@@ -1,0 +1,68 @@
+name: Anthares OCI A1 one-shot read-only smoke
+
+# One-shot validation after this workflow is merged into main.
+# Does not create instances. No recurring schedule; source changes are rare.
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/oci-a1-readonly-smoke-once.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: anthares-oci-a1-readonly-smoke
+  cancel-in-progress: false
+
+jobs:
+  activation-and-capacity-check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      OCI_A1_WATCH_AUTH_JSON: ${{ secrets.OCI_A1_WATCH_AUTH_JSON }}
+      OCI_A1_WATCH_ENABLED: ${{ vars.OCI_A1_WATCH_ENABLED }}
+      # Safety-critical override: smoke test must never provision a VM,
+      # regardless of repository variables or other workflow settings.
+      OCI_A1_AUTO_PROVISION: '0'
+      OCI_A1_LAUNCH_GUARD: 'DISABLED_FOR_SMOKE'
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - name: Assert read-only and user-selected activation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = 'UniversoAnthares/anthares-kwai-runner'
+          test "$GITHUB_REF" = 'refs/heads/main'
+          test "$OCI_A1_AUTO_PROVISION" = '0'
+          test "$OCI_A1_LAUNCH_GUARD" = 'DISABLED_FOR_SMOKE'
+          if [ "$OCI_A1_WATCH_ENABLED" != '1' ]; then
+            echo 'OCI_A1_SMOKE=VARIABLE_DISABLED_OR_MISSING'
+            exit 11
+          fi
+          if [ -z "$OCI_A1_WATCH_AUTH_JSON" ]; then
+            echo 'OCI_A1_SMOKE=SECRET_MISSING'
+            exit 12
+          fi
+          echo 'OCI_A1_SMOKE=INPUTS_PRESENT_NO_CREDENTIALS_PRINTED'
+      - uses: actions/checkout@v4
+      - name: Install pinned Oracle SDK
+        run: python -m pip install --disable-pip-version-check 'oci==2.187.1'
+      - name: Run OCI watcher regression tests
+        run: python -m unittest discover -s tests -p 'test_oci_a1_capacity_watch.py' -v
+      - name: Read real Oracle A1 capacity without provisioning
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/oci_a1_capacity_watch.py
+      - name: Record safe completion
+        if: always()
+        run: |
+          {
+            echo '## OCI A1 read-only smoke'
+            echo 'The run used OCI_A1_AUTO_PROVISION=0 and DISABLED_FOR_SMOKE.'
+            echo 'It cannot initiate Compute.launch_instance via the current watcher guards.'
+            echo 'Secret content is never written to the summary.'
+            echo 'This workflow does not authenticate Kwai or create any Android VM.'
+          } >> "$GITHUB_STEP_SUMMARY"
