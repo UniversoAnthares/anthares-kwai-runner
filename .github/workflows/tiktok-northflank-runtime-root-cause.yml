@@ -1,0 +1,101 @@
+name: TikTok Northflank existing service root-cause audit
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths: ['.github/workflows/tiktok-northflank-runtime-root-cause.yml']
+permissions:
+  contents: read
+concurrency:
+  group: tiktok-northflank-root-cause-read-only
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    env:
+      NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+    steps:
+      - name: Read exact existing service configuration, deployment and runtime errors without mutations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,re,urllib.request,urllib.error,urllib.parse
+          T=os.getenv('NORTHFLANK_API_TOKEN','')
+          SHARED=os.getenv('ARA_SHARED','')
+          A='https://api.northflank.com/v1'
+          BASE='https://http--anthares-tiktok-northflank--6f6pbqmvhpv6.code.run'
+          def get(url,token,timeout=16):
+              req=urllib.request.Request(url,headers={'Authorization':'Bearer '+token,'Accept':'application/json','User-Agent':'Anthares-Northflank-Owner-Service-Audit/1.0'})
+              try:
+                  with urllib.request.urlopen(req,timeout=timeout) as r:
+                      return r.status,json.load(r)
+              except urllib.error.HTTPError as e:return e.code,{}
+              except Exception as e:
+                  print('NETWORK_ERROR='+type(e).__name__+' host='+str(urllib.parse.urlparse(url).hostname),flush=True)
+                  return 0,{}
+          def render(label,code,detail):
+              print(label+'_HTTP='+str(code),flush=True)
+              print(label+'_INFO='+json.dumps(detail,sort_keys=True)[:1800],flush=True)
+          assert len(T)>20 and len(SHARED)>20,'AUTH_REQUIRED'
+          code,p=get(A+'/projects',T)
+          assert code==200,'NORTHFLANK_ADMIN_API_FAILED'
+          projects=(p.get('data') or {}).get('projects') or []
+          if isinstance(projects,dict):projects=list(projects.values())
+          print('NORTHFLANK_PROJECT_COUNT='+str(len(projects)),flush=True)
+          found=[]
+          for proj in projects:
+              pid=proj.get('id')
+              if not pid:continue
+              c,s=get(A+'/projects/'+pid+'/services',T)
+              if c!=200:print('PROJECT_SERVICES_HTTP='+str(c));continue
+              services=(s.get('data') or {}).get('services') or []
+              if isinstance(services,dict):services=list(services.values())
+              for serv in services:
+                  if serv.get('name')=='anthares-tiktok-northflank':
+                      found.append((pid,serv.get('id') or 'anthares-tiktok-northflank'))
+          print('TARGET_SERVICE_MATCH_COUNT='+str(len(found)),flush=True)
+          if len(found)!=1:raise SystemExit('EXISTING_SERVICE_UNAVAILABLE_OR_AMBIGUOUS')
+          pid,sid=found[0]
+          root=A+'/projects/'+urllib.parse.quote(pid,safe='')+'/services/'+urllib.parse.quote(sid,safe='')
+          code,d=get(root,T)
+          data=(d.get('data') or {}) if code==200 else {}
+          build=data.get('buildSettings') or {}
+          deployment=data.get('deployment') or {}
+          vcs=data.get('vcsData') or {}
+          status=data.get('status') or {}
+          summary={
+              'service_type':data.get('serviceType'),
+              'deployment_status':(status.get('deployment') or {}).get('status'),
+              'build_status':(status.get('build') or {}).get('status'),
+              'deployment_replicas':deployment.get('instances'),
+              'deployment_image':str(deployment.get('imageUrl') or (deployment.get('external') or {}).get('imagePath') or '')[:130],
+              'vcs_repository':str(vcs.get('projectUrl') or '')[:150],
+              'build_dockerfile':str((build.get('dockerfile') or {}).get('dockerFilePath') or '')[:100],
+              'build_source':data.get('buildSource'),
+              'expired':bool(data.get('expiredAt')),
+              'deployment_command_mode':(deployment.get('docker') or {}).get('configType'),
+          }
+          render('SERVICE_DETAIL',code,summary)
+          query='?type=runtime&queryType=range&duration=1800&lineLimit=80&direction=backward'
+          c,logs=get(root+'/logs'+query,T,timeout=20)
+          entries=logs.get('data') if isinstance(logs.get('data'),list) else []
+          keywords=('error','fail','timeout','crash','killed','oom','ffmpeg','chromium','playwright','ENOMEM','ENOENT','health')
+          counts={k:0 for k in keywords}
+          redacted=[]
+          for entry in entries:
+              log=str(entry.get('log') or '')
+              for k in keywords:
+                  if k.lower() in log.lower():counts[k]+=1
+              # Report only classifiers, never raw logs, cookies, env, URLs.
+              cats=[k for k in keywords if k.lower() in log.lower()]
+              if cats and len(redacted)<12:redacted.append({'class':cats,'ts':str(entry.get('ts') or '')[:28]})
+          render('RUNTIME_LOGS',c,{'entries':len(entries),'classes':counts,'samples':redacted})
+          for name,path in [('health','/health'),('session','/session-status'),('revision','/interactive-browser/revision'),('browser','/interactive-browser/status')]:
+              code,data=get(BASE+path,SHARED,timeout=13)
+              safe={k:data.get(k) for k in ('ok','revision','backend','session_bootstrapped','identity_verified','ready_for_tiktok','ffmpeg_ready','bootstrapped','active') if k in data}
+              render('TARGET_'+name.upper(),code,safe)
+          print('NORTHFLANK_READONLY_SERVICE_AUDIT_FINISHED=1',flush=True)
+          PY
