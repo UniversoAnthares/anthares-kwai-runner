@@ -1,4 +1,4 @@
-name: One-time Northflank interactive Chromium TikTok upload read-only check
+name: One-time TikTok Studio SPA upload navigation from authenticated Posts
 on:
   push:
     branches: [main]
@@ -8,14 +8,14 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 5
     env:
       NF_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
       ARA_SHARED: ${{ secrets.ARA_SHARED }}
     steps:
       - name: Install Northflank client
         run: npm install --no-save --no-package-lock --ignore-scripts @northflank/js-client@0.12.0
-      - name: Open authenticated interactive upload page and check file input without posting
+      - name: Reach upload from authenticated Studio SPA without selecting file
         shell: bash
         run: |
           set -euo pipefail
@@ -24,54 +24,60 @@ jobs:
           const token=process.env.NF_TOKEN,auth=process.env.ARA_SHARED;
           if(!token||token.length<20||!auth||auth.length<20)throw Error('AUTH_MISSING');
           const root='https://http--anthares-tiktok-northflank--6f6pbqmvhpv6.code.run';
-          async function call(method,path,body,ms=30000){
+          async function api(method,path,body){
            const headers={Authorization:'Bearer '+auth,Accept:'application/json'};
            if(body!==undefined)headers['Content-Type']='application/json';
-           const r=await fetch(root+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(ms)});
+           const r=await fetch(root+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(32000)});
            return {code:r.status,data:await r.json().catch(()=>({}))};
           }
-          const health=await call('GET','/health');
-          console.log('IDENTITY_VERIFIED='+Boolean(health.data.identity_verified));
+          const health=await api('GET','/health');
+          console.log('OWNER_VERIFIED='+Boolean(health.data.identity_verified));
           if(health.code!==200||!health.data.identity_verified||!health.data.ready_for_tiktok)throw Error('AUTH_NOT_READY');
-          let status=await call('GET','/interactive-browser/status');
-          console.log('INTERACTIVE_INITIAL_ACTIVE='+Boolean(status.data.active));
+          let status=await api('GET','/interactive-browser/status');
+          console.log('BROWSER_ACTIVE_INITIAL='+Boolean(status.data.active));
           if(!status.data.active||!status.data.responsive){
-           const start=await call('POST','/interactive-browser/start-async',{});
-           console.log('INTERACTIVE_START_HTTP='+start.code);
-           if(start.code>=400||!start.data.ok)throw Error('INTERACTIVE_START_FAILED');
+           const start=await api('POST','/interactive-browser/start-async',{});
+           console.log('START_BROWSER_HTTP='+start.code);
+           if(start.code>=400||!start.data.ok)throw Error('START_REJECTED');
+           for(let n=0;n<15;n++){
+            await new Promise(r=>setTimeout(r,4500));
+            status=await api('GET','/interactive-browser/status');
+            if(status.code===200&&status.data.active&&status.data.responsive)break;
+           }
           }
-          for(let n=0;n<21;n++){
-           await new Promise(r=>setTimeout(r,5000));
-           status=await call('GET','/interactive-browser/status');
-           if(status.code===200&&status.data.active&&status.data.responsive)break;
-          }
-          console.log('INTERACTIVE_RESPONSIVE='+Boolean(status.data.responsive));
-          if(!status.data.active||!status.data.responsive)throw Error('INTERACTIVE_RESTORE_FAILED');
-          const nav=await call('POST','/interactive-browser/navigate',{url:'https://www.tiktok.com/tiktokstudio/upload?from=webapp'});
-          console.log('UPLOAD_NAVIGATE_HTTP='+nav.code);
-          if(nav.code!==200||!nav.data.ok)throw Error('UPLOAD_NAVIGATION_FAILED');
+          console.log('BROWSER_RESPONSIVE='+Boolean(status.data.responsive));
+          if(!status.data.active||!status.data.responsive)throw Error('BROWSER_UNRESPONSIVE');
+          const nav=await api('POST','/interactive-browser/navigate',{url:'https://www.tiktok.com/tiktokstudio/content'});
+          console.log('STUDIO_CONTENT_NAV_HTTP='+nav.code);
+          if(nav.code!==200||!nav.data.ok)throw Error('STUDIO_CONTENT_NAV_FAILED');
+          await new Promise(r=>setTimeout(r,13000));
           const get=async path=>{const r=await fetch('https://api.northflank.com/v1'+path,{headers:{Authorization:'Bearer '+token}});if(!r.ok)throw Error('NF_'+r.status);return r.json()};
           const found=[];for(const p of (await get('/projects')).data?.projects||[])for(const s of (await get('/projects/'+encodeURIComponent(p.id)+'/services')).data?.services||[])if(s.name==='anthares-tiktok-northflank')found.push([p.id,s.id||s.name]);
           if(found.length!==1)throw Error('SERVICE_NOT_UNIQUE');
-          const [projectId,serviceId]=found[0],ctx=new ApiClientInMemoryContextProvider();await ctx.addContext({name:'observe',token});const cli=new ApiClient(ctx);
-          const source=String.raw`
-          import sys,json
+          const [projectId,serviceId]=found[0],ctx=new ApiClientInMemoryContextProvider();await ctx.addContext({name:'spa',token});const cli=new ApiClient(ctx);
+          const script=String.raw`
+          import sys,time,json
           sys.path.insert(0,'/app/render-tiktok-worker')
           from browser_executor import _cdp
-          expr="""(()=>{const text=document.body?.innerText||'';return {path:location.pathname,ready:document.readyState,title:document.title.slice(0,65),htmlSize:document.documentElement?.outerHTML.length||0,bodySize:text.length,uploadInputs:document.querySelectorAll('input[type=file]').length,scripts:document.scripts.length,rootSize:document.querySelector('#root,#app,[id*=root]')?.innerHTML.length||0,captcha:/captcha|verify to continue|verifique para continuar/i.test(text),login:/log in|sign in|fazer login/i.test(text),uploadText:/upload|carregar vídeo|enviar vídeo/i.test(text)}})()"""
-          try:
+          def read(expr):
            r=_cdp('Runtime.evaluate',{'expression':expr,'returnByValue':True},timeout=13)
-           value=(r.get('result') or {}).get('value') or {}
-           print('INTERACTIVE_UPLOAD_DOM='+json.dumps(value,ensure_ascii=False,separators=(',',':'))[:850],flush=True)
-          except Exception as exc:print('INTERACTIVE_UPLOAD_CDP_ERROR='+type(exc).__name__,flush=True)
+           if 'exceptionDetails' in r:raise RuntimeError('CDP_EVALUATION_EXCEPTION')
+           return (r.get('result') or {}).get('value') or {}
+          before=read(r"""(()=>{const b=document.body?.innerText||'';return {path:location.pathname,ready:document.readyState,body:b.length,anchors:[...document.querySelectorAll('a')].filter(e=>/upload|carregar|enviar v/i.test((e.innerText||'')+' '+(e.getAttribute('href')||''))).slice(0,6).map(e=>({label:(e.innerText||'').trim().slice(0,55),href:(e.getAttribute('href')||'').slice(0,120)}))}})()""")
+          print('STUDIO_BEFORE='+json.dumps(before,ensure_ascii=False)[:1500],flush=True)
+          if before.get('path')!='/tiktokstudio/content':raise SystemExit('NOT_ON_STUDIO_CONTENT')
+          click=read(r"""(()=>{const all=[...document.querySelectorAll('a,button,[role=button]')];const eligible=all.filter(e=>/upload|carregar v[ií]deo|enviar v[ií]deo/i.test((e.innerText||'').trim()+' '+(e.getAttribute('aria-label')||'')+' '+(e.getAttribute('href')||'')));const el=eligible.find(e=>(e.getAttribute('href')||'').includes('/upload'))||eligible[0];if(!el)return {clicked:false,options:eligible.length};const name=(el.innerText||el.getAttribute('aria-label')||'').trim().slice(0,45);const href=(el.getAttribute('href')||'').slice(0,120);el.click();return {clicked:true,name,href,count:eligible.length}})()""")
+          print('STUDIO_UPLOAD_CLICK='+json.dumps(click,ensure_ascii=False)[:1000],flush=True)
+          if not click.get('clicked'):raise SystemExit('NO_UPLOAD_NAV_LINK')
+          time.sleep(15)
+          after=read(r"""(()=>{const b=document.body?.innerText||'';const el=document.documentElement;const root=document.querySelector('#root,#app,[id*=root]');const style=getComputedStyle(document.body);return {path:location.pathname,ready:document.readyState,html:el.outerHTML.length,text:b.length,textContent:document.body?.textContent?.length||0,uploadInputs:document.querySelectorAll('input[type=file]').length,buttons:document.querySelectorAll('button').length,scripts:document.scripts.length,visibility:style.visibility,display:style.display,root:root?.innerHTML.length||0,captcha:/captcha|verify to continue|security check/i.test(b),login:/log in|sign in|fazer login/i.test(b)}})()""")
+          print('STUDIO_AFTER_SPA_CLICK='+json.dumps(after,ensure_ascii=False)[:1300],flush=True)
+          print('NO_VIDEO_SELECTED_OR_POSTED=1',flush=True)
           `;
-          for(let attempt=0;attempt<5;attempt++){
-           await new Promise(r=>setTimeout(r,13000));
-           const result=await cli.exec.execServiceCommand({projectId,serviceId},{command:['python3','-c',source]});
-           console.log('INTERACTIVE_CHECK_'+(attempt+1)+'_EXIT='+String(result.commandResult?.exitCode));
-           console.log('INTERACTIVE_CHECK_'+(attempt+1)+'_OUT='+String(result.stdOut||'').trim().slice(0,1000).replace(/[\r\n]+/g,' | '));
-           if(String(result.stdOut||'').includes('"uploadInputs":1')){console.log('INTERACTIVE_UPLOAD_READY=1');break;}
-          }
-          console.log('INTERACTIVE_SESSION_LEFT_OPEN=1');
+          const r=await cli.exec.execServiceCommand({projectId,serviceId},{command:['timeout','65s','python3','-c',script]});
+          console.log('SPA_UPLOAD_EXIT='+String(r.commandResult?.exitCode));
+          console.log('SPA_UPLOAD_OUTPUT='+String(r.stdOut||'').slice(0,4800).replace(/[\r\n]+/g,' | '));
+          if(r.commandResult?.exitCode!==0)throw Error('SPA_UPLOAD_PROBE_UNCONFIRMED');
           console.log('NO_VIDEO_SELECTED_OR_POSTED=1');
+          
           NODE
