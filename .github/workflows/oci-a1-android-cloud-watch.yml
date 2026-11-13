@@ -19,16 +19,18 @@ concurrency:
 
 jobs:
   capacity-watch:
-    # Owner explicitly approved the read-only monitor on 2026-11-13.
-    # No variable-driven job skip; disabling requires workflow change.
-    # This can never allocate a machine: OCI_A1_AUTO_PROVISION is forced 0.
+    # Owner requested progression to the existing Always Free cloud Android
+    # plan on 2026-11-13. VM allocation is strictly limited in Python:
+    # home region, one A1 1 OCPU/6GiB, 50GiB boot, signed OCI, audited subnet,
+    # pinned administrator SSH key, 200GiB total storage and no other A1.
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     env:
       OCI_A1_WATCH_AUTH_JSON: ${{ secrets.OCI_A1_WATCH_AUTH_JSON }}
-      # Force read-only operation until a separate, reviewed approval.
-      OCI_A1_AUTO_PROVISION: '0'
-      OCI_A1_LAUNCH_GUARD: 'DISABLED_FOR_MONITORING'
+      # Permit ONLY the single guarded A1 Always Free instance when capacity
+      # becomes AVAILABLE; no paid shapes, no disk over 200GiB, no public ADB.
+      OCI_A1_AUTO_PROVISION: '1'
+      OCI_A1_LAUNCH_GUARD: 'ALWAYS_FREE_SINGLE_A1'
       PYTHONUNBUFFERED: '1'
     steps:
       - uses: actions/checkout@v4
@@ -38,14 +40,16 @@ jobs:
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = 'UniversoAnthares/anthares-kwai-runner'
           test "$GITHUB_REF" = 'refs/heads/main'
-          test "$OCI_A1_AUTO_PROVISION" = '0'
-          test "$OCI_A1_LAUNCH_GUARD" = 'DISABLED_FOR_MONITORING'
+          test "$OCI_A1_AUTO_PROVISION" = '1'
+          test "$OCI_A1_LAUNCH_GUARD" = 'ALWAYS_FREE_SINGLE_A1'
           test -f tools/oci_a1_capacity_watch.py
+          test -f infra/oci-android/approved-admin-ssh.pub
+          test -f infra/oci-android/redroid-firstboot.cloud-config.yml
       - name: Install pinned Oracle SDK
         run: python -m pip install --disable-pip-version-check 'oci==2.187.1'
       - name: Run fail-closed regression tests
         run: python -m unittest discover -s tests -p 'test_oci_a1_capacity_watch.py' -v
-      - name: Read OCI A1 capacity and validate approved subnet/SSH readiness
+      - name: Read capacity and provision ONE A1 only if all Always Free guards pass
         shell: bash
         run: |
           set -euo pipefail
@@ -55,9 +59,9 @@ jobs:
         if: always()
         run: |
           {
-            echo 'The watcher uses GitHub hosted runners only.'
+            echo 'The watcher uses GitHub hosted runners only; no Windows PC or physical Android executor.'
             echo 'Owner approved read-only monitoring; no repository variable gate is used.'
-            echo 'Automatic allocation is disabled by forced OCI_A1_AUTO_PROVISION=0 until separately reviewed.'
+            echo 'At AVAILABLE only: allow one 1-OCPU/6GiB A1 with 50GiB boot, if all audited free-tier guards pass.'
             echo 'Each capacity poll validates the audited subnet, SSH key fingerprint and locked ingress before enabling future allocation.'
             echo 'It never posts to Kwai or modifies physical Android/MEmu routing.'
             echo 'An allocated Linux VM is not proof of ReDroid, MacroDroid or Kwai operation.'
