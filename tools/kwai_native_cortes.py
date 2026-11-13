@@ -107,6 +107,22 @@ def wait(s,r,name,seconds=30):
   # the authenticated profile tab. Dismiss only its exact close control, never
   # the permission/enable button; preserve account and privacy settings.
   prefix='com.kwai.video' if ACCOUNT=='universoanthares' else 'kwai.lite.video'
+  # Secondary Kwai may present the same optional promotional popup already
+  # handled in kwai_up.py. Match all three exact controls before closing it.
+  # Unknown prompts, login and security dialogs remain untouched.
+  if r==RID_PROFILE and ACCOUNT=='universoanthares':
+   promo_ids={n.attrib.get('resource-id','') for n in root.iter('node')}
+   promo_required={'com.kwai.video.basis:id/view_content',
+                   'com.kwai.video:id/colored_button_bg',
+                   'com.kwai.video:id/close_button'}
+   if promo_required.issubset(promo_ids):
+    promo_close=[n for n in root.iter('node')
+      if n.attrib.get('resource-id')=='com.kwai.video:id/close_button'
+      and n.attrib.get('clickable')=='true'
+      and n.attrib.get('enabled')=='true'
+      and center(n.attrib.get('bounds',''))]
+    if len(promo_close)==1:
+     tap(s,promo_close[0]);time.sleep(1);continue
   notification_prompt=any(
    n.attrib.get('resource-id')==prefix+'.basis:id/tv_dialog_title' and
    'notifica' in (n.attrib.get('text') or '').casefold()
