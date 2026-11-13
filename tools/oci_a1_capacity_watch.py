@@ -50,7 +50,11 @@ def auth():
         fingerprint=d["fingerprint"], private_key_file_location=None,
         private_key_content=d["private_key"]
     )
-    b = {"region": REGION}
+    # OCI SDK 2.187.1 validates the required config fields even with an
+    # explicit oci.signer.Signer. The key_file sentinel is never accessed:
+    # the signer signs using the in-memory encrypted Actions secret material.
+    b = {"region": REGION, "tenancy": d["tenancy"], "user": d["user"],
+         "fingerprint": d["fingerprint"], "key_file": "/dev/null"}
     kwargs = {"signer": signer, "retry_strategy": oci.retry.NoneRetryStrategy()}
     return d, oci.core.ComputeClient(b, **kwargs), \
         oci.core.VirtualNetworkClient(b, **kwargs), \
