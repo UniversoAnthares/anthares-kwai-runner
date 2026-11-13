@@ -1,0 +1,57 @@
+name: One-time TikTok remote screenshot integrity diagnostic
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tiktok-white-screenshot-once.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: anthares-tiktok-screenshot-diagnostic
+  cancel-in-progress: false
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      AUTH_TOKEN: ${{ secrets.ARA_SHARED }}
+    steps:
+      - name: Read in-memory remote screenshot and print only statistics
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip -q install pillow
+          python3 - <<'PY'
+          import os,urllib.request,json,base64,io,statistics
+          from PIL import Image,ImageStat
+          token=os.environ.get('AUTH_TOKEN','')
+          if len(token)<20:
+              raise SystemExit('AUTH_NOT_CONFIGURED')
+          base='https://http--anthares-tiktok-northflank--6f6pbqmvhpv6.code.run'
+          def get(path):
+              req=urllib.request.Request(base+path,headers={'Authorization':'Bearer '+token,'Accept':'application/json'},method='GET')
+              with urllib.request.urlopen(req,timeout=28) as res:
+                  return json.loads(res.read(1200000))
+          status=get('/interactive-browser/status')
+          print('BROWSER_STATUS_OK='+str(bool(status.get('ok'))))
+          print('BROWSER_ACTIVE='+str(bool(status.get('active'))))
+          print('BROWSER_RESPONSIVE='+str(bool(status.get('responsive'))))
+          if not(status.get('ok') and status.get('active') and status.get('responsive')):
+              raise SystemExit('BROWSER_INACTIVE_PRESERVED')
+          shot=get('/interactive-browser/screenshot')
+          print('SCREENSHOT_OK='+str(bool(shot.get('ok'))))
+          if not shot.get('ok'):
+              raise SystemExit('SCREENSHOT_ERROR_'+str(shot.get('error'))[:40])
+          data=base64.b64decode(shot.get('image_b64') or '',validate=True)
+          im=Image.open(io.BytesIO(data)).convert('RGB')
+          thumbnail=im.resize((120,70))
+          stat=ImageStat.Stat(thumbnail)
+          print('JPEG_BYTES='+str(len(data)))
+          print('IMAGE_DIMENSIONS='+str(im.size[0])+'x'+str(im.size[1]))
+          print('RGB_MEAN='+','.join(str(round(v,1)) for v in stat.mean))
+          print('RGB_STDDEV='+','.join(str(round(v,2)) for v in stat.stddev))
+          print('NEAR_WHITE_FRACTION='+str(round(sum(all(c>=245 for c in px) for px in thumbnail.getdata())/(thumbnail.width*thumbnail.height),3)))
+          print('URL_TIKTOK_PROFILE='+str(str(shot.get('url') or '').startswith('https://www.tiktok.com/@universo.anthares')))
+          print('DIAGNOSTIC_DONE=1')
+          PY
