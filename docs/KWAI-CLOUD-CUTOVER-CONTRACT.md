@@ -5,7 +5,7 @@ Data: 2026-11-13. Autoridade de roteamento: `ci-hub/executor-routing.json`.
 
 Executar a publicação de CORTES nas duas contas Kwai de forma persistente, independente do Android físico e do computador, com custo incremental R$ 0 e integridade da fila Neon. O mecanismo de publicação deve continuar usando o app oficial Kwai/Kwai Lite, com identidade de conta comprovada e horários de 06h até 23h (fuso da operação). A aplicação web do Kwai e a emulação GitHub Actions **não são publicadores homologados**.
 
-Estado: Oracle OCI A1 no monitor automático, mas a capacidade consultada apresentou `OUT_OF_HOST_CAPACITY` e `TARGET_INSTANCE=NONE` no run #43472721346. ReDroid tem cloud-init/checagem ADB preparados; Android remoto com Kwai autenticado permanece pendente. Enquanto isso, o Android físico publica em produção. Nenhuma alteração deste contrato equivale à existência de uma VM nem a uma publicação.
+Estado revisado: a Oracle foi retirada do plano pelo titular em 13/11/2026 (PR #2575). O histórico da falta de capacidade consta do run #43472721346; monitoramento e provisionamento permanecem desativados. ReDroid tem cloud-init/checagem ADB preparados; Android remoto com Kwai autenticado permanece pendente. Enquanto isso, o Android físico publica em produção. Nenhuma alteração deste contrato equivale à existência de uma VM nem a uma publicação.
 
 ## Contrato de migração protegida
 
@@ -28,7 +28,7 @@ Depois do corte autorizado, `disable_local_executors=true` proíbe fallback sile
 
 ## Pendências concretas de execução
 
-- Conseguir host Android remoto gratuito e persistente, com kernel binder e acesso suficiente para o ReDroid; Oracle A1 continua em tentativa automática, terceiros ainda sem prova.
+- Conseguir host Android remoto gratuito e persistente, com kernel binder e acesso suficiente para o ReDroid; Oracle está desativada pelo titular e terceiros continuam sem prova. A possível cessão institucional/hosting patrocinado exige compatibilidade e permissão comercial explícitas.
 - Instalar, autenticar e preservar Kwai/Kwai Lite, MacroDroid ou Anthares Android Agent; comprovar a execução do fluxo real de upload em ambas as contas.
 - Ligar o novo executor ao controlador e à fila Neon, verificar fencing, intervalos e comprovação externa de publicação.
 - Verificar autonomia de rede e reboot, aprovar as oito evidências e só então promover `cloud_cutover.enabled` no repositório e descontinuar os dispositivos físicos.
