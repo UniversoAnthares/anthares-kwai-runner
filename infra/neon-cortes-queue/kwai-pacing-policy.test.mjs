@@ -4,7 +4,7 @@ import {deriveKwaiPacing,KWAI_PACING_VERSION} from './kwai-pacing-policy.mjs';
 const end='2026-11-12T03:00:00.000Z'; // 23:00 on Nov 11 in America/Campo_Grande
 const clock='2026-11-12T00:00:00.000Z'; // Nov 11 at 20:00
 const defaultInput=(v={})=>({
- target_key:'kwai:lucasrosalem',now:clock,deadline:end,
+ target_key:'kwai:lucasrosalem',now:clock,window_open_at:'2026-11-11T10:00:00.000Z',deadline:end,
  pending:5,used:1,confirmed_today:1,
  first_confirmed_at:'2026-11-11T23:00:00.000Z',
  last_confirmed_at:'2026-11-11T23:00:00.000Z',daily_limit:100,...v});
@@ -73,4 +73,32 @@ test('overdue schedule permits one next lease, not a same-tick burst',()=>{
  const p=deriveKwaiPacing(defaultInput({now:'2026-11-12T01:00:00.000Z'}));
  assert.equal(p.status,'DUE');
  assert.equal(p.next_due_at,'2026-11-11T23:40:00.000Z');
+});
+
+test('before 06:00 in Campo Grande neither account may get its first lease',()=>{
+ for(const target_key of ['kwai:lucasrosalem','kwai:universoanthares']){
+  const before=deriveKwaiPacing(defaultInput({target_key,
+   now:'2026-11-11T09:59:59.999Z',used:0,confirmed_today:0,
+   first_confirmed_at:null,last_confirmed_at:null}));
+  assert.equal(before.status,'WAIT_OPEN');
+  assert.equal(before.next_due_at,'2026-11-11T10:00:00.000Z');
+  assert.equal(before.remaining_today,5);
+  assert.equal(before.window_open_at,'2026-11-11T10:00:00.000Z');
+  const atOpen=deriveKwaiPacing(defaultInput({target_key,
+   now:'2026-11-11T10:00:00.000Z',used:0,confirmed_today:0,
+   first_confirmed_at:null,last_confirmed_at:null}));
+  assert.equal(atOpen.status,'DUE');
+  assert.equal(atOpen.next_due_at,'2026-11-11T10:00:00.000Z');
+ }
+});
+test('closing at 23:00 remains a strict fence independent of 06:00 opening',()=>{
+ const p=deriveKwaiPacing(defaultInput({now:'2026-11-12T02:59:59.999Z'}));
+ assert.notEqual(p.status,'BLOCKED_SAME_DAY_CAPACITY');
+ assert.equal(deriveKwaiPacing(defaultInput({now:end})).status,'BLOCKED_SAME_DAY_CAPACITY');
+});
+test('unproven or inverted posting window rejects all publishing',()=>{
+ for(const window_open_at of [null,'invalid',end,'2026-11-12T05:00:00.000Z']){
+  assert.throws(()=>deriveKwaiPacing(defaultInput({window_open_at})),
+   /KWAI_PACING_CLOCK_UNVERIFIED/);
+ }
 });
