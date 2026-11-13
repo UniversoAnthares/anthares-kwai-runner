@@ -68,6 +68,10 @@ jobs:
           status=data.get('status') or {}
           summary={
               'service_type':data.get('serviceType'),
+              'billing_deployment_plan':str((data.get('billing') or {}).get('deploymentPlan') or '')[:60],
+              'billing_build_plan':str((data.get('billing') or {}).get('buildPlan') or '')[:60],
+              'compute_object_keys':list((data.get('compute') or {}).keys()) if isinstance(data.get('compute'),dict) else [],
+              'deployment_plan':str((deployment.get('plan') or ''))[:60],
               'deployment_status':(status.get('deployment') or {}).get('status'),
               'build_status':(status.get('build') or {}).get('status'),
               'deployment_replicas':deployment.get('instances'),
