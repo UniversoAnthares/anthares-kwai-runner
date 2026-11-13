@@ -49,3 +49,23 @@ test('Neon computes 06:00 open in America/Campo_Grande and passes it to both acc
  const kwaiGate=/const pacing=await kwaiDeadlinePacing\(String\(b\.target_key\|\|''\),100\);\s*if\(pacing\.status!=='DUE'\)return\{ok:true,job:null,pacing\};/g;
  assert.equal([...source.matchAll(kwaiGate)].length,2);
 });
+
+test('both Kwai START transitions recheck 06h-23h inside atomic PostgreSQL UPDATE',()=>{
+ const main=source.slice(source.indexOf('async function kwaiAction('),
+                         source.indexOf('async function kwaiUnprovenAction('));
+ const secondary=source.slice(source.indexOf('async function kwaiSecondaryAction('),
+                              source.indexOf('async function cortesAction(',source.indexOf('async function kwaiSecondaryAction(')));
+ for(const account of [main,secondary]){
+   const start=account.indexOf("if(action==='kwai-start')");
+   assert.ok(start>=0);
+   const end=account.indexOf("if(action==='kwai-confirm')",start);
+   assert.ok(end>start);
+   const sql=account.slice(start,end);
+   assert.match(sql,/WHERE p\.id=\$1 AND p\.target_key=\$2 AND p\.status='leased'/);
+   assert.match(sql,/AND p\.publication_started_at IS NULL/);
+   assert.match(sql,/AND p\.lease_generation=\$4 AND p\.lease_until>now\(\)/);
+   assert.match(sql,/AT TIME ZONE 'America\/Campo_Grande'\)\:\:time >= time '06:00'/);
+   assert.match(sql,/AT TIME ZONE 'America\/Campo_Grande'\)\:\:time < time '23:00'/);
+   assert.equal((sql.match(/RETURNING p\.id,p\.status,p\.lease_generation/g)||[]).length,1);
+ }
+});
