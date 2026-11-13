@@ -87,6 +87,37 @@ else:
 print('KWAI_LOCAL_V3_WINDOW_06_23_AND_DUE_MATH_PASS')
 
 
+# Exercise terminal ACK decision with AST-only isolated code (no filesystem writes).
+fn_node=next(n for n in ast.parse(daemon).body
+             if isinstance(n,ast.FunctionDef) and n.name=='terminal_ack_decision')
+isolated={'EXPECTED_ACCOUNT':'lucasrosalem'}
+exec(compile(ast.Module(body=[fn_node],type_ignores=[]),'<kwai-ack-only>','exec'),isolated)
+ack_decision=isolated['terminal_ack_decision']
+jid='kwai-cortes-A7BsgCe3-oo-g1-A7BsgCe3-oo-7595-7635'
+local_row={'state':'quarantined_uncertain','lease_generation':173}
+receipt={'ok':True,'id':jid,'target_key':'kwai:lucasrosalem',
+         'lease_generation':173,'terminal':'confirmed'}
+assert ack_decision(jid,local_row,receipt)=='completed_acknowledged'
+assert ack_decision(jid,local_row,{**receipt,'terminal':'cancelled'})=='cancelled_acknowledged'
+for fake in [
+    {**receipt,'id':'kwai-cortes-other'},
+    {**receipt,'target_key':'kwai:universoanthares'},
+    {**receipt,'lease_generation':174},
+    {**receipt,'terminal':None},
+    {**receipt,'ok':False},
+    {**receipt,'terminal':'uncertain'}
+]:
+    assert ack_decision(jid,local_row,fake) is None,fake
+isolated['EXPECTED_ACCOUNT']='universoanthares'
+jid2='kwai-cortes-ua-217fddfeae7c0a86be66d8e8511e2916'
+assert ack_decision(jid2,{'state':'published_pending_ack','lease_generation':1},
+    {'ok':True,'id':jid2,'target_key':'kwai:universoanthares',
+     'lease_generation':1,'terminal':'confirmed'})=='completed_acknowledged'
+assert "'terminal':'kwai-job-terminal-read'" in client
+assert "call('terminal',{'id':jid,'lease_generation':int(row.get('lease_generation') or 0)})" in daemon
+print('KWAI_TERMINAL_ACK_FAIL_CLOSED_READONLY_PASS')
+
+
 class ReachedVerifiedShare(Exception):
     pass
 
