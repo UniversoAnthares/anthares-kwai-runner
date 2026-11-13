@@ -135,13 +135,14 @@ class SafeDefaults(unittest.TestCase):
         self.assertIsNone(mod.safe_instance_network_mode(network, subnet))
 
     def _stub_cloud_init(self, fake_path, content):
-        fake_path.return_value.resolve.return_value.parents.__getitem__ \\
-            .return_value.__truediv__.return_value.read_bytes.return_value = content
+        reader = (fake_path.return_value.resolve.return_value
+                  .parents.__getitem__.return_value.__truediv__.return_value)
+        reader.read_bytes.return_value = content
 
     def test_cloud_init_is_encoded_and_local_only(self):
         from unittest.mock import patch
         import base64
-        data = b"#cloud-config\\n" + b"--privileged\\n127.0.0.1:5555:5555\\n"
+        data = b"#cloud-config\n" + b"--privileged\n127.0.0.1:5555:5555\n"
         with patch.object(mod, "Path") as path:
             self._stub_cloud_init(path, data)
             self.assertEqual(base64.b64decode(
@@ -149,8 +150,8 @@ class SafeDefaults(unittest.TestCase):
 
     def test_cloud_init_rejects_public_adb_binding(self):
         from unittest.mock import patch
-        data = (b"#cloud-config\\n--privileged\\n" +
-                b"127.0.0.1:5555:5555 0.0.0.0:5555\\n")
+        data = (b"#cloud-config\n--privileged\n" +
+                b"127.0.0.1:5555:5555 0.0.0.0:5555\n")
         with patch.object(mod, "Path") as path:
             self._stub_cloud_init(path, data)
             with self.assertRaises(ValueError):
@@ -159,7 +160,7 @@ class SafeDefaults(unittest.TestCase):
     def test_cloud_init_rejects_missing_header(self):
         from unittest.mock import patch
         with patch.object(mod, "Path") as path:
-            self._stub_cloud_init(path, b"--privileged\\n127.0.0.1:5555:5555")
+            self._stub_cloud_init(path, b"--privileged\n127.0.0.1:5555:5555")
             with self.assertRaises(ValueError):
                 mod.redroid_cloud_init_data()
 
