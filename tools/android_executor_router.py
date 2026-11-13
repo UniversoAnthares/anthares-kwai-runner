@@ -2,6 +2,7 @@
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -64,6 +65,14 @@ def _verified_cloud_cutover(cfg, state):
             state.get("authenticated") is not True or
             state.get("healthy") is not True or
             state.get("ready") is not True):
+        return False
+    observed = state.get("observed_at_epoch")
+    if isinstance(observed, bool) or not isinstance(observed, (int, float)):
+        return False
+    age = time.time() - float(observed)
+    max_age = guard.get("max_heartbeat_age_seconds", 120)
+    if (not isinstance(max_age, int) or max_age < 1 or max_age > 300 or
+            not 0 <= age <= max_age):
         return False
     required = guard.get("required_proofs", [])
     accounts = guard.get("required_accounts", [])

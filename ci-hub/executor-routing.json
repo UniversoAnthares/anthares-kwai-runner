@@ -38,6 +38,7 @@
     "cloud_cutover": {
       "enabled": false,
       "disable_local_executors": true,
+      "max_heartbeat_age_seconds": 120,
       "required_accounts": ["lucasrosalem", "universoanthares"],
       "required_proofs": [
         "android_ready",

@@ -3,6 +3,7 @@ import contextlib
 import io
 import os
 import sys
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -36,6 +37,7 @@ class AndroidExecutorRoutingTests(unittest.TestCase):
         data = ready()
         data["online"] = True
         data["authenticated"] = True
+        data["observed_at_epoch"] = time.time()
         data["verified_accounts"] = list(
             manifest["android_execution"]["cloud_cutover"]["required_accounts"])
         data["proofs"] = {name: True for name in
@@ -68,6 +70,19 @@ class AndroidExecutorRoutingTests(unittest.TestCase):
         self.assertIsNone(router.choose(
             cfg, {"cloud_android_verified": cloud,
                   "physical_android": ready()}, "kwai_publish"))
+
+    def test_cloud_cutover_rejects_stale_and_future_heartbeat(self):
+        import copy
+        cfg = copy.deepcopy(MANIFEST)
+        cfg["android_execution"]["cloud_cutover"]["enabled"] = True
+        cloud = self.cloud_proven(cfg)
+        for observed in (None, True, "recent", time.time() - 121,
+                         time.time() + 30):
+            with self.subTest(observed=observed):
+                cloud["observed_at_epoch"] = observed
+                self.assertIsNone(router.choose(
+                    cfg, {"cloud_android_verified": cloud,
+                          "physical_android": ready()}, "kwai_publish"))
 
     def test_cloud_cutover_fails_closed_if_host_loses_session(self):
         import copy
