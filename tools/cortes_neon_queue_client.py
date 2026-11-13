@@ -24,7 +24,7 @@ _PHYSICAL_KEY=pathlib.Path(os.getenv('ANTHARES_PHYSICAL_EXECUTOR_KEY',r'D:\Antha
 ACCOUNT=os.getenv('KWAI_EXPECTED_ACCOUNT','lucasrosalem').strip().lstrip('@').lower()
 if ACCOUNT not in ('lucasrosalem','universoanthares'):raise RuntimeError('KWAI_ACCOUNT_NOT_ALLOWED')
 _TARGET='kwai:'+ACCOUNT
-_ACTIONS={'stats':'kwai-physical-stats','lease':'kwai-lease','start':'kwai-start','confirm':'kwai-confirm','fail':'kwai-fail','renew':'kwai-renew','historical':'kwai-historical-resolve','no-post-repair':'kwai-physical-repair-no-post','unproven':'kwai-unproven'}
+_ACTIONS={'stats':'kwai-physical-stats','lease':'kwai-lease','start':'kwai-start','confirm':'kwai-confirm','fail':'kwai-fail','renew':'kwai-renew','historical':'kwai-historical-resolve','no-post-repair':'kwai-physical-repair-no-post','unproven':'kwai-unproven','terminal':'kwai-job-terminal-read'}
 
 def call(action: str, payload: dict | None=None, method: str='POST') -> dict:
     if BASE.rstrip('/')!=_NEON.rstrip('/'):
