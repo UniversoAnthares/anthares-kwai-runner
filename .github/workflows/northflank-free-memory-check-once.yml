@@ -45,6 +45,13 @@ jobs:
             const numeric={};for(const [k,v] of Object.entries(o))if(/credit|balance|total|cost|usage|remaining|amount/i.test(k)&&typeof v!=='object')numeric[k]=v;
             console.log('BILLING_'+path.split('/').pop()+'_FIELDS='+Object.keys(o).slice(0,18).join(','));
             console.log('BILLING_'+path.split('/').pop()+'_NUMERIC='+JSON.stringify(numeric).slice(0,700));
+          if(path.endsWith('credit-balance')){
+           console.log('CREDIT_CURRENCY='+String(o.currency||'unknown'));
+           console.log('CREDIT_AVAILABLE='+String(o.total?.available ?? 'unknown'));
+           console.log('CREDIT_PENDING='+String(o.total?.pending ?? 'unknown'));
+           console.log('CREDIT_GRANTS_AVAILABLE='+String(o.grants?.available ?? 'unknown'));
+           console.log('CUSTOMER_BALANCE_AMOUNT='+String(o.customerBalance?.amount ?? 'unknown'));
+          }
            }
           }
           console.log('READ_ONLY=1');
