@@ -1,0 +1,53 @@
+name: Kwai three quarantined public-media readback (read only)
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/kwai-three-public-readback-20261113.yml'
+      - 'tools/kwai_three_public_media_readback.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: kwai-three-public-readback-20261113
+  cancel-in-progress: true
+jobs:
+  public-readback:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate source syntax
+        run: python3 -m py_compile tools/kwai_three_public_media_readback.py
+      - name: Install isolated dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv /tmp/kwai-readback-venv
+          /tmp/kwai-readback-venv/bin/pip install --quiet 'playwright==1.56.0' 'opencv-python-headless==4.11.0.86' 'numpy==2.2.6'
+          /tmp/kwai-readback-venv/bin/python -m playwright install chromium
+      - name: Compare author, post timestamps, source SHA256 and independent video frames
+        shell: bash
+        run: |
+          set -euo pipefail
+          /tmp/kwai-readback-venv/bin/python tools/kwai_three_public_media_readback.py
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          data=json.loads(Path('kwai-three-public-readback.json').read_text())
+          assert len(data['results'])==3
+          assert data['queue_mutations']==0 and data['posts_submitted']==0
+          for r in data['results']:
+              print('KWAI_MEDIA_PROOF',r['account'],r['id'],r['status'])
+          print('KWAI_PUBLIC_READBACK_COMPLETE=YES')
+          print('KWAI_QUEUE_MUTATIONS=0')
+          print('KWAI_POSTS_SUBMITTED=0')
+          PY
+      - name: Preserve read-only results for review
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kwai-three-public-readback-${{ github.run_id }}
+          path: kwai-three-public-readback.json
+          if-no-files-found: warn
+          retention-days: 7
