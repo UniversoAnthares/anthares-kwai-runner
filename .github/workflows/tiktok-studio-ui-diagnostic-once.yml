@@ -58,7 +58,7 @@ jobs:
              error_visible:/something went wrong|something isn't working|try again later|access denied|error occurred|ocorreu um erro|não foi possível|tente novamente/.test(body),
              captchas_visible:/drag the slider|verify to continue|captcha|verificar sua identidade/.test(body),
              page_shell_visible:!!document.querySelector('main,[role=main],#root,#app'),
-             upload_input_count:document.querySelectorAll('input[type=file]').length
+             upload_input_count:document.querySelectorAll('input[type=file]').length,
              password_input_count:document.querySelectorAll('input[type=password]').length,
              login_dialog_count:[...document.querySelectorAll('[role=dialog]')].filter(e=>/log in|login|entrar|sign in/.test((e.innerText||'').toLowerCase())).length,
              login_in_first_500:/log in|login|sign in|fazer login/.test(body.slice(0,500)),
@@ -71,6 +71,7 @@ jobs:
           })()"""
           r=_cdp("Runtime.evaluate",{"expression":expr,"returnByValue":True})
           v=(r.get("result") or {}).get("value") or {}
+          if r.get("exceptionDetails") or not v:raise SystemExit("STUDIO_RUNTIME_QUERY_EMPTY_OR_INVALID")
           if not isinstance(v,dict):raise SystemExit("DOM_QUERY_FAILED")
           for key,val in v.items():print("STUDIO_DOM_"+str(key).upper()+"="+str(val)[:180])
           `;
