@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import {kwaiPersistentCloudIdentity,localBlockedByCloudCutover} from './kwai-persistent-cloud-identity.mjs';
 import {deriveKwaiPacing,KWAI_PACING_VERSION} from './kwai-pacing-policy.mjs';
 // Canonical CORTES ledger is Neon PostgreSQL. No local queue or Vercel dependency.
 // This function never publishes media and never accepts device-PC authentication.
@@ -414,8 +415,10 @@ async function kwaiAction(action,b,actor){
  }
  const physical=actor.role==='kwai-physical'&&actor.workflow==='physical:DESKTOP-FTDK0HP';
  const cloud=actor.role==='kwai-publisher'&&actor.workflow==='cortes-kwai-cloud-publisher.yml';
+ const persistentCloud=actor.role==='kwai-persistent-cloud'&&actor.workflow==='cloud:android:redroid';
  const mobilePrimary=actor.role==='kwai-mobile-primary'&&actor.workflow==='mobile:M2004J19C:lucasrosalem';
- if(!physical&&!cloud&&!mobilePrimary)return{ok:false,error:'KWAI_PUBLISHER_ROLE_REQUIRED'};
+ if(!physical&&!cloud&&!mobilePrimary&&!persistentCloud)return{ok:false,error:'KWAI_PUBLISHER_ROLE_REQUIRED'};
+ if(localBlockedByCloudCutover(actor,action))return{ok:false,error:'KWAI_LOCAL_CUTOVER_ACTIVE'};
  if(b.target_key!==KWAI_TARGET||b.expected_account!=='lucasrosalem')
   return{ok:false,error:'KWAI_ACCOUNT_IDENTITY_MISMATCH'};
  const owner=physical?'physical_android:DESKTOP-FTDK0HP':mobilePrimary?'mobile_android:M2004J19C:lucasrosalem':'kwai-cloud:'+actor.workflow;
@@ -1141,7 +1144,9 @@ async function kwaiSecondaryAction(action,b,actor){
  const physical=actor.role==='kwai-physical'&&actor.workflow==='physical:DESKTOP-FTDK0HP';
  const mobile=actor.role==='kwai-mobile'&&actor.workflow==='mobile:M2004J19C:universoanthares';
  const cloud=actor.role==='kwai-publisher'&&actor.workflow==='cortes-kwai-cloud-publisher.yml';
- if(!physical&&!cloud&&!mobile)return{ok:false,error:'KWAI_PUBLISHER_ROLE_REQUIRED'};
+ const persistentCloud=actor.role==='kwai-persistent-cloud'&&actor.workflow==='cloud:android:redroid';
+ if(!physical&&!cloud&&!mobile&&!persistentCloud)return{ok:false,error:'KWAI_PUBLISHER_ROLE_REQUIRED'};
+ if(localBlockedByCloudCutover(actor,action))return{ok:false,error:'KWAI_LOCAL_CUTOVER_ACTIVE'};
  if(b.target_key!==KWAI_TARGET||b.expected_account!=='universoanthares')
   return{ok:false,error:'KWAI_ACCOUNT_IDENTITY_MISMATCH'};
  const owner=physical?'physical_android:DESKTOP-FTDK0HP':mobile?'mobile_android:M2004J19C':'kwai-cloud:'+actor.workflow;
@@ -2603,7 +2608,7 @@ export default {async fetch(request){
  if(Number(request.headers.get('content-length')||0)>65536)return answer({ok:false,error:'TOO_LARGE'},413);
  const actor=action.startsWith('browser-')?
     (await authorizePinterestBrowser(request)?{role:'pinterest-browser'}:null):
-    (action.startsWith('kwai-')?(await kwaiPhysicalIdentity(request,action))||(await kwaiMobileIdentity(request,action))||await identity(request):await identity(request));
+    (action.startsWith('kwai-')?(await kwaiPhysicalIdentity(request,action))||(await kwaiMobileIdentity(request,action))||kwaiPersistentCloudIdentity(request,action)||await identity(request):await identity(request));
  if(!actor)return answer({ok:false,error:'PUBLISHER_AUTH_UNAUTHORIZED'},401);
  let body;try{body=await request.json();}catch{return answer({ok:false,error:'INVALID_JSON'},400);}
  if(!body||typeof body!=='object'||Array.isArray(body))return answer({ok:false,error:'INVALID_BODY'},400);
