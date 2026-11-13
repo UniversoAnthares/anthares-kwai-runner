@@ -145,6 +145,10 @@ class SafeDefaults(unittest.TestCase):
                 + b'/etc/modules-load.d/anthares-redroid.conf\n'
                 + b'options binder_linux devices=binder,hwbinder,vndbinder\n'
                 + b'docker start anthares-redroid\n'
+                + b'adb connect 127.0.0.1:5555\n'
+                + b'sys.boot_completed\n'
+                + b'ANDROID_BOOT_READY_ADB_LOCAL\n'
+                + b'anthares-redroid-health.timer\n'
                 + mod.REDROID_ARM64_IMAGE.encode("ascii")
                 + b"\n" + mod.REDROID_AMD64_IMAGE.encode("ascii"))
 
@@ -181,6 +185,42 @@ class SafeDefaults(unittest.TestCase):
         data = self._valid_cloud_init().replace(
             b"docker start anthares-redroid", b"CONTAINER_RECOVERY_MISSING")
         self._assert_bootstrap_rejected(data)
+
+    def test_cloud_init_rejects_missing_android_boot_readiness(self):
+        for marker in (b"adb connect 127.0.0.1:5555",
+                       b"sys.boot_completed",
+                       b"ANDROID_BOOT_READY_ADB_LOCAL",
+                       b"anthares-redroid-health.timer"):
+            with self.subTest(marker=marker):
+                self._assert_bootstrap_rejected(
+                    self._valid_cloud_init().replace(marker, b"REMOVED"))
+
+    def test_real_cloud_init_validates_android_boot_on_local_adb(self):
+        import subprocess
+        import yaml
+        from pathlib import Path
+        cloud = Path("infra/oci-android/redroid-firstboot.cloud-config.yml")
+        config = yaml.safe_load(cloud.read_text(encoding="utf-8"))
+        files = {entry["path"]: entry["content"] for entry in config["write_files"]}
+        firstboot = files["/usr/local/sbin/anthares-redroid-firstboot"]
+        health = files["/usr/local/sbin/anthares-redroid-readiness-check"]
+        service = files["/etc/systemd/system/anthares-redroid-health.service"]
+        timer = files["/etc/systemd/system/anthares-redroid-health.timer"]
+        self.assertIn("ca-certificates docker.io kmod adb", firstboot)
+        self.assertIn("docker port anthares-redroid 5555/tcp", health)
+        self.assertIn('"127.0.0.1:5555"', health)
+        self.assertIn("sys.boot_completed", health)
+        self.assertIn("'ANDROID_BOOT_READY_ADB_LOCAL'", health)
+        self.assertIn("OnUnitInactiveSec=15min", timer)
+        self.assertIn("TimeoutStartSec=8min", service)
+        self.assertIn(["systemctl", "enable", "--now",
+                       "anthares-redroid-health.timer"], config["runcmd"])
+        self.assertIn(["systemctl", "start",
+                       "anthares-redroid-health.service"], config["runcmd"])
+        for script in (firstboot, health):
+            result = subprocess.run(["bash", "-n"], input=script,
+                                    text=True, capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_cloud_init_rejects_mutable_redroid_tag(self):
         data = self._valid_cloud_init().replace(
