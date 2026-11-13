@@ -35,13 +35,16 @@ test('forged account, URLs, timestamps, duplicate posts and content hashes are r
    [(b,v)=>b.result.observed_source_file_bytes=v,12]
  ])assert.equal(validateOneoffKwaiPublicProof(mutate(mut,val)),null);
 });
-test('one-off OIDC role is isolated from normal public and publisher roles',()=>{
+test('one-off OIDC writer was revoked after all three real video confirmations',()=>{
  assert.equal(ONEOFF_WORKFLOW,'kwai-three-verified-reconcile.yml');
  assert.equal(ONEOFF_RECONCILED_KIND,'kwai_three_public_sift_oidc_reconciled_v1');
- assert.match(data,/else if\(wf===ONEOFF_WORKFLOW\)\{role='kwai-oneoff-reconciler';platform='kwai';\}/);
- assert.match(data,/if\(action==='kwai-oneoff-confirm-public'\)/);
- assert.match(data,/ONEOFF_OIDC_ROLE_REQUIRED/);
- assert.match(data,/validateOneoffKwaiPublicProof\(body\)/);
+ assert.doesNotMatch(data,/else if\(wf===ONEOFF_WORKFLOW\)\{role='kwai-oneoff-reconciler';platform='kwai';\}/);
+ assert.doesNotMatch(data,/if\(action==='kwai-oneoff-confirm-public'\)/);
+ const workflow=readFileSync(new URL('../../.github/workflows/kwai-three-verified-reconcile.yml',import.meta.url),'utf8');
+ assert.match(workflow,/GITHUB_OIDC_TOKEN_ACCESS=DISABLED/);
+ assert.doesNotMatch(workflow,/id-token:\s*write/);
+ assert.doesNotMatch(workflow,/schedule:\s*|cron:\s*/);
+ assert.doesNotMatch(workflow,/^  push:/m);
  assert.match(data,/ONEOFF_CANCEL_PROOF_MISMATCH/);
  assert.match(data,/ONEOFF_STARTED_OWNER_MISMATCH/);
  assert.match(data,/ONEOFF_ATOMIC_RECONCILE_CONFLICT/);

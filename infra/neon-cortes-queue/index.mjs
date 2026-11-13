@@ -90,7 +90,7 @@ async function identity(request){
   else if(PROBE_WORKFLOWS.has(wf))role='probe';
   else if(wf==='cortes-neon-ha-oidc-proof.yml'){role='probe';platform='linkedin';}
   else if(wf==='cortes-kwai-cloud-publisher.yml'){role='kwai-publisher';platform='kwai';}
-  else if(wf===ONEOFF_WORKFLOW){role='kwai-oneoff-reconciler';platform='kwai';}
+  // One-off reconciler authorization revoked after production confirmation of three jobs.
   else if(wf==='cortes-linkedin-personal-cloud.yml'||wf==='cortes-linkedin-personal-fallback-cloud.yml'){
    // Two separate hosted execution paths share one Neon ledger, identity,
    // owner lease and quota. Neither path can replay an uncertain delivery.
@@ -2723,12 +2723,7 @@ export default {async fetch(request){
    const out=await personalAction(action.slice('personal-'.length),body);
    return answer(out,out.ok?200:409);
   }
-  if(action==='kwai-oneoff-confirm-public'){
-   if(actor.role!=='kwai-oneoff-reconciler'||actor.workflow!==ONEOFF_WORKFLOW)
-    return answer({ok:false,error:'ONEOFF_OIDC_ROLE_REQUIRED'},403);
-   const out=await kwaiOneoffPublicReconcile(body,actor);
-   return answer(out,out.ok?200:409);
-  }
+  // One-off public reconciliation endpoint retired; no HTTP action is reachable.
   if(action.startsWith('kwai-')){
    const out=await kwaiAction(action,body,actor);
    return answer(out,out.ok?200:out.error==='KWAI_PUBLISHER_NOT_ENABLED'?423:409);

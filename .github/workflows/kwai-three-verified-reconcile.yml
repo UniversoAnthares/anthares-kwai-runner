@@ -1,98 +1,16 @@
-name: Kwai three verified published posts - reconcile once
+name: Retired Kwai three verified published posts - OIDC revoked
 on:
-  push:
-    branches: [main]
-    paths: ['test-hub/findings/20261113-kwai-reconcile-trigger.json']
+  workflow_dispatch:
 permissions:
   contents: read
-  id-token: write
-concurrency:
-  group: kwai-three-verified-reconcile-oneoff
-  cancel-in-progress: false
 jobs:
-  exact-three:
+  retired:
     runs-on: ubuntu-24.04
-    timeout-minutes: 11
+    timeout-minutes: 1
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Revalidate all three public MP4 sources and CDN frames before any queue mutation
-        shell: bash
+      - name: Ensure one-time reconciliation cannot be replayed
         run: |
-          set -euo pipefail
-          python -m pip install --disable-pip-version-check playwright opencv-python-headless
-          python tools/kwai_three_public_media_readback.py
-          python - <<'PY'
-          import json
-          data=json.load(open('kwai-three-public-readback.json'))
-          baseline=json.load(open('test-hub/findings/20261113-kwai-three-public-matches.json'))
-          if data.get('queue_mutations')!=0 or data.get('posts_submitted')!=0:raise SystemExit('READBACK_SIDE_EFFECT')
-          b={x['id']:x for x in baseline['results']}
-          a={x['id']:x for x in data['results']}
-          if b.keys()!=a.keys() or len(a)!=3:raise SystemExit('JOB_ALLOWLIST_CHANGED')
-          for job,r in a.items():
-              old=b[job]
-              for k in ('account','photo_id','started_ms','posted_ms','source_sha256',
-                        'public_url','observed_source_file_sha256','public_media_sha256',
-                        'observed_source_file_bytes','public_media_bytes','ledger_media_hash_kind'):
-                  if r.get(k)!=old.get(k):raise SystemExit('INDEPENDENT_MEDIA_CHANGED:'+job+':'+k)
-              if r.get('status')!='VERIFIED_PUBLIC_SOURCE_MEDIA_READONLY':raise SystemExit('MEDIA_UNVERIFIED:'+job)
-              p=r.get('proof') or {}
-              if p.get('qualifying_distinct_frames')!=6 or p.get('matcher')!='sift_source_to_public_cdn_v1':
-                  raise SystemExit('FRAME_PROOF_MISSING:'+job)
-              if len(p.get('best_source_frame_inliers',[]))!=6 or min(p['best_source_frame_inliers'])<240:
-                  raise SystemExit('FRAME_INLIERS_INSUFFICIENT:'+job)
-          print('THREE_PUBLIC_KWAI_MEDIA_INDEPENDENTLY_VERIFIED=YES')
-          PY
-      - name: Reconcile exactly three already-posted records through exclusive signed OIDC controller
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          import json,os,urllib.request,urllib.error,urllib.parse
-          old=json.load(open('test-hub/findings/20261113-kwai-three-public-matches.json'))
-          fresh=json.load(open('kwai-three-public-readback.json'))
-          approved={r['id'] for r in old['results']}
-          if len(approved)!=3:raise SystemExit('EXACT_ALLOWLIST_INVALID')
-          audience='https://anthares-remote-primary.vercel.app/api/cortes-queue'
-          url=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']
-          req=urllib.request.Request(url+('&' if '?' in url else '?')+urllib.parse.urlencode({'audience':audience}),
-              headers={'Authorization':'Bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']})
-          with urllib.request.urlopen(req,timeout=15) as resp: token=json.load(resp)['value']
-          if len(token)<60:raise SystemExit('OIDC_NOT_VALID')
-          endpoint='https://br-crimson-unit-b89nau08-cortesqueue.compute.c-14.us-east-1.aws.neon.tech/?action=kwai-oneoff-confirm-public'
-          ids=[]
-          for r in fresh['results']:
-              if r['id'] not in approved:raise SystemExit('NOT_ALLOWLISTED')
-              body={'id':r['id'],'target_key':'kwai:'+r['account'],'expected_account':r['account'],'result':r}
-              payload=json.dumps(body,separators=(',',':')).encode('utf8')
-              request=urllib.request.Request(endpoint,data=payload,method='POST',
-                 headers={'Authorization':'Bearer '+token,'Content-Type':'application/json',
-                          'User-Agent':'AntharesKwaiPublicSiftOneoff/1.0'})
-              try:
-                  with urllib.request.urlopen(request,timeout=35) as response:
-                      answer=json.load(response)
-              except urllib.error.HTTPError as err:
-                  try: result=json.load(err);reason=str(result.get('error','unknown'))[:120]
-                  except (ValueError,TypeError):reason='NON_JSON'
-                  print('KWAI_RECONCILE_ERROR',r['id'],err.code,reason)
-                  raise SystemExit('KWAI_RECONCILE_CAS_FAILED')
-              if not answer.get('ok') or answer.get('job',{}).get('status')!='confirmed':
-                  raise SystemExit('KWAI_RECONCILE_UNCONFIRMED:'+r['id'])
-              ids.append(r['id'])
-              wp=answer.get('wp_callback') or {}
-              print('KWAI_RECONCILED',r['account'],r['photo_id'],'wp_synced='+str(wp.get('synced',0)),flush=True)
-          if len(ids)!=3:raise SystemExit('THREE_JOBS_NOT_DONE')
-          print('THREE_KWAI_ROWS_CONFIRMED=YES')
-          print('KWAI_VIDEO_UPLOADS=0')
-          PY
-      - name: Keep no videos and no OIDC credentials
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: kwai-verified-public-reconcile-readback
-          path: kwai-three-public-readback.json
-          retention-days: 3
-          if-no-files-found: warn
+          echo 'KWAI_THREE_ONEOFF_RECONCILER=DISABLED_AFTER_3_CONFIRMED'
+          echo 'GITHUB_OIDC_TOKEN_ACCESS=DISABLED'
+          echo 'NEON_MUTATIONS=0'
+          echo 'KWAI_POSTS_SUBMITTED=0'
