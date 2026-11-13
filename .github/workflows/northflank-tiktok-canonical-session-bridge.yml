@@ -54,18 +54,18 @@ jobs:
               except Exception as ex:
                   print('NF_SESSION_BRIDGE_NETWORK='+type(ex).__name__+' path='+path,flush=True)
                   return 0,{}
-          EXPECTED='2026-11-12-browser-ffmpeg-session-v17'
+          EXPECTED='2026-11-12-browser-ffmpeg-session-v18'
           for wait in range(25):
               rc,revision=call('/interactive-browser/revision',timeout=15)
               if rc==200 and revision.get('revision')==EXPECTED:
-                  print('NF_V17_REVISION_PROVEN=1',flush=True)
+                  print('NF_V18_REVISION_PROVEN=1',flush=True)
                   break
-              if wait%5==0:print('NF_V17_WAITING_FOR_RELEASE=1',flush=True)
+              if wait%5==0:print('NF_V18_WAITING_FOR_RELEASE=1',flush=True)
               time.sleep(10)
-          else:raise SystemExit('NF_V17_NOT_DEPLOYED_SAFE_STOP')
+          else:raise SystemExit('NF_V18_NOT_DEPLOYED_SAFE_STOP')
           c,health=call('/health',timeout=18)
           if c!=200 or health.get('ok') is not True or health.get('ffmpeg_ready') is not True:
-              raise SystemExit('NF_V17_CODEC_PREFLIGHT_UNAVAILABLE')
+              raise SystemExit('NF_V18_CODEC_PREFLIGHT_UNAVAILABLE')
           state=preflight_vault()
           cookies=state.get('cookies') or []
           if not cookies or len(cookies)>256:raise SystemExit('NF_CANONICAL_OWNER_STATE_INVALID')
