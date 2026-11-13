@@ -31,7 +31,7 @@ share=code('kwai_phone_share_clipboard.py')
 for term in ('def compute_schedule(', 'def sweep_unproven(', 'def acquire_physical_device_lock(',
              'def release_physical_device_lock(', 'def repair_pending(', 'def complete_origin_callback(',
              'KWAI_RECONCILED_WP_SYNC', "if now-prior>=65:", 'KWAI_PROOF_RECOVERY_',
-             'kwai-public-post-proportional-v2', 'def can_attempt_cut('):
+             'kwai-public-post-proportional-06to23-v3', 'def can_attempt_cut('):
     assert term in daemon, 'Windows daemon lost safety guard: '+term
 for term in ('KWAI_PUBLIC_PROFILE_INDEX_PENDING_RETRYABLE',
              'KWAI_PUBLIC_MEDIA_MATCH_PENDING_RETRYABLE',
@@ -43,6 +43,49 @@ assert 'KWAI_PHYSICAL_NEON_CANONICAL_URL_REQUIRED' in client
 assert "KWAI_UP_STATE=FAILED ERROR=timeout" in worker
 assert "KWAI_PHONE_MEDIA_REUSED_VERIFIED_SHA256" in native
 print('CANONICAL_MODULES_AND_FAIL_CLOSED_GUARDS_PASS')
+
+# Execute only the isolated scheduler function: no Android, network or file IO.
+import datetime
+from zoneinfo import ZoneInfo
+mod=ast.parse(daemon)
+fn_node=next(n for n in mod.body if isinstance(n,ast.FunctionDef) and n.name=='compute_schedule')
+scheduler={'EXPECTED_ACCOUNT':'lucasrosalem','load_schedule':lambda:{},
+           'save_schedule':lambda value:None}
+exec(compile(ast.Module(body=[fn_node],type_ignores=[]),'<kwai-schedule-only>','exec'),scheduler)
+fn=scheduler['compute_schedule']
+tz=ZoneInfo('America/Campo_Grande')
+def local(h,m=0,s=0):
+    return datetime.datetime(2026,11,13,h,m,s,tzinfo=tz)
+def snapshot(now,status,pending=16,confirmed=0,used=0,first=None,last=None,next_due=None):
+    return {'ok':True,'pacing_version':'kwai-public-post-proportional-06to23-v3',
+            'target_key':'kwai:lucasrosalem','window_open_at':local(6).isoformat(),
+            'deadline_at':local(23).isoformat(),'confirmed_today':confirmed,
+            'started_today':used,'remaining_today':min(pending,100-used),
+            'first_confirmed_at':first.isoformat() if first else None,
+            'last_confirmed_at':last.isoformat() if last else None,
+            'next_due_at':next_due.isoformat() if next_due else None,'status':status}
+for now,status,next_due in [
+    (local(5,59,59),'WAIT_OPEN',local(6)),
+    (local(6),'DUE',local(6)),
+    (local(23),'BLOCKED_SAME_DAY_CAPACITY',None)
+]:
+    sec,record=fn(0,16,100,now,snapshot(now,status,next_due=next_due))
+    assert record['status']==status,(now,status,record)
+first,last=local(6,35),local(15,50)
+due=last+(local(23)-last)/17
+sec,record=fn(14,16,100,local(18,30),snapshot(
+    local(18,30),'DUE',confirmed=14,used=14,first=first,last=last,next_due=due))
+assert record['status']=='DUE' and 1500 < sec < 1600,record
+try:
+    invalid=snapshot(local(5,59,59),'WAIT_OPEN',next_due=local(6))
+    invalid['window_open_at']=local(7).isoformat()
+    fn(0,16,100,local(5,59,59),invalid)
+except RuntimeError as exc:
+    assert 'kwai_pacing_open_window_mismatch' in str(exc)
+else:
+    raise AssertionError('Invalid server opening time was accepted')
+print('KWAI_LOCAL_V3_WINDOW_06_23_AND_DUE_MATH_PASS')
+
 
 class ReachedVerifiedShare(Exception):
     pass
