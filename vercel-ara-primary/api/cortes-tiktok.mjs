@@ -72,7 +72,7 @@ async function schema(){
  'confirmed_at timestamptz, last_error text, created_at timestamptz NOT NULL DEFAULT now(),'+
  'updated_at timestamptz NOT NULL DEFAULT now(),'+
  'CONSTRAINT cortes_tiktok_source_bounds CHECK(source_end>source_start),'+
- 'CONSTRAINT cortes_tiktok_state CHECK(status IN (\'queued\',\'leased\',\'started\',\'uncertain\',\'confirmed\'))'+
+ 'CONSTRAINT cortes_tiktok_state CHECK(status IN (\'queued\',\'leased\',\'started\',\'uncertain\',\'confirmed\',\'closed_unverified\'))'+
  ')');
  await pool.query('CREATE INDEX IF NOT EXISTS cortes_tiktok_queue_ix ON cortes_tiktok_publications(status,created_at)');
  // Idempotent additive migration: failed media preflight must never monopolize the queue.
