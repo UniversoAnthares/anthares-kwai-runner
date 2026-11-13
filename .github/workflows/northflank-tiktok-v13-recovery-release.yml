@@ -1,13 +1,13 @@
-name: TikTok Northflank existing service bounded v13 recovery
+name: TikTok Northflank existing service bounded v14 recovery
 on:
   workflow_dispatch: {}
   push:
     branches: [main]
-    paths: ['.github/workflows/northflank-tiktok-v13-recovery-release.yml']
+    paths: ['.github/workflows/northflank-tiktok-v14-recovery-release.yml']
 permissions:
   contents: read
 concurrency:
-  group: northflank-tiktok-v13-production-existing-service
+  group: northflank-tiktok-v14-production-existing-service
   cancel-in-progress: false
 jobs:
   repair:
@@ -17,7 +17,7 @@ jobs:
       NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
       ARA_SHARED: ${{ secrets.ARA_SHARED }}
     steps:
-      - name: Rebuild exclusively the existing Anthares TikTok Northflank git service and verify FFmpeg/Chromium v13
+      - name: Rebuild exclusively the existing Anthares TikTok Northflank git service and verify FFmpeg/Chromium v14
         shell: bash
         run: |
           set -euo pipefail
@@ -28,9 +28,9 @@ jobs:
           assert len(T)>20 and len(SHARED)>20,'NORTHFLANK_AUTH_NOT_CONFIGURED'
           ROOT='https://api.northflank.com/v1'
           LIVE='https://http--anthares-tiktok-northflank--6f6pbqmvhpv6.code.run'
-          EXPECTED='2026-11-12-browser-ffmpeg-v13'
+          EXPECTED='2026-11-12-browser-ffmpeg-session-v14'
           def call(url,token,method='GET',body=None,timeout=25):
-              headers={'Authorization':'Bearer '+token,'Accept':'application/json','User-Agent':'Anthares-Northflank-TikTok-V13-Bounded-Recovery/1.0'}
+              headers={'Authorization':'Bearer '+token,'Accept':'application/json','User-Agent':'Anthares-Northflank-TikTok-V14-Bounded-Recovery/1.0'}
               if body is not None:headers['Content-Type']='application/json'
               req=urllib.request.Request(url,method=method,headers=headers,data=json.dumps(body).encode() if body is not None else None)
               try:
@@ -45,7 +45,7 @@ jobs:
           c,rev=call(LIVE+'/interactive-browser/revision',SHARED,timeout=13)
           print('NF_CURRENT_REVISION_HTTP='+str(c),flush=True)
           if c==200 and rev.get('revision')==EXPECTED:
-              print('NF_V13_RELEASE_ALREADY_ACTIVE=1',flush=True)
+              print('NF_V14_RELEASE_ALREADY_ACTIVE=1',flush=True)
           else:
               c,p=call(ROOT+'/projects',T)
               if c!=200:raise SystemExit('NF_ADMIN_INVALID_HTTP_'+str(c))
@@ -78,10 +78,10 @@ jobs:
                   time.sleep(10)
                   c,rev=call(LIVE+'/interactive-browser/revision',SHARED,timeout=13)
                   if c==200 and rev.get('revision')==EXPECTED:
-                      print('NF_V13_DEPLOYMENT_CONFIRMED=1',flush=True)
+                      print('NF_V14_DEPLOYMENT_CONFIRMED=1',flush=True)
                       break
                   if attempt%5==0:print('NF_DEPLOY_WAITING_10SEC_STEP='+str(attempt+1)+' http='+str(c),flush=True)
-              else:raise SystemExit('NF_V13_DEPLOYMENT_TIMEOUT')
+              else:raise SystemExit('NF_V14_DEPLOYMENT_TIMEOUT')
           for i in range(18):
               c,h=call(LIVE+'/health',SHARED,timeout=12)
               if c==200 and h.get('ok') is True and h.get('ffmpeg_ready') is True:
@@ -94,12 +94,12 @@ jobs:
           print('NF_BROWSER_STATUS_HTTP='+str(c),flush=True)
           if c!=200 or s.get('ok') is not True or s.get('backend')!='northflank_chromium_cdp':
               raise SystemExit('NF_BROWSER_STATUS_UNVERIFIED')
-          print('NF_BROWSER_STATUS_V13_PASS=1',flush=True)
+          print('NF_BROWSER_STATUS_V14_PASS=1',flush=True)
           c,ss=call(LIVE+'/session-status',SHARED,timeout=12)
           print('NF_TIKTOK_SESSION_HTTP='+str(c),flush=True)
           print('NF_TIKTOK_IDENTITY_VERIFIED='+str(bool(ss.get('identity_verified'))),flush=True)
           print('NF_TIKTOK_SESSION_BOOTSTRAPPED='+str(bool(ss.get('bootstrapped'))),flush=True)
           if c!=200 or ss.get('ok') is not True:
               raise SystemExit('NF_TIKTOK_SESSION_STATUS_UNVERIFIED')
-          print('NF_V13_EXISTING_SERVICE_RECOVERY_COMPLETE=1',flush=True)
+          print('NF_V14_EXISTING_SERVICE_RECOVERY_COMPLETE=1',flush=True)
           PY
