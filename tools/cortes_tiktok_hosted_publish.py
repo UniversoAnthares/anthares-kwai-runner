@@ -254,6 +254,14 @@ def main():
         print("CORTES_TIKTOK_DEFERRED_UNTIL_2026_10_20_0600_CUIABA",flush=True)
         return 0
 
+    # Check cloud publisher capability before claiming or starting a Neon job.
+    # Missing Browserless credentials must never leave a clip in UNCERTAIN.
+    remote_status=q.wcall("/session-status",q.worker_auth(),timeout=25)
+    if not (remote_status.get("ok") and remote_status.get("bootstrapped")
+            and remote_status.get("identity_verified")
+            and remote_status.get("browserless_ready")):
+        print("CORTES_TIKTOK_BROWSERLESS_PREFLIGHT_HOLD_NO_NEON_CLAIM",flush=True)
+        return 0
     state=preflight_vault()
     control=q.oidc()
     if os.getenv("TIKTOK_CODEBERG_PREFLIGHT_ONLY")=="1":
