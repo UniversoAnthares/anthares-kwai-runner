@@ -26,6 +26,36 @@ try:
   assert tab.attrib.get('resource-id')==prefix+'.basis:id/id_home_bottom_tab_me'
   assert len(calls)==2
   print('KWAI_OPTIONAL_NOTIFICATION_'+account.upper()+'_PASS')
+ # Retain the pre-existing Windows creator-level popup guard after code sync.
+ n.ACCOUNT='universoanthares'
+ creator=ET.fromstring('<hierarchy>'
+  '<node resource-id="com.kwai.video.basis_extension:id/create_user_text" text="Universo Anthares" />'
+  '<node resource-id="com.kwai.video.basis_extension:id/create_cancel_button" text="Fechar" clickable="true" enabled="true" bounds="[905,532][977,604]"/>'
+  '</hierarchy>')
+ ready=ET.fromstring('<hierarchy><node resource-id="com.kwai.video.basis:id/id_home_bottom_tab_me" clickable="true" enabled="true" bounds="[900,2100][1070,2300]"/></hierarchy>')
+ taps=[];reads=[]
+ def creator_read(serial,name):
+  reads.append(name)
+  return (creator if len(reads)==1 else ready),None
+ n.dump=creator_read;n.tap=lambda serial,node:taps.append(node.attrib.get('resource-id'))
+ _,tab,_=n.wait('simulated',n.RID_PROFILE,'creator-guard',seconds=3)
+ assert taps==['com.kwai.video.basis_extension:id/create_cancel_button']
+ assert tab.attrib.get('resource-id')=='com.kwai.video.basis:id/id_home_bottom_tab_me'
+ for invalid in [
+  '<hierarchy><node resource-id="com.kwai.video.basis_extension:id/create_user_text" text="Other account"/><node resource-id="com.kwai.video.basis_extension:id/create_cancel_button" text="Fechar" clickable="true" enabled="true" bounds="[905,532][977,604]"/></hierarchy>',
+  '<hierarchy><node resource-id="com.kwai.video.basis_extension:id/create_user_text" text="Universo Anthares"/><node resource-id="com.kwai.video.basis_extension:id/create_cancel_button" text="Fechar" clickable="false" enabled="true" bounds="[905,532][977,604]"/></hierarchy>',
+ ]:
+  bad=ET.fromstring(invalid);taps=[];reads=[]
+  def creator_wrong(serial,name):
+   reads.append(name)
+   if len(reads)==1:return bad,None
+   raise n.E('CREATOR_UNKNOWN_PROMPT_PRESERVED')
+  n.dump=creator_wrong;n.tap=lambda serial,node:taps.append(node)
+  try:n.wait('simulated',n.RID_PROFILE,'creator-invalid',seconds=3)
+  except n.E as exc:assert 'CREATOR_UNKNOWN_PROMPT_PRESERVED' in str(exc)
+  else:raise AssertionError('Creator prompt accepted unexpectedly')
+  assert not taps
+ print('KWAI_CREATOR_LEVEL_POPUP_GUARD_PASS')
  # Real secondary popup geometry was observed in the pre-publication UI dump.
  # Whitelist only an exact three-ID optional promotion, then re-read the profile.
  n.ACCOUNT='universoanthares'
