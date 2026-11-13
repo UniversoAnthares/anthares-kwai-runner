@@ -13,6 +13,40 @@ jobs:
       NF_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
       ARA_SHARED: ${{ secrets.ARA_SHARED }}
     steps:
+      - name: Download approved WordPress MP4 using verified range request
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import urllib.request,urllib.error
+          from pathlib import Path
+          source='https://anthares.us/wp-content/uploads/anthares-clips/2026/10/short_9CIk-I_3VhM_g1_6619_6657.mp4'
+          profiles=[
+           {'Range':'bytes=0-','User-Agent':'Anthares-Media-ReadOnly/1.0'},
+           {'Range':'bytes=0-','User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/157.0.0.0 Safari/537.36','Referer':'https://anthares.us/'},
+           {'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/157.0.0.0 Safari/537.36','Referer':'https://anthares.us/'},
+          ]
+          done=False
+          for index,headers in enumerate(profiles,1):
+           try:
+            req=urllib.request.Request(source,headers=headers)
+            with urllib.request.urlopen(req,timeout=35) as r:
+             content=r.read(15000001)
+             print('SOURCE_REQUEST_'+str(index)+'_HTTP='+str(r.status),flush=True)
+             if not 150000<=len(content)<=15000000 or content[4:8]!=b'ftyp':
+              print('SOURCE_REQUEST_'+str(index)+'_INVALID_MP4=1',flush=True)
+              continue
+             target=Path('/tmp/anthares-approved-clip.mp4')
+             target.write_bytes(content)
+             print('SOURCE_MP4_VALIDATED_BYTES='+str(target.stat().st_size),flush=True)
+             done=True
+             break
+           except urllib.error.HTTPError as e:
+            print('SOURCE_REQUEST_'+str(index)+'_HTTP='+str(e.code),flush=True)
+           except Exception as e:
+            print('SOURCE_REQUEST_'+str(index)+'_ERROR='+type(e).__name__,flush=True)
+          if not done:raise SystemExit('SOURCE_MEDIA_UNAVAILABLE_SAFE_STOP')
+          PY
       - name: Install Northflank client
         run: npm install --no-save --no-package-lock --ignore-scripts @northflank/js-client@0.12.0
       - name: Enumerate all 584 owned Studio posts and publish one approved clip only if safely absent
@@ -147,10 +181,8 @@ jobs:
            console.log('DRY_RUN_'+test+'_HTTP='+d.code);
            if(d.code!==200||!d.data.ok)throw Error('DRY_RUN_'+test+'_FAILED');
           }
-          const mediaResp=await fetch(media,{headers:{'User-Agent':'Anthares-Approved-Media/1.0'},signal:AbortSignal.timeout(50000)});
-          console.log('SOURCE_MEDIA_HTTP='+mediaResp.status);
-          if(!mediaResp.ok)throw Error('MEDIA_DOWNLOAD_UNAVAILABLE');
-          const video=Buffer.from(await mediaResp.arrayBuffer());
+          const {readFileSync}=await import('node:fs');
+          const video=readFileSync('/tmp/anthares-approved-clip.mp4');
           console.log('SOURCE_MEDIA_BYTES='+video.length);
           if(video.length<150000||video.length>15000000||video.subarray(4,8).toString()!=='ftyp')throw Error('MEDIA_MP4_VALIDATION_FAILED');
           const upload=new FormData();
