@@ -402,6 +402,48 @@ class SafeDefaults(unittest.TestCase):
             self.assertEqual(mod.main(), 0)
         h["compute"].launch_instance.assert_not_called()
 
+    def test_existing_a1_observer_reports_running_instance_read_only(self):
+        from unittest.mock import Mock
+        compute, identity = Mock(), Mock()
+        target = SimpleNamespace(
+            shape=mod.A1, lifecycle_state="RUNNING",
+            display_name=mod.NAME,
+            freeform_tags={"anthares-purpose": "android-redroid-standby",
+                           "cost-policy": "always-free-single-a1"})
+        child = SimpleNamespace(id="child", lifecycle_state="ACTIVE")
+        with patch.object(mod, "pages", side_effect=[
+                [child], [], [target]]), patch.object(mod, "report") as emit:
+            mod.observe_existing_a1(compute, identity, "tenancy")
+            emit.assert_called_once_with("TARGET_INSTANCE", "RUNNING")
+        compute.list_instances.assert_not_called()  # pages mock intercepts API
+
+    def test_existing_a1_observer_reports_none_without_launch(self):
+        from unittest.mock import Mock
+        compute, identity = Mock(), Mock()
+        with patch.object(mod, "pages", side_effect=[
+                [], []]), patch.object(mod, "report") as emit:
+            mod.observe_existing_a1(compute, identity, "tenancy")
+            emit.assert_called_once_with("TARGET_INSTANCE", "NONE")
+        compute.launch_instance.assert_not_called()
+
+    def test_existing_a1_observer_blocks_ambiguous_identity(self):
+        from unittest.mock import Mock
+        compute, identity = Mock(), Mock()
+        foreign = SimpleNamespace(
+            shape=mod.A1, lifecycle_state="RUNNING",
+            display_name="unknown-a1", freeform_tags={})
+        target = SimpleNamespace(
+            shape=mod.A1, lifecycle_state="PROVISIONING",
+            display_name=mod.NAME,
+            freeform_tags={"anthares-purpose": "android-redroid-standby",
+                           "cost-policy": "always-free-single-a1"})
+        with patch.object(mod, "pages", side_effect=[
+                [], [target, foreign]]), patch.object(mod, "report") as emit:
+            mod.observe_existing_a1(compute, identity, "tenancy")
+            emit.assert_called_once_with(
+                "TARGET_INSTANCE", "AMBIGUOUS_OR_OTHER_A1")
+        compute.launch_instance.assert_not_called()
+
     def test_region_constant_is_home_approved(self):
         self.assertEqual(mod.REGION, "sa-saopaulo-1")
         self.assertEqual((mod.CPU, mod.MEMORY_GB, mod.BOOT_GB), (1, 6, 50))
