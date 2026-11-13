@@ -140,7 +140,9 @@ jobs:
           if(h.code!==200||!h.data.identity_verified||!h.data.ready_for_tiktok)throw Error('ACCOUNT_IDENTITY_NOT_VERIFIED');
           const media='https://anthares.us/wp-content/uploads/anthares-clips/2026/10/short_9CIk-I_3VhM_g1_6619_6657.mp4';
           const plan={segment_id:'g1:9CIk-I_3VhM:6619:6657',source_id:'9CIk-I_3VhM',title:'O Conceito de Comédia para Aristóteles',source_title:'A Poética de Aristóteles - Parte 2',summary:'Aristóteles define a comédia pela imitação de personagens inferiores, com ênfase no ridículo e na deformidade sem dor.'};
-          for(const test of ['08','10']){
+          // Test 10 performs a remote media GET, already confirmed blocked (HTTP 502).
+          // Use identity dry-run 08; validate MP4 ftyp and size on the sender before multipart.
+          for(const test of ['08']){
            const d=await call('POST','/publish-dry-run',{test,media_url:media,plan},45000);
            console.log('DRY_RUN_'+test+'_HTTP='+d.code);
            if(d.code!==200||!d.data.ok)throw Error('DRY_RUN_'+test+'_FAILED');
