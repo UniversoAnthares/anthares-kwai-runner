@@ -162,7 +162,10 @@ def redroid_cloud_init_data():
             b"--privileged" not in data or
             REDROID_ARM64_IMAGE.encode("ascii") not in data or
             REDROID_AMD64_IMAGE.encode("ascii") not in data or
-            b'--platform "$PLATFORM"' not in data):
+            b'--platform "$PLATFORM"' not in data or
+            b"/etc/modules-load.d/anthares-redroid.conf" not in data or
+            b"options binder_linux devices=binder,hwbinder,vndbinder" not in data or
+            b"docker start anthares-redroid" not in data):
         raise ValueError("UNSAFE_OR_MISSING_REDR0ID_BOOTSTRAP")
     return base64.b64encode(data).decode("ascii")
 
