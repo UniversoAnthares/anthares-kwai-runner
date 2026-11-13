@@ -31,6 +31,33 @@ class SafeDefaults(unittest.TestCase):
             with self.assertRaises(ValueError):
                 mod.auth()
 
+    def test_sdk_client_config_has_required_fields_with_signer(self):
+        sample = '{"user":"oci_user","tenancy":"oci_tenancy",' \
+                 '"fingerprint":"oci_fp","region":"sa-saopaulo-1",' \
+                 '"private_key":"-----BEGIN PRIVATE KEY-----example"}'
+        configs = []
+
+        def inspect_client(config, **kwargs):
+            configs.append(config)
+            self.assertIsNotNone(kwargs.get("signer"))
+            self.assertTrue(all(k in config for k in (
+                "region", "tenancy", "user", "fingerprint", "key_file")))
+            return object()
+
+        with patch.dict(os.environ, {"OCI_A1_WATCH_AUTH_JSON": sample},
+                        clear=True), \
+             patch.object(mod.oci.signer, "Signer", return_value=object()), \
+             patch.object(mod.oci.core, "ComputeClient",
+                          side_effect=inspect_client), \
+             patch.object(mod.oci.core, "VirtualNetworkClient",
+                          side_effect=inspect_client), \
+             patch.object(mod.oci.core, "BlockstorageClient",
+                          side_effect=inspect_client), \
+             patch.object(mod.oci.identity, "IdentityClient",
+                          side_effect=inspect_client):
+            self.assertEqual(len(mod.auth()), 5)
+        self.assertEqual(len(configs), 4)
+
     def test_region_constant_is_home_approved(self):
         self.assertEqual(mod.REGION, "sa-saopaulo-1")
         self.assertEqual((mod.CPU, mod.MEMORY_GB, mod.BOOT_GB), (1, 6, 50))
