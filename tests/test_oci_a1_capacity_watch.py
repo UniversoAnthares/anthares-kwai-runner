@@ -91,6 +91,49 @@ class SafeDefaults(unittest.TestCase):
                                      vcn_id="vcn", block_traffic=False)))
         self.assertTrue(mod.private_network_egress_ready(network, subnet))
 
+    def _locked_public_network(self, source="203.0.113.7/32", port=22,
+                               ingress_count=1):
+        subnet = SimpleNamespace(
+            prohibit_public_ip_on_vnic=False, route_table_id="route",
+            vcn_id="vcn", security_list_ids=["sec"])
+        default = SimpleNamespace(destination="0.0.0.0/0",
+                                  destination_type="CIDR_BLOCK",
+                                  network_entity_id="ocid1.internetgateway.demo")
+        tcp = SimpleNamespace(destination_port_range=SimpleNamespace(
+            min=port, max=port))
+        rule = SimpleNamespace(source=source, protocol="6", is_stateless=False,
+                               source_type="CIDR_BLOCK", tcp_options=tcp)
+        egress = SimpleNamespace(destination="0.0.0.0/0", protocol="all",
+                                 destination_type="CIDR_BLOCK")
+        network = SimpleNamespace(
+            get_route_table=lambda _: SimpleNamespace(
+                data=SimpleNamespace(route_rules=[default])),
+            get_internet_gateway=lambda _: SimpleNamespace(
+                data=SimpleNamespace(lifecycle_state="AVAILABLE",
+                                     vcn_id="vcn", is_enabled=True)),
+            get_security_list=lambda _: SimpleNamespace(
+                data=SimpleNamespace(ingress_security_rules=[rule] * ingress_count,
+                                     egress_security_rules=[egress]))
+        )
+        return network, subnet
+
+    def test_locked_public_igw_allows_safe_free_egress(self):
+        network, subnet = self._locked_public_network()
+        self.assertEqual(mod.safe_instance_network_mode(network, subnet),
+                         "LOCKED_PUBLIC")
+
+    def test_public_ssh_open_range_is_denied(self):
+        network, subnet = self._locked_public_network(source="0.0.0.0/0")
+        self.assertIsNone(mod.safe_instance_network_mode(network, subnet))
+
+    def test_public_extra_ingress_is_denied(self):
+        network, subnet = self._locked_public_network(ingress_count=2)
+        self.assertIsNone(mod.safe_instance_network_mode(network, subnet))
+
+    def test_public_unexpected_port_is_denied(self):
+        network, subnet = self._locked_public_network(port=5555)
+        self.assertIsNone(mod.safe_instance_network_mode(network, subnet))
+
     def test_region_constant_is_home_approved(self):
         self.assertEqual(mod.REGION, "sa-saopaulo-1")
         self.assertEqual((mod.CPU, mod.MEMORY_GB, mod.BOOT_GB), (1, 6, 50))
