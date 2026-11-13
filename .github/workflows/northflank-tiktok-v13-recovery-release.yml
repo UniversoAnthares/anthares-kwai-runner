@@ -3,7 +3,7 @@ on:
   workflow_dispatch: {}
   push:
     branches: [main]
-    paths: ['.github/workflows/northflank-tiktok-v14-recovery-release.yml']
+    paths: ['.github/workflows/northflank-tiktok-v13-recovery-release.yml']
 permissions:
   contents: read
 concurrency:
