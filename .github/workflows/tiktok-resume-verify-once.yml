@@ -1,0 +1,62 @@
+name: One-time Northflank TikTok encrypted session resume and read-only checks
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/tiktok-resume-verify-once.yml']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+      RESERVE_TOKEN: ${{ secrets.ANTHARES_RESERVA_TOKEN }}
+    steps:
+      - name: Restore saved session and inspect profile and Studio without saving or closing
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,json,hashlib,time,urllib.request,urllib.error
+          shared=os.getenv('ARA_SHARED','')
+          if len(shared)<20:raise SystemExit('MISSING_AUTH')
+          token=os.getenv('RESERVE_TOKEN') or hashlib.sha256(('anthares-reserva-browser-v1:'+shared).encode()).hexdigest()
+          root='https://anthares-reserva-browser.anthares1.workers.dev'
+          def api(method,path,data=None,timeout=42):
+              payload=json.dumps(data).encode() if data is not None else None
+              headers={'Authorization':'Bearer '+token,'Accept':'application/json'}
+              if data is not None:headers['Content-Type']='application/json'
+              req=urllib.request.Request(root+path,data=payload,headers=headers,method=method)
+              try:
+                  with urllib.request.urlopen(req,timeout=timeout) as resp:
+                      return resp.status,json.loads(resp.read(120000))
+              except urllib.error.HTTPError as err:
+                  body=err.read(6000)
+                  try:return err.code,json.loads(body)
+                  except:return err.code,{}
+          status,resume=api('POST','/tiktok/northflank/resume',{})
+          print('RESUME_HTTP='+str(status))
+          print('ENCRYPTED_COOKIE_COUNT='+str(resume.get('saved_cookie_count',0)))
+          print('RESTORE_STATE='+str(resume.get('state','unknown')))
+          if status!=200 or resume.get('ok') is not True:raise SystemExit('RESTORE_FAILED_'+str(resume.get('error','unknown')))
+          browser={}
+          for attempt in range(18):
+              _,browser=api('GET','/tiktok/northflank/status',timeout=20)
+              if browser.get('ok') and browser.get('active') and browser.get('responsive'):break
+              time.sleep(8)
+          else:raise SystemExit('BROWSER_NOT_RESPONSIVE')
+          print('BROWSER_RESTORED_ACTIVE=1')
+          print('DRAG_BACKEND='+str(browser.get('drag_backend','unknown')))
+          for target in ['profile','studio']:
+              code,check=api('POST','/tiktok/northflank/check',{'target':target},timeout=45)
+              print(target.upper()+'_HTTP='+str(code))
+              print(target.upper()+'_RESULT='+str(check.get('result','unknown')))
+              print(target.upper()+'_CORRECT_PATH='+str(bool(check.get('correct_path'))))
+              print(target.upper()+'_LOGIN_GATE='+str(bool(check.get('login_gate'))))
+              print(target.upper()+'_ACCOUNT_MARKER='+str(bool(check.get('account_marker'))))
+              print(target.upper()+'_UI_MARKER='+str(bool(check.get('upload_marker'))))
+              if code!=200:raise SystemExit(target.upper()+'_CHECK_FAILED_'+str(check.get('error','unknown')))
+          print('READ_ONLY_CHECKS_COMPLETED=1')
+          print('BROWSER_SESSION_PRESERVED_OPEN=1')
+          PY
