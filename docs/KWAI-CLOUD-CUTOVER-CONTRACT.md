@@ -28,7 +28,7 @@ Depois do corte autorizado, `disable_local_executors=true` proíbe fallback sile
 
 ## Pendências concretas de execução
 
-- Conseguir host Android remoto gratuito e persistente, com kernel binder e acesso suficiente para o ReDroid; Oracle está desativada pelo titular e terceiros continuam sem prova. A possível cessão institucional/hosting patrocinado exige compatibilidade e permissão comercial explícitas.
+- Conseguir host Android remoto gratuito e persistente, com kernel binder e acesso suficiente para o ReDroid; Oracle está desativada pelo titular e terceiros continuam sem prova. Patrocínios sujeitos a aprovação externa e qualquer opção paga estão fora da política vigente: custo incremental R$0, sem esperar respostas, sem solicitar alteração de orçamento.
 - Instalar, autenticar e preservar Kwai/Kwai Lite, MacroDroid ou Anthares Android Agent; comprovar a execução do fluxo real de upload em ambas as contas.
 - Ligar o novo executor ao controlador e à fila Neon, verificar fencing, intervalos e comprovação externa de publicação.
 - Verificar autonomia de rede e reboot, aprovar as oito evidências e só então promover `cloud_cutover.enabled` no repositório e descontinuar os dispositivos físicos.
