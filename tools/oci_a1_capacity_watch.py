@@ -19,6 +19,7 @@ A1 = "VM.Standard.A1.Flex"
 NAME = "anthares-android-redroid-free"
 REGION = "sa-saopaulo-1"
 CPU, MEMORY_GB, BOOT_GB = 1, 6, 50
+REDROID_ARM64_IMAGE = "redroid/redroid@sha256:3c7f9450188226bf8042c0159b9b38abe2106f1ceb0dfa45fae1cbc6409cd9bb"
 
 
 def report(key, value):
@@ -157,7 +158,8 @@ def redroid_cloud_init_data():
             len(data) > 12_000 or
             b"127.0.0.1:5555:5555" not in data or
             b"0.0.0.0:5555" in data or
-            b"--privileged" not in data):
+            b"--privileged" not in data or
+            REDROID_ARM64_IMAGE.encode("ascii") not in data):
         raise ValueError("UNSAFE_OR_MISSING_REDR0ID_BOOTSTRAP")
     return base64.b64encode(data).decode("ascii")
 
