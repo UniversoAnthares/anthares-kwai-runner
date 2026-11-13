@@ -1,0 +1,68 @@
+name: One-time Northflank TikTok independent identity verifier
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/tiktok-identity-verify-once.yml']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+    steps:
+      - name: Verify owner identity in existing TikTok session without publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,json,time,urllib.request,urllib.error
+          token=os.getenv('ARA_SHARED','')
+          if len(token)<20:raise SystemExit('AUTH_MISSING')
+          root='https://http--anthares-tiktok-northflank--6f6pbqmvhpv6.code.run'
+          def call(path,method='GET',data=None):
+              headers={'Authorization':'Bearer '+token,'Accept':'application/json','User-Agent':'Anthares-Independent-Owner-Verifier'}
+              raw=json.dumps(data).encode() if data is not None else None
+              if raw is not None:headers['Content-Type']='application/json'
+              req=urllib.request.Request(root+path,headers=headers,method=method,data=raw)
+              try:
+                  with urllib.request.urlopen(req,timeout=25) as r:return r.status,json.loads(r.read(30000))
+              except urllib.error.HTTPError as e:
+                  try:return e.code,json.loads(e.read(10000))
+                  except:return e.code,{}
+              except Exception as e:return 0,{'error':type(e).__name__}
+          code,health=call('/health')
+          print('HEALTH_HTTP='+str(code))
+          print('HEALTH_SESSION_BOOTSTRAPPED='+str(bool(health.get('session_bootstrapped'))))
+          print('HEALTH_IDENTITY_VERIFIED='+str(bool(health.get('identity_verified'))))
+          if code!=200 or not health.get('session_bootstrapped'):raise SystemExit('NO_SAVED_SESSION')
+          if health.get('identity_verified') and health.get('ready_for_tiktok'):
+              print('INDEPENDENT_IDENTITY=ALREADY_VERIFIED')
+              raise SystemExit(0)
+          code,state=call('/session-test/async-status')
+          print('PREVIOUS_VERIFIER_STATUS='+str(state.get('status','unknown')))
+          if state.get('status') not in ('starting','running'):
+              code,start=call('/session-test/async-start','POST',{})
+              print('VERIFIER_START_HTTP='+str(code))
+              if code not in (200,202) or not start.get('ok'):
+                  raise SystemExit('VERIFIER_START_REFUSED')
+          for attempt in range(25):
+              time.sleep(8)
+              code,state=call('/session-test/async-status')
+              if code!=200:continue
+              state_name=str(state.get('status','unknown'))
+              if attempt%3==0:print('VERIFIER_POLL_STATUS='+state_name+' PHASE='+str(state.get('phase','unknown'))[:80])
+              if state_name in ('success','succeeded','complete','completed','failed','error','timeout','done'):
+                  break
+          print('VERIFIER_FINAL_STATUS='+str(state.get('status','unknown')))
+          print('VERIFIER_FINAL_PHASE='+str(state.get('phase','unknown'))[:80])
+          print('VERIFIER_FINAL_REASON='+str(state.get('reason','none'))[:120])
+          print('VERIFIER_FINAL_IDENTITY='+str(bool(state.get('identity_verified'))))
+          code,h=call('/health')
+          print('POST_CHECK_HEALTH_HTTP='+str(code))
+          print('POST_CHECK_IDENTITY='+str(bool(h.get('identity_verified'))))
+          print('POST_CHECK_READY='+str(bool(h.get('ready_for_tiktok'))))
+          print('NO_MEDIA_POSTED_BY_THIS_RUN=1')
+          if not h.get('identity_verified'):raise SystemExit('IDENTITY_NOT_PROVEN')
+          PY
