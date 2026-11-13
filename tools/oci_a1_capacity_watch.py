@@ -62,6 +62,29 @@ def auth():
         oci.identity.IdentityClient(b, **kwargs)
 
 
+def private_network_egress_ready(network, subnet):
+    """Require private subnet + healthy NAT before allocating no-public-IP VM.
+
+    An internet gateway does not route outbound IPv4 from a VNIC without
+    a public address, so allocating on the current Android public subnet
+    would create an inaccessible Linux VM unable to fetch ReDroid packages.
+    """
+    if subnet.prohibit_public_ip_on_vnic is not True:
+        return False
+    routes = network.get_route_table(subnet.route_table_id).data.route_rules or []
+    default = [r for r in routes if r.destination == "0.0.0.0/0"
+               and r.destination_type == "CIDR_BLOCK"]
+    if len(default) != 1:
+        return False
+    target = default[0].network_entity_id or ""
+    if not target.startswith("ocid1.natgateway."):
+        return False
+    nat = network.get_nat_gateway(target).data
+    return (nat.lifecycle_state == "AVAILABLE" and
+            nat.vcn_id == subnet.vcn_id and
+            nat.block_traffic is False)
+
+
 def main():
     session = auth()
     if session is None:
@@ -108,6 +131,9 @@ def main():
     subnet = network.get_subnet(subnet_id).data
     if subnet.compartment_id != tenancy or subnet.lifecycle_state != "AVAILABLE":
         raise ValueError("SUBNET_NOT_ELIGIBLE")
+    if not private_network_egress_ready(network, subnet):
+        report("STATE", "PRIVATE_NAT_EGRESS_UNAVAILABLE")
+        return 0
 
     # Fail closed on any uncertain inventory; never allocate over free limits.
     compartments = [tenancy]
