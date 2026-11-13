@@ -64,6 +64,15 @@ O PR #2490 permanece como proteção histórica de rede privada sem NAT. Foi enc
 
 Fontes: [reDroid arm64 e imagens](https://hub.docker.com/r/redroid/redroid), [documentação de instalação](https://github.com/remote-android/redroid-doc/blob/master/deploy/ubuntu.md), [binder kernel modules](https://github.com/remote-android/redroid-modules).
 
+
+### Proteção adicional contra lançamentos duplicados (13/11/2026)
+
+- O cliente `tools/oci_a1_capacity_watch.py` agora envia `opc_retry_token` em `ComputeClient.launch_instance`: UUIDv5 estável derivado de região, tenancy, subnet e definição da única máquina A1 permitida (shape, CPU, RAM e boot). Nenhum segredo integra esse identificador.
+- A Oracle documenta que o token associa tentativas idênticas por até **24 horas**, evitando criar duas instâncias se houver perda de resposta HTTP e uma chamada for repetida. A lógica existente ainda inventaria instâncias A1 de todos os compartimentos acessíveis, verifica o teto de volumes, limita concorrência do GitHub Actions, exige os dois guards de ativação e utiliza `NoneRetryStrategy` (uma chamada por execução).
+- A proteção do token não resolve estados de execução ambíguos após 24 horas; antes de nova tentativa, exigir inventário OCI íntegro e reconciliação quando houver qualquer indício de lançamento anterior. O monitor somente pode marcar `INSTANCE_CREATED` quando a API retornar a instância; estados incertos permanecem pendentes.
+- Testes regressivos: verificam determinismo, escopo diferente para outra tenancy/subnet e passagem literal do token ao método `launch_instance`. **17 testes Python aprovados, zero erros e falhas**, execução de QA autorizada `dc827af30b7b88d54ad60d6903aa621d`. Não houve criação de VM, publicação Kwai ou ativação de GitHub Actions nessa auditoria.
+- Referência oficial: https://docs.oracle.com/en-us/iaas/tools/python/latest/api/core/client/oci.core.ComputeClient.html#oci.core.ComputeClient.launch_instance .
+
 ## 2. MacroDroid Android físico — consultas independentes
 
 - A API Neon existente já reconhece `kwai-mobile-primary` via credencial própria do aparelho `M2004J19C`; o contrato `kwai-physical-stats` é de leitura. O controle da fila, pacing até 23h, geração de leases, dedupe e estados `STARTED/UNCERTAIN` permanecem em Neon.

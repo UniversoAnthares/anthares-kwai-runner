@@ -9,6 +9,7 @@ import json
 import os
 import re
 import sys
+import uuid
 from pathlib import Path
 
 import oci
@@ -161,6 +162,24 @@ def redroid_cloud_init_data():
     return base64.b64encode(data).decode("ascii")
 
 
+def launch_retry_token(tenancy, subnet_id):
+    """Stable OCI idempotency token for this one approved Always Free VM.
+
+    The token is tenant/subnet/shape scoped, excludes credentials, and OCI
+    deduplicates matching launch requests for up to 24 hours. The separate
+    full-tenancy inventory still gates every attempt.
+    """
+    scope = "|".join((REGION, tenancy, subnet_id, A1, NAME,
+                      str(CPU), str(MEMORY_GB), str(BOOT_GB)))
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, scope))
+
+
+def guarded_launch(compute, request, tenancy, subnet_id):
+    """No automatic HTTP retry; one idempotent OCI launch request."""
+    return compute.launch_instance(
+        request, opc_retry_token=launch_retry_token(tenancy, subnet_id))
+
+
 def main():
     session = auth()
     if session is None:
@@ -260,7 +279,7 @@ def main():
                        "cost-policy": "always-free-single-a1"},
     )
     try:
-        instance = compute.launch_instance(request).data
+        instance = guarded_launch(compute, request, tenancy, subnet_id).data
     except ServiceError as e:
         if "Out of host capacity" in str(e.message):
             report("STATE", "HOST_CAPACITY_DISAPPEARED")
