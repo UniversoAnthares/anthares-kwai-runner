@@ -46,3 +46,9 @@ Disponibilizar **uma VM Linux realmente utilizável** com contrato gratuito e pe
 - ReDroid oficial — kernel binder/portas ADB e suporte AMD64/ARM64: https://github.com/remote-android/redroid-doc
 
 **NENHUMA VM PROVISIONADA NESTA ETAPA; nenhuma credencial Kwai, compra, gasto, migração ou postagem.**
+
+## Bootstrap portável pronto para VPS AMD64 e ARM64 (13/11/2026)
+
+Após superar o pré-teste de root, CPU, RAM, armazenamento, kernel e legitimidade do provedor, o operador poderá aplicar `infra/oci-android/redroid-firstboot.cloud-config.yml` em VM Ubuntu compatível. A escolha da imagem passou a ser automática, conforme a arquitetura física, com digests SHA-256 aprovados pela API oficial Docker Hub para ARM64 e AMD64. O `binder_linux` é configurado para voltar após reboot e o script pode recuperar um container existente que esteja parado; ADB continua limitado ao localhost.
+
+Esta portabilidade foi homologada em testes isolados: **22 Python PASS, Bash -n PASS e seleção exata de digest/plataforma para aarch64, arm64, x86_64, amd64**. Não comprova compatibilidade do kernel da futura VPS, Docker privilegiado efetivo, funcionamento dos APKs Kwai/MacroDroid ou autenticação. Nenhum servidor terceirizado foi contratado, nenhuma credencial ou sessão foi transferida, e nenhum publicador foi alterado.

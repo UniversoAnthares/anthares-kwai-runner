@@ -100,3 +100,14 @@ A autonomia integral do Android físico exige que o aparelho consuma a fila cent
 O Docker Hub confirmou que a tag original `redroid/redroid:12.0.0_64only-240527` foi publicada em 28/05/2024 e oferece uma imagem `linux/arm64` com digest `sha256:3c7f9450188226bf8042c0159b9b38abe2106f1ceb0dfa45fae1cbc6409cd9bb`. A primeira inicialização passa a baixar `redroid/redroid@sha256:3c7f9450188226bf8042c0159b9b38abe2106f1ceb0dfa45fae1cbc6409cd9bb`; a função `redroid_cloud_init_data` rejeita bootstraps sem esse identificador aprovado.
 
 O endpoint público `https://hub.docker.com/v2/repositories/redroid/redroid/tags/12.0.0_64only-240527` foi consultado em 13/11/2026 e devolveu as arquiteturas ARM64 e AMD64 com digests diferentes; somente o ARM64 foi aceito. Foi testado o conteúdo real do arquivo cloud-init: **18 testes Python, 0 falhas/0 erros**, `CLOUD_CONFIG_PARSED=True`, `ARM64_DIGEST_PINNED=True`, `DIGEST_FORMAT=True` (ARA `b4ea4a5d3a76a2c45e7fbe5b101cee5d`) e `REPRODUCIBLE_REDR0ID_BASH_SYNTAX=PASS` (ARA `84d0fffb4c81338daafb78acdc6454ba`). Nenhuma VM foi criada; a execução do bootstrap em host permanece sem prova. Fonte oficial: https://hub.docker.com/r/redroid/redroid/tags .
+
+### Bootstrap portável ARM64/AMD64 e recuperação após reinicialização — 13/11/2026
+
+O cloud-init `infra/oci-android/redroid-firstboot.cloud-config.yml`, originalmente preparado somente para A1 ARM64, foi ampliado para Linux ARM64 (`aarch64`/`arm64`) e AMD64 (`x86_64`/`amd64`). Ambos usam a mesma tag oficial ReDroid Android 12, fixada nos **manifestos específicos** obtidos da API pública Docker Hub em 13/11/2026:
+
+- ARM64: `redroid/redroid@sha256:3c7f9450188226bf8042c0159b9b38abe2106f1ceb0dfa45fae1cbc6409cd9bb`.
+- AMD64: `redroid/redroid@sha256:e6f799d56b9a9a2bbc6224b5b7a6dc744c9b4d878ac856f27f0c4ec793ef55d3`.
+
+O script escolhe a plataforma de acordo com `uname -m`, recusa arquiteturas desconhecidas, mantém ADB apenas em `127.0.0.1:5555`, instala configuração de `binder_linux` em `/etc/modules-load.d/anthares-redroid.conf` e opções em `/etc/modprobe.d/anthares-redroid.conf` para reinicializações. Um container existente que esteja parado é iniciado e novamente verificado, sem repetir `docker pull`. O monitor OCI exige os dois digests e os marcadores de segurança/recuperação no bootstrap.
+
+Verificação: **22 testes Python, 0 falhas, 0 erros**; YAML válido, Bash `-n` aprovado, quatro variações de arquitetura executadas em Bash isolado; arquivos de módulos e ordem de recuperação validados (ARA `4a169c3298434a71b3f1457fb432a38f`). Testes são sintáticos e de contrato: a VM ainda não foi obtida, portanto Docker, binderfs e ReDroid permanecem sem teste real, assim como login Kwai e failover Neon. O monitor GitHub Actions permanece desarmado até autenticação autorizada.

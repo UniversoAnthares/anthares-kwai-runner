@@ -1,5 +1,5 @@
 #cloud-config
-# Anthares: first boot for a future Always Free OCI A1 host.
+# Anthares: first boot for a future OCI A1 or compatible external VPS Linux host.
 # No account tokens, no APK install, no social publishing or public ADB.
 write_files:
   - path: /usr/local/sbin/anthares-redroid-firstboot
@@ -10,9 +10,21 @@ write_files:
       set -Eeuo pipefail
       exec > >(tee -a /var/log/anthares-redroid-firstboot.log) 2>&1
       echo 'ANTHARES_REDR0ID_BOOT_BEGIN'
-      if [ "$(uname -m)" != 'aarch64' ]; then
-        echo 'ANTHARES_REDR0ID_BOOT_ARCH_UNSUPPORTED'; exit 71
-      fi
+      # Digests verified against official Docker Hub tag API on 2026-11-13.
+      # OCI A1 uses aarch64; external KVM/VPS hosts may use x86_64.
+      case "$(uname -m)" in
+        aarch64|arm64)
+          IMAGE='redroid/redroid@sha256:3c7f9450188226bf8042c0159b9b38abe2106f1ceb0dfa45fae1cbc6409cd9bb'
+          PLATFORM='linux/arm64'
+          ;;
+        x86_64|amd64)
+          IMAGE='redroid/redroid@sha256:e6f799d56b9a9a2bbc6224b5b7a6dc744c9b4d878ac856f27f0c4ec793ef55d3'
+          PLATFORM='linux/amd64'
+          ;;
+        *)
+          echo 'ANTHARES_REDR0ID_BOOT_ARCH_UNSUPPORTED'; exit 71
+          ;;
+      esac
       export DEBIAN_FRONTEND=noninteractive
       apt-get update -qq
       apt-get install -y --no-install-recommends ca-certificates docker.io kmod
@@ -29,21 +41,36 @@ write_files:
       done
       install -d -m 0700 /var/lib/anthares-redroid/android-data
       systemctl enable --now docker
-      # Official Docker Hub arm64 manifest digest; verified 2026-11-13.
-      IMAGE='redroid/redroid@sha256:3c7f9450188226bf8042c0159b9b38abe2106f1ceb0dfa45fae1cbc6409cd9bb'
-      docker pull "$IMAGE"
       if docker container inspect anthares-redroid >/dev/null 2>&1; then
         echo 'ANTHARES_REDR0ID_CONTAINER_ALREADY_DEFINED'
+        if [ "$(docker inspect -f '{{.State.Running}}' anthares-redroid)" != 'true' ]; then
+          docker start anthares-redroid
+          sleep 10
+        fi
+        [ "$(docker inspect -f '{{.State.Running}}' anthares-redroid)" = 'true' ] || exit 75
+        echo 'ANTHARES_REDR0ID_CONTAINER_RECOVERED_OR_RUNNING'
         exit 0
       fi
+      docker pull --platform "$PLATFORM" "$IMAGE"
       docker run -d --name anthares-redroid --restart unless-stopped \
-        --privileged --platform linux/arm64 \
+        --privileged --platform "$PLATFORM" \
         -p 127.0.0.1:5555:5555 \
         -v /var/lib/anthares-redroid/android-data:/data \
         "$IMAGE"
       sleep 10
       [ "$(docker inspect -f '{{.State.Running}}' anthares-redroid)" = 'true' ] || exit 75
       echo 'ANTHARES_REDR0ID_CONTAINER_RUNNING_LOCALHOST_ONLY'
+  # Persist binder module selection across host reboot, before Docker starts.
+  - path: /etc/modules-load.d/anthares-redroid.conf
+    owner: root:root
+    permissions: '0644'
+    content: |
+      binder_linux
+  - path: /etc/modprobe.d/anthares-redroid.conf
+    owner: root:root
+    permissions: '0644'
+    content: |
+      options binder_linux devices=binder,hwbinder,vndbinder
 runcmd:
   - [ bash, /usr/local/sbin/anthares-redroid-firstboot ]
 final_message: 'Anthares first-boot completed; check /var/log/anthares-redroid-firstboot.log. ReDroid is not proof of authenticated Kwai or MacroDroid.'
