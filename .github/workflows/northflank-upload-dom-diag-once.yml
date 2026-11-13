@@ -1,0 +1,87 @@
+name: One-time TikTok upload page DOM and network read-only diagnosis
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/northflank-upload-dom-diag-once.yml']
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      NF_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+    steps:
+      - name: Install Northflank client
+        run: npm install --no-save --no-package-lock --ignore-scripts @northflank/js-client@0.12.0
+      - name: Read DOM and status classes for upload pages without selecting a video
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {ApiClient,ApiClientInMemoryContextProvider} from '@northflank/js-client';
+          const token=process.env.NF_TOKEN,auth=process.env.ARA_SHARED;
+          if(!token||token.length<20||!auth||auth.length<20)throw Error('AUTH_MISSING');
+          const root='https://http--anthares-tiktok-northflank--6f6pbqmvhpv6.code.run';
+          const h=await fetch(root+'/health',{headers:{Authorization:'Bearer '+auth},signal:AbortSignal.timeout(22000)});
+          const d=await h.json().catch(()=>({}));
+          console.log('OWNER_VERIFIED='+Boolean(d.identity_verified));
+          if(h.status!==200||!d.identity_verified||!d.ready_for_tiktok)throw Error('OWNER_NOT_READY');
+          const get=async path=>{let r=await fetch('https://api.northflank.com/v1'+path,{headers:{Authorization:'Bearer '+token}});if(!r.ok)throw Error('NF_HTTP_'+r.status);return r.json()};
+          const found=[];for(const p of (await get('/projects')).data?.projects||[])for(const s of (await get('/projects/'+encodeURIComponent(p.id)+'/services')).data?.services||[])if(s.name==='anthares-tiktok-northflank')found.push([p.id,s.id||s.name]);
+          if(found.length!==1)throw Error('SERVICE_NOT_UNIQUE');
+          const [projectId,serviceId]=found[0],ctx=new ApiClientInMemoryContextProvider();await ctx.addContext({name:'inspect',token});const cli=new ApiClient(ctx);
+          const script=String.raw`
+          import os,sys,time,json,collections,urllib.parse
+          sys.path.insert(0,'/app')
+          os.environ.pop('TIKTOK_STORAGE_STATE',None)
+          os.environ['TIKTOK_STORAGE_STATE_FILE']=os.getenv('TIKTOK_STATE_PATH','/tmp/tiktok-storage-state.json')
+          import tiktok_worker as tw
+          from playwright.sync_api import sync_playwright
+          state=tw.storage_state()
+          if len(state.get('cookies') or [])<20 or not tw.auth_cookie_names(state):raise SystemExit('AUTH_COOKIES_UNVERIFIED')
+          if os.getenv('EXPECTED_TIKTOK_USERNAME','').strip().lstrip('@').lower()!='universo.anthares':raise SystemExit('OWNER_MISMATCH')
+          def emit(k,v):print(str(k)+'='+str(v),flush=True)
+          with sync_playwright() as p:
+           browser=p.chromium.launch(headless=True,args=['--disable-dev-shm-usage','--no-sandbox','--disable-gpu','--disable-extensions','--disable-background-networking','--disable-component-update','--disable-default-apps','--disable-sync','--no-first-run','--no-zygote','--renderer-process-limit=1'],timeout=35000)
+           try:
+            context=browser.new_context(storage_state=state,viewport={'width':800,'height':600},locale='pt-BR')
+            try:
+             page=context.new_page()
+             page.set_default_timeout(5500)
+             code_counts=collections.Counter()
+             def response(resp):
+              try:
+               if int(resp.status)>=400:
+                host=urllib.parse.urlsplit(resp.url).hostname or ''
+                group='tiktok' if 'tiktok' in host else 'external'
+                code_counts[(str(resp.status),group)]+=1
+              except Exception:pass
+             page.on('response',response)
+             page.route('**/*',lambda r:(r.abort() if r.request.resource_type in ('image','font','media') else r.continue_()))
+             for index,url in enumerate(['https://www.tiktok.com/tiktokstudio/upload?from=webapp','https://www.tiktok.com/upload?lang=pt-BR'],1):
+              emit('NAV_NUMBER',index)
+              try:
+               response=page.goto(url,wait_until='commit',timeout=25000)
+               emit('NAV_HTTP',response.status if response else 'none')
+              except Exception as exc:emit('NAV_ERROR_CLASS',type(exc).__name__)
+              time.sleep(11)
+              try:
+               info=page.locator('html').evaluate("""(el)=>{const body=document.body;const txt=body?.innerText?.toLowerCase()||'';return {ready:document.readyState,urlPath:location.pathname,title:document.title.slice(0,80),htmlSize:el.outerHTML.length,bodySize:txt.length,scripts:document.scripts.length,inputs:document.querySelectorAll('input[type=file]').length,frames:document.querySelectorAll('iframe').length,rootSize:document.querySelector('#root,#app,[id*=root]')?.innerHTML?.length||0,uploadText:/upload|carregar|enviar vídeo|postar vídeo/.test(txt),challenge:/captcha|verify to continue|verifique/.test(txt),login:/log in|sign in|fazer login|entrar na conta/.test(txt),error:/something went wrong|access denied|try again later|erro|error/.test(txt)}}""",timeout=5500)
+               emit('UPLOAD_DOM_'+str(index),json.dumps(info,ensure_ascii=False,separators=(',',':'))[:1600])
+              except Exception as exc:emit('UPLOAD_DOM_ERROR_'+str(index),type(exc).__name__)
+              emit('BAD_NETWORK_RESPONSES_'+str(index),json.dumps({str(k):v for k,v in code_counts.items()})[:700])
+              if page.locator('input[type=file]').count()>0:
+               emit('FILE_INPUT_READY',True)
+               break
+             emit('UPLOAD_PAGE_PROBE_NO_PUBLICATION',True)
+            finally:context.close()
+           finally:browser.close()
+          `;
+          const res=await cli.exec.execServiceCommand({projectId,serviceId},{command:['python3','-c',script]});
+          console.log('UPLOAD_DIAG_EXIT='+String(res.commandResult?.exitCode));
+          console.log('UPLOAD_DIAG_OUTPUT='+String(res.stdOut||'').replace(/[\r\n]+/g,' | ').slice(0,7000));
+          console.log('UPLOAD_DIAG_STDERR_CLASS='+String(res.stdErr||'').slice(0,120).replace(/[\r\n]+/g,' | '));
+          if(res.commandResult?.exitCode!==0)throw Error('UPLOAD_DIAG_FAILED');
+          NODE
