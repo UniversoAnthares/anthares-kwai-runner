@@ -328,7 +328,7 @@ def main():
                 remote=matching
             else:
                 # Avoid downloading a second time after the started checkpoint.
-                remote=publish_one_preloaded(job,sid,folder,state)
+                remote=publish_one_preloaded(job,sid,folder,state,generation)
                 verified=q.found(inventory(state),sid)
                 if verified!=remote:
                     raise q.SafeStop("TIKTOK_PROFILE_MARKER_CONFIRMATION_MISMATCH")
@@ -344,9 +344,8 @@ def main():
             raise
 
 
-def publish_one_preloaded(job,sid,folder,state):
-    # Isolate publisher run from download and queue state mutations.
-    # Publication code expects only the local media and a strict plan file.
+def publish_one_preloaded(job,sid,folder,state,generation):
+    """Invoke the Northflank Browserless publisher after canonical Neon STARTED."""
     media=folder/"short.mp4"
     if not media.is_file() or media.stat().st_size<MIN_SIZE:
         raise q.SafeStop("TIKTOK_MEDIA_MISSING_AT_START")
@@ -356,70 +355,27 @@ def publish_one_preloaded(job,sid,folder,state):
         "source_title":str(job.get("title") or ""),
         "title":q.caption(job),
         "expected_tiktok_username":EXPECTED,
-        "media_path":str(media),
+        "queue_job_id":str(job["id"]),
+        "lease_generation":int(generation),
+        "queue_started":True,
     }
-    plan_file=folder/"plan.json"
-    plan_file.write_text(json.dumps(plan,ensure_ascii=False),encoding="utf-8")
-    env=os.environ.copy()
-    env.pop("TIKTOK_STORAGE_STATE",None)
-    env.update({
-        "EXPECTED_TIKTOK_USERNAME":EXPECTED,
-        "TIKTOK_STORAGE_STATE_FILE":str(folder/"canonical-state.json"),
-        "TIKTOK_YOUTUBE_PLAN":str(plan_file),
-        "ATD_ARTIFACT_DIR":str(folder/"artifacts"),
-        "TIKTOK_AUTOMATION_HALT":str(folder/"halt.json"),
-        "TIKTOK_PUBLISH_EVIDENCE":str(folder/"publish-evidence.json"),
-        "TIKTOK_PUBLISHED_KEYS":str(folder/"published.json"),
-    })
-    (folder/"canonical-state.json").write_text(json.dumps(state,separators=(",",":")),encoding="utf-8")
-    (folder/"canonical-state.json").chmod(0o600)
-    try:
-        proc=subprocess.run([sys.executable,"-u",str(ROOT/"direct-tiktok-publisher"/"tiktok_cloud_publish.py")],
-                            cwd=str(ROOT),env=env,text=True,capture_output=True,timeout=390)
-    except subprocess.TimeoutExpired as exc:
-        raise q.SafeStop("TIKTOK_BROWSER_PUBLISH_TIMEOUT_RECONCILE_ONLY") from exc
-    if proc.returncode:
-        # The publisher may have clicked Post. Inspect only fixed, safe markers
-        # and error categories; never print original browser text or stderr.
-        stage = "before_upload_form"
-        if (folder/"artifacts"/"tiktok-owned-upload-page.png").is_file():
-            stage = "upload_form_open"
-        if "TIKTOK_CAPTION=" in proc.stdout:
-            stage = "caption_filled"
-        if (folder/"artifacts"/"tiktok-owned-upload-ready.png").is_file():
-            stage = "upload_ready"
-        if "TIKTOK_PROFILE_VERIFY attempt=" in proc.stdout:
-            stage = "after_post_profile_reconciliation"
-        if (folder/"artifacts"/"tiktok-owned-after-post.png").is_file():
-            stage = "after_publish_click"
-        body = (proc.stderr+"\\n"+proc.stdout).lower()
-        rules = (
-            ("captcha", "platform_challenge"),
-            ("security check", "platform_challenge"),
-            ("login", "identity_expired_or_login"),
-            ("página de upload", "upload_page_unavailable"),
-            ("input[type", "upload_field_missing"),
-            ("campo de legenda", "caption_field_missing"),
-            ("botão publicar", "post_button_unavailable"),
-            ("confirmação inequívoca", "confirmation_missing"),
-            ("múltiplos vídeos novos", "profile_multiple_posts"),
-            ("nenhum vídeo novo", "profile_not_updated"),
-            ("modulenotfounderror", "publisher_import_failure"),
-            ("canonical_session_secret_missing", "canonical_vault_unavailable"),
-            ("timeout", "browser_timeout"),
-        )
-        category=next((v for k,v in rules if k in body),"unclassified")
-        print("CORTES_TIKTOK_PUBLISH_FAILURE_STAGE="+stage+" CATEGORY="+category,flush=True)
-        raise q.SafeStop("TIKTOK_BROWSER_PUBLISH_UNVERIFIED")
-    try:
-        evidence=json.loads((folder/"publish-evidence.json").read_text(encoding="utf-8"))
-    except (OSError,ValueError) as exc:
-        raise q.SafeStop("TIKTOK_PUBLISH_EVIDENCE_MISSING") from exc
-    remote=str(evidence.get("remote_id") or "")
-    if not (evidence.get("confirmed") is True and q.ID_RE.fullmatch(remote) and
-            str(evidence.get("segment_id") or "")==sid and str(evidence.get("account") or "").lstrip("@").casefold()==EXPECTED):
-        raise q.SafeStop("TIKTOK_PUBLISH_EVIDENCE_INVALID")
-    return remote
+    print("CORTES_TIKTOK_BROWSERLESS_REMOTE_SUBMIT segment="+sid,flush=True)
+    reply=q.wcall("/publish-url",q.worker_auth(),{
+        "media_url":str(job["media_url"]),"plan":plan
+    },timeout=145)
+    if not(reply.get("ok") and reply.get("ui_confirmed") and
+           reply.get("publication_requested") and
+           str(reply.get("account") or "").lower()==EXPECTED and
+           str(reply.get("segment_id") or "")==sid):
+        raise q.SafeStop("TIKTOK_BROWSERLESS_PUBLISH_NOT_UI_CONFIRMED")
+    print("CORTES_TIKTOK_BROWSERLESS_UI_CONFIRMED segment="+sid,flush=True)
+    for attempt in range(4):
+        if attempt:
+            time.sleep(7)
+        remote=q.found(inventory(state),sid)
+        if remote:
+            return remote
+    raise q.SafeStop("TIKTOK_BROWSERLESS_PROFILE_MARKER_NOT_YET_VERIFIED")
 
 
 if __name__=="__main__":
