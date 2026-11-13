@@ -1,0 +1,21 @@
+{
+  "intent": "Owner-directed reconciliation of exactly three already-published Kwai records",
+  "evidence_run": 43511361479,
+  "evidence_file": "test-hub/findings/20261113-kwai-three-public-matches.json",
+  "production_function_deployment": 75,
+  "workflow": ".github/workflows/kwai-three-verified-reconcile.yml",
+  "job_ids": [
+    "kwai-cortes-cOhqEaY3-08-g1-cOhqEaY3-08-1983-2023",
+    "kwai-cortes-A7BsgCe3-oo-g1-A7BsgCe3-oo-7595-7635",
+    "kwai-cortes-ua-217fddfeae7c0a86be66d8e8511e2916"
+  ],
+  "conditions": [
+    "owner-approved current task",
+    "GitHub signed OIDC role",
+    "6 SIFT source-to-public frames",
+    "no video upload",
+    "transactional CAS + idempotence",
+    "no Oracle or paid resources"
+  ],
+  "one_off": true
+}
