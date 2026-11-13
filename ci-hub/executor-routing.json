@@ -37,6 +37,7 @@
     "github_actions": "experimental_only",
     "cloud_cutover": {
       "enabled": false,
+      "disable_local_executors": true,
       "required_accounts": ["lucasrosalem", "universoanthares"],
       "required_proofs": [
         "android_ready",
