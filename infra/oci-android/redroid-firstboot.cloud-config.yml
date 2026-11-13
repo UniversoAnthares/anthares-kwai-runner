@@ -29,7 +29,8 @@ write_files:
       done
       install -d -m 0700 /var/lib/anthares-redroid/android-data
       systemctl enable --now docker
-      IMAGE='redroid/redroid:12.0.0_64only-240527'
+      # Official Docker Hub arm64 manifest digest; verified 2026-11-13.
+      IMAGE='redroid/redroid@sha256:3c7f9450188226bf8042c0159b9b38abe2106f1ceb0dfa45fae1cbc6409cd9bb'
       docker pull "$IMAGE"
       if docker container inspect anthares-redroid >/dev/null 2>&1; then
         echo 'ANTHARES_REDR0ID_CONTAINER_ALREADY_DEFINED'
