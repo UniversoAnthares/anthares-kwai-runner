@@ -5,6 +5,7 @@ Authenticated exclusively from GitHub Actions encrypted secrets; never copies
 the OCI API key to Windows, logs, or repository source. Does not publish Kwai.
 """
 import base64
+import hashlib
 import json
 import os
 import re
@@ -21,6 +22,10 @@ REGION = "sa-saopaulo-1"
 CPU, MEMORY_GB, BOOT_GB = 1, 6, 50
 REDROID_ARM64_IMAGE = "redroid/redroid@sha256:3c7f9450188226bf8042c0159b9b38abe2106f1ceb0dfa45fae1cbc6409cd9bb"
 REDROID_AMD64_IMAGE = "redroid/redroid@sha256:e6f799d56b9a9a2bbc6224b5b7a6dc744c9b4d878ac856f27f0c4ec793ef55d3"
+APPROVED_SUBNET_NAME = "anthares-android-subnet"
+APPROVED_SUBNET_CIDR = "10.92.1.0/24"
+APPROVED_SSH_KEY_SHA256 = "SHA256:g6uknj0s8zT/en4AJDmf/1+TjcwCKYrM5xRjYA3hM2w"
+
 
 
 def report(key, value):
@@ -170,6 +175,64 @@ def redroid_cloud_init_data():
     return base64.b64encode(data).decode("ascii")
 
 
+def approved_ssh_public_key():
+    """Load a pinned public administrator SSH key; never load the private key."""
+    key_file = Path(__file__).resolve().parents[1] / (
+        "infra/oci-android/approved-admin-ssh.pub")
+    parts = key_file.read_text(encoding="ascii").strip().split()
+    if len(parts) not in (2, 3) or parts[0] != "ssh-ed25519":
+        raise ValueError("APPROVED_SSH_KEY_TYPE_INVALID")
+    try:
+        blob = base64.b64decode(parts[1], validate=True)
+    except (ValueError, base64.binascii.Error):
+        raise ValueError("APPROVED_SSH_KEY_BASE64_INVALID") from None
+    fingerprint = "SHA256:" + base64.b64encode(
+        hashlib.sha256(blob).digest()).decode("ascii").rstrip("=")
+    if fingerprint != APPROVED_SSH_KEY_SHA256:
+        raise ValueError("APPROVED_SSH_KEY_FINGERPRINT_MISMATCH")
+    return "ssh-ed25519 " + parts[1] + " anthares-oci-admin"
+
+
+def approved_subnet(network, tenancy, optional_subnet_id=""):
+    """Discover exactly one already-audited subnet; allocate nothing."""
+    subnets = pages(network.list_subnets, compartment_id=tenancy)
+    matches = [s for s in subnets
+               if s.display_name == APPROVED_SUBNET_NAME
+               and s.compartment_id == tenancy
+               and s.cidr_block == APPROVED_SUBNET_CIDR
+               and s.lifecycle_state == "AVAILABLE"]
+    if len(matches) != 1:
+        raise ValueError("ANDROID_SUBNET_NOT_UNIQUE_OR_NOT_APPROVED")
+    subnet_id = matches[0].id
+    if optional_subnet_id and optional_subnet_id != subnet_id:
+        raise ValueError("SUBNET_OVERRIDE_DIFFERS_FROM_APPROVED")
+    subnet = network.get_subnet(subnet_id).data
+    if (subnet.id != subnet_id or subnet.compartment_id != tenancy
+            or subnet.display_name != APPROVED_SUBNET_NAME
+            or subnet.cidr_block != APPROVED_SUBNET_CIDR
+            or subnet.lifecycle_state != "AVAILABLE"):
+        raise ValueError("ANDROID_SUBNET_CHANGED_SINCE_DISCOVERY")
+    return subnet
+
+
+def approved_boot_access(network, tenancy, auth_data):
+    """Validate the target network and SSH key without creating resources.
+
+    Existing encrypted GitHub secret contains the five OCI signer fields.
+    Optional legacy subnet/key overrides must match the pinned resources.
+    """
+    subnet = approved_subnet(
+        network, tenancy, auth_data.get("subnet_id", ""))
+    sshkey = approved_ssh_public_key()
+    override = auth_data.get("ssh_public_key", "").strip()
+    if override and override.split()[:2] != sshkey.split()[:2]:
+        raise ValueError("SSH_KEY_OVERRIDE_DIFFERS_FROM_APPROVED")
+    mode = safe_instance_network_mode(network, subnet)
+    if mode is None:
+        raise ValueError("NETWORK_EGRESS_OR_INGRESS_GUARD")
+    return subnet, sshkey, mode
+
+
 def launch_retry_token(tenancy, subnet_id):
     """Stable OCI idempotency token for this one approved Always Free VM.
 
@@ -219,6 +282,11 @@ def main():
         raise ValueError("INVALID_CAPACITY_REPORT")
     state = shape_states[0]
     report("CAPACITY", state)
+    # Preflight validates SSH, subnet and firewall even when A1 is out of stock.
+    subnet, sshkey, mode = approved_boot_access(network, tenancy, d)
+    subnet_id = subnet.id
+    report("NETWORK_MODE", mode)
+    report("PROVISION_PREFLIGHT", "READY_SSH_SUBNET_NETWORK")
     if state != "AVAILABLE":
         return 0
 
@@ -226,19 +294,6 @@ def main():
        os.getenv("OCI_A1_LAUNCH_GUARD") != "ALWAYS_FREE_SINGLE_A1":
         report("STATE", "CAPACITY_AVAILABLE_PROVISIONING_NOT_ARMED")
         return 0
-
-    subnet_id, sshkey = d.get("subnet_id", ""), d.get("ssh_public_key", "")
-    if not re.fullmatch(r"ocid1\.subnet\.[a-z0-9.]+", subnet_id) or \
-       not sshkey.startswith(("ssh-ed25519 ", "ssh-rsa ")):
-        raise ValueError("SUBNET_OR_SSH_KEY_MISSING")
-    subnet = network.get_subnet(subnet_id).data
-    if subnet.compartment_id != tenancy or subnet.lifecycle_state != "AVAILABLE":
-        raise ValueError("SUBNET_NOT_ELIGIBLE")
-    mode = safe_instance_network_mode(network, subnet)
-    if mode is None:
-        report("STATE", "NETWORK_EGRESS_OR_INGRESS_GUARD")
-        return 0
-    report("NETWORK_MODE", mode)
 
     # Fail closed on any uncertain inventory; never allocate over free limits.
     compartments = [tenancy]

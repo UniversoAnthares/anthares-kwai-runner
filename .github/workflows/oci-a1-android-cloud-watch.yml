@@ -45,10 +45,11 @@ jobs:
         run: python -m pip install --disable-pip-version-check 'oci==2.187.1'
       - name: Run fail-closed regression tests
         run: python -m unittest discover -s tests -p 'test_oci_a1_capacity_watch.py' -v
-      - name: Read OCI A1 capacity; guarded allocation optional
+      - name: Read OCI A1 capacity and validate approved subnet/SSH readiness
         shell: bash
         run: |
           set -euo pipefail
+          test -f infra/oci-android/approved-admin-ssh.pub
           python tools/oci_a1_capacity_watch.py
       - name: Document execution scope
         if: always()
@@ -57,6 +58,7 @@ jobs:
             echo 'The watcher uses GitHub hosted runners only.'
             echo 'Owner approved read-only monitoring; no repository variable gate is used.'
             echo 'Automatic allocation is disabled by forced OCI_A1_AUTO_PROVISION=0 until separately reviewed.'
+            echo 'Each capacity poll validates the audited subnet, SSH key fingerprint and locked ingress before enabling future allocation.'
             echo 'It never posts to Kwai or modifies physical Android/MEmu routing.'
             echo 'An allocated Linux VM is not proof of ReDroid, MacroDroid or Kwai operation.'
           } >> "$GITHUB_STEP_SUMMARY"

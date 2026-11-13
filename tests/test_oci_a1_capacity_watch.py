@@ -215,6 +215,95 @@ class SafeDefaults(unittest.TestCase):
             request, opc_retry_token=mod.launch_retry_token(
                 "tenancy-a", "subnet-a"))
 
+    def _approved_subnet_fixture(self):
+        return SimpleNamespace(
+            id="ocid1.subnet.oc1.sa-saopaulo-1.example",
+            display_name=mod.APPROVED_SUBNET_NAME,
+            compartment_id="tenancy",
+            cidr_block=mod.APPROVED_SUBNET_CIDR,
+            lifecycle_state="AVAILABLE",
+        )
+
+    def test_pin_existing_ssh_public_key_and_reject_substitution(self):
+        import base64
+        import hashlib
+        raw = b"synthetic-ed25519-public-material-for-fixture"
+        encoded = base64.b64encode(raw).decode("ascii")
+        digest = "SHA256:" + base64.b64encode(
+            hashlib.sha256(raw).digest()).decode("ascii").rstrip("=")
+        reader = (
+            "ssh-ed25519 " + encoded + " fixture"
+        )
+        with patch.object(mod, "Path") as path, patch.object(
+                mod, "APPROVED_SSH_KEY_SHA256", digest):
+            selected = (path.return_value.resolve.return_value
+                        .parents.__getitem__.return_value.__truediv__.return_value)
+            selected.read_text.return_value = reader
+            self.assertEqual(
+                mod.approved_ssh_public_key(),
+                "ssh-ed25519 " + encoded + " anthares-oci-admin"
+            )
+            selected.read_text.return_value = "ssh-ed25519 AAAASUBSTITUTED"
+            with self.assertRaises(ValueError):
+                mod.approved_ssh_public_key()
+
+    def test_approved_subnet_is_discovered_without_secret_ocid(self):
+        subnet = self._approved_subnet_fixture()
+        network = SimpleNamespace(
+            list_subnets=lambda **kwargs: None,
+            get_subnet=lambda _id: SimpleNamespace(data=subnet)
+        )
+        with patch.object(mod, "pages", return_value=[subnet]) as pages:
+            self.assertIs(mod.approved_subnet(network, "tenancy"), subnet)
+            pages.assert_called_once()
+        with patch.object(mod, "pages", return_value=[subnet]):
+            with self.assertRaisesRegex(ValueError, "SUBNET_OVERRIDE"):
+                mod.approved_subnet(network, "tenancy", "different-subnet")
+
+    def test_unapproved_or_multiple_subnet_blocks_launch(self):
+        subnet = self._approved_subnet_fixture()
+        network = SimpleNamespace(list_subnets=lambda **kwargs: None)
+        with patch.object(mod, "pages", return_value=[subnet, subnet]):
+            with self.assertRaisesRegex(ValueError, "NOT_UNIQUE"):
+                mod.approved_subnet(network, "tenancy")
+        bad = self._approved_subnet_fixture()
+        bad.cidr_block = "10.92.7.0/24"
+        with patch.object(mod, "pages", return_value=[bad]):
+            with self.assertRaisesRegex(ValueError, "NOT_UNIQUE"):
+                mod.approved_subnet(network, "tenancy")
+
+    def test_approved_boot_access_rejects_ssh_key_override(self):
+        subnet = self._approved_subnet_fixture()
+        sshkey = "ssh-ed25519 AAAA_APPROVED anthares-oci-admin"
+        with patch.object(mod, "approved_subnet", return_value=subnet), \
+             patch.object(mod, "approved_ssh_public_key", return_value=sshkey), \
+             patch.object(mod, "safe_instance_network_mode", return_value="LOCKED_PUBLIC"):
+            result = mod.approved_boot_access({}, "tenancy", {})
+            self.assertEqual(result, (subnet, sshkey, "LOCKED_PUBLIC"))
+            with self.assertRaisesRegex(ValueError, "SSH_KEY_OVERRIDE"):
+                mod.approved_boot_access({}, "tenancy", {
+                    "ssh_public_key": "ssh-ed25519 AAAA_WRONG intruder"})
+
+    def test_preflight_runs_even_when_a1_host_out_of_capacity(self):
+        from unittest.mock import Mock
+        signer = dict(tenancy="tenancy")
+        compute, network, block, identity = Mock(), Mock(), Mock(), Mock()
+        region = SimpleNamespace(region_name=mod.REGION, status="READY")
+        ad = SimpleNamespace(name="AD-1")
+        shape = SimpleNamespace(
+            instance_shape=mod.A1, availability_status="OUT_OF_HOST_CAPACITY")
+        compute.create_compute_capacity_report.return_value.data.shape_availabilities = [shape]
+        subnet = self._approved_subnet_fixture()
+        with patch.object(mod, "auth", return_value=(
+                signer, compute, network, block, identity)), \
+             patch.object(mod, "pages", side_effect=[[region], [ad]]), \
+             patch.object(mod, "approved_boot_access",
+                          return_value=(subnet, "ssh-ed25519 AAAA_PUBLIC", "LOCKED_PUBLIC")
+                          ) as preflight:
+            self.assertEqual(mod.main(), 0)
+            preflight.assert_called_once_with(network, "tenancy", signer)
+            compute.launch_instance.assert_not_called()
+
     def test_region_constant_is_home_approved(self):
         self.assertEqual(mod.REGION, "sa-saopaulo-1")
         self.assertEqual((mod.CPU, mod.MEMORY_GB, mod.BOOT_GB), (1, 6, 50))
