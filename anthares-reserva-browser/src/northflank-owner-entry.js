@@ -202,6 +202,45 @@ export default {
       return html(browserPage(ok?`Autenticação criptografada salva (${count} cookies) e Chromium encerrado.`:`Falha ao salvar: ${err}`,null),ok?200:503);
     }
 
+    if(url.pathname==="/tiktok/northflank/resume"&&request.method==="POST"){
+      if(!machineAuthorized(request,env))return json({ok:false,error:"unauthorized"},401);
+      const saved=await readPlainState(env);
+      if(!saved?.cookies?.length)return json({ok:false,error:"no_encrypted_tiktok_state"},409);
+      const current=await nf(env,"/interactive-browser/status");
+      if(current.ok&&current.active&&current.responsive)
+        return json({ok:true,state:"already_active",saved_cookie_count:saved.cookies.length,backend:current.backend});
+      if(current.ok&&current.starting)
+        return json({ok:true,state:"starting",saved_cookie_count:saved.cookies.length});
+      const started=await nf(env,"/interactive-browser/start-async",{method:"POST",body:{state:saved}});
+      return json({ok:!!started.ok,state:started.starting?"starting":started.active?"active":"failed",
+        saved_cookie_count:saved.cookies.length,error:started.ok?undefined:started.error||"start_failed"},started.ok?200:503);
+    }
+    if(url.pathname==="/tiktok/northflank/check"&&request.method==="POST"){
+      if(!machineAuthorized(request,env))return json({ok:false,error:"unauthorized"},401);
+      const body=await request.json().catch(()=>({}));
+      const target=String(body?.target||"");
+      const urls={profile:"https://www.tiktok.com/@universo.anthares",studio:"https://www.tiktok.com/tiktokstudio"};
+      if(!Object.hasOwn(urls,target))return json({ok:false,error:"unsupported_target"},400);
+      const status=await nf(env,"/interactive-browser/status");
+      if(!status.ok||!status.active||!status.responsive)
+        return json({ok:false,error:"browser_not_ready",active:!!status.active,starting:!!status.starting},409);
+      const navigated=await nf(env,"/interactive-browser/navigate",{method:"POST",body:{url:urls[target]}});
+      if(!navigated.ok)return json({ok:false,error:"navigation_failed"},503);
+      await new Promise(resolve=>setTimeout(resolve,2400));
+      const evidence=await nf(env,"/interactive-browser/tiktok-evidence");
+      if(!evidence.ok)return json({ok:false,error:"evidence_failed"},503);
+      const e=evidence.evidence||{};
+      const host=String(e.host||"").toLowerCase();
+      const path=String(e.path||"");
+      const correctHost=host==="www.tiktok.com"||host==="tiktok.com";
+      const correctPath=target==="profile"?path.startsWith("/@universo.anthares"):path.startsWith("/tiktokstudio");
+      return json({ok:true,target,correct_host:correctHost,correct_path:correctPath,
+        login_gate:!!e.login_gate,account_marker:!!e.account_marker,upload_marker:!!e.upload_marker,
+        title_present:!!e.title,authenticated_access_confirmed:false,
+        result:!correctHost||!correctPath?"unexpected_page":e.login_gate?"login_required":
+          target==="profile"&&e.account_marker?"profile_visible":
+          target==="studio"&&e.upload_marker?"studio_ui_detected":"inconclusive"});
+    }
     if(url.pathname==="/tiktok/northflank/status"&&request.method==="GET"){
       if(!machineAuthorized(request,env))return json({error:"unauthorized"},401);
       return json(await nf(env,"/interactive-browser/status"));
