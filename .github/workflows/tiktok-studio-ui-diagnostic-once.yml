@@ -59,14 +59,14 @@ jobs:
              captchas_visible:/drag the slider|verify to continue|captcha|verificar sua identidade/.test(body),
              page_shell_visible:!!document.querySelector('main,[role=main],#root,#app'),
              upload_input_count:document.querySelectorAll('input[type=file]').length
-   password_input_count:document.querySelectorAll('input[type=password]').length,
-   login_dialog_count:[...document.querySelectorAll('[role=dialog]')].filter(e=>/log in|login|entrar|sign in/.test((e.innerText||'').toLowerCase())).length,
-   login_in_first_500:/log in|login|sign in|fazer login/.test(body.slice(0,500)),
-   error_in_first_500:/something went wrong|try again|error occurred|ocorreu um erro/.test(body.slice(0,500)),
-   error_first_index:body.search(/something went wrong|try again later|access denied|error occurred|ocorreu um erro|não foi possível/),
-   upload_first_index:body.search(/upload|carregar vídeo|enviar vídeo/),
-   upload_link_count:[...document.querySelectorAll('a[href]')].filter(a=>/upload/i.test(a.getAttribute('href')||'')).length,
-   upload_button_disabled:[...document.querySelectorAll('button,a,[role=button]')].filter(e=>/^(upload|carregar|upload video|enviar vídeo)/i.test((e.innerText||'').trim())).some(e=>e.disabled||e.getAttribute('aria-disabled')==='true'),
+             password_input_count:document.querySelectorAll('input[type=password]').length,
+             login_dialog_count:[...document.querySelectorAll('[role=dialog]')].filter(e=>/log in|login|entrar|sign in/.test((e.innerText||'').toLowerCase())).length,
+             login_in_first_500:/log in|login|sign in|fazer login/.test(body.slice(0,500)),
+             error_in_first_500:/something went wrong|try again|error occurred|ocorreu um erro/.test(body.slice(0,500)),
+             error_first_index:body.search(/something went wrong|try again later|access denied|error occurred|ocorreu um erro|não foi possível/),
+             upload_first_index:body.search(/upload|carregar vídeo|enviar vídeo/),
+             upload_link_count:[...document.querySelectorAll('a[href]')].filter(a=>/upload/i.test(a.getAttribute('href')||'')).length,
+             upload_button_disabled:[...document.querySelectorAll('button,a,[role=button]')].filter(e=>/^(upload|carregar|upload video|enviar vídeo)/i.test((e.innerText||'').trim())).some(e=>e.disabled||e.getAttribute('aria-disabled')==='true'),
            };
           })()"""
           r=_cdp("Runtime.evaluate",{"expression":expr,"returnByValue":True})
