@@ -32,3 +32,19 @@ test('Neon lease eligibility excludes duplicates and unresolved posts',()=>{
  assert.match(gate,/source_start/);
  assert.match(gate,/source_end/);
 });
+
+test('Neon computes 06:00 open in America/Campo_Grande and passes it to both account gates',()=>{
+ const a=source.indexOf('async function kwaiDeadlinePacing(');
+ const z=source.indexOf('async function cortesDeadlinePacing(',a);
+ const gate=source.slice(a,z);
+ assert.match(gate,/interval '6 hours'/);
+ assert.match(gate,/AT TIME ZONE 'America\/Campo_Grande'/);
+ assert.match(gate,/AS open_at/);
+ assert.match(gate,/b\.open_at AS window_open_at/);
+ assert.match(gate,/window_open_at:row\.window_open_at/);
+ assert.match(gate,/GROUP BY e\.n,b\.clock,b\.open_at,b\.end_at/);
+ const policy=readFileSync(new URL('./kwai-pacing-policy.mjs',import.meta.url),'utf8');
+ assert.match(policy,/if\(time<open\)\{result\.status='WAIT_OPEN'/);
+ // Both lease routes require DUE, so WAIT_OPEN authorizes no job.
+ assert.equal(times(source,"if(pacing.status!=='DUE')return{ok:true,job:null,pacing};"),2);
+});
