@@ -4,10 +4,12 @@
 Authenticated exclusively from GitHub Actions encrypted secrets; never copies
 the OCI API key to Windows, logs, or repository source. Does not publish Kwai.
 """
+import base64
 import json
 import os
 import re
 import sys
+from pathlib import Path
 
 import oci
 from oci.exceptions import ServiceError
@@ -145,6 +147,20 @@ def safe_instance_network_mode(network, subnet):
     return "LOCKED_PUBLIC"
 
 
+def redroid_cloud_init_data():
+    """Load the reviewed first-boot contract into OCI user_data, never a secret."""
+    path = Path(__file__).resolve().parents[1] / (
+        "infra/oci-android/redroid-firstboot.cloud-config.yml")
+    data = path.read_bytes()
+    if (not data.startswith(b"#cloud-config\n") or
+            len(data) > 12_000 or
+            b"127.0.0.1:5555:5555" not in data or
+            b"0.0.0.0:5555" in data or
+            b"--privileged" not in data):
+        raise ValueError("UNSAFE_OR_MISSING_REDR0ID_BOOTSTRAP")
+    return base64.b64encode(data).decode("ascii")
+
+
 def main():
     session = auth()
     if session is None:
@@ -238,7 +254,8 @@ def main():
         create_vnic_details=oci.core.models.CreateVnicDetails(
             subnet_id=subnet_id, assign_public_ip=(mode == "LOCKED_PUBLIC"),
             nsg_ids=[]),
-        metadata={"ssh_authorized_keys": sshkey},
+        metadata={"ssh_authorized_keys": sshkey,
+                  "user_data": redroid_cloud_init_data()},
         freeform_tags={"anthares-purpose": "android-redroid-standby",
                        "cost-policy": "always-free-single-a1"},
     )

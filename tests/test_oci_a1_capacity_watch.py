@@ -134,6 +134,36 @@ class SafeDefaults(unittest.TestCase):
         network, subnet = self._locked_public_network(port=5555)
         self.assertIsNone(mod.safe_instance_network_mode(network, subnet))
 
+    def _stub_cloud_init(self, fake_path, content):
+        reader = (fake_path.return_value.resolve.return_value
+                  .parents.__getitem__.return_value.__truediv__.return_value)
+        reader.read_bytes.return_value = content
+
+    def test_cloud_init_is_encoded_and_local_only(self):
+        from unittest.mock import patch
+        import base64
+        data = b"#cloud-config\n" + b"--privileged\n127.0.0.1:5555:5555\n"
+        with patch.object(mod, "Path") as path:
+            self._stub_cloud_init(path, data)
+            self.assertEqual(base64.b64decode(
+                mod.redroid_cloud_init_data()), data)
+
+    def test_cloud_init_rejects_public_adb_binding(self):
+        from unittest.mock import patch
+        data = (b"#cloud-config\n--privileged\n" +
+                b"127.0.0.1:5555:5555 0.0.0.0:5555\n")
+        with patch.object(mod, "Path") as path:
+            self._stub_cloud_init(path, data)
+            with self.assertRaises(ValueError):
+                mod.redroid_cloud_init_data()
+
+    def test_cloud_init_rejects_missing_header(self):
+        from unittest.mock import patch
+        with patch.object(mod, "Path") as path:
+            self._stub_cloud_init(path, b"--privileged\n127.0.0.1:5555:5555")
+            with self.assertRaises(ValueError):
+                mod.redroid_cloud_init_data()
+
     def test_region_constant_is_home_approved(self):
         self.assertEqual(mod.REGION, "sa-saopaulo-1")
         self.assertEqual((mod.CPU, mod.MEMORY_GB, mod.BOOT_GB), (1, 6, 50))

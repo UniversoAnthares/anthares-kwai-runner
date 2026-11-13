@@ -1,0 +1,48 @@
+#cloud-config
+# Anthares: first boot for a future Always Free OCI A1 host.
+# No account tokens, no APK install, no social publishing or public ADB.
+write_files:
+  - path: /usr/local/sbin/anthares-redroid-firstboot
+    owner: root:root
+    permissions: '0700'
+    content: |
+      #!/usr/bin/env bash
+      set -Eeuo pipefail
+      exec > >(tee -a /var/log/anthares-redroid-firstboot.log) 2>&1
+      echo 'ANTHARES_REDR0ID_BOOT_BEGIN'
+      if [ "$(uname -m)" != 'aarch64' ]; then
+        echo 'ANTHARES_REDR0ID_BOOT_ARCH_UNSUPPORTED'; exit 71
+      fi
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get update -qq
+      apt-get install -y --no-install-recommends ca-certificates docker.io kmod
+      if ! modprobe binder_linux devices=binder,hwbinder,vndbinder; then
+        echo 'ANTHARES_REDR0ID_BINDER_MODULE_LOAD_FAILED'
+        apt-get install -y --no-install-recommends "linux-modules-extra-$(uname -r)" || exit 72
+        modprobe binder_linux devices=binder,hwbinder,vndbinder || exit 73
+      fi
+      for dev in binder hwbinder vndbinder; do
+        if [ ! -e "/dev/$dev" ]; then
+          echo "ANTHARES_REDR0ID_MISSING_BINDER_$dev"
+          exit 74
+        fi
+      done
+      install -d -m 0700 /var/lib/anthares-redroid/android-data
+      systemctl enable --now docker
+      IMAGE='redroid/redroid:12.0.0_64only-240527'
+      docker pull "$IMAGE"
+      if docker container inspect anthares-redroid >/dev/null 2>&1; then
+        echo 'ANTHARES_REDR0ID_CONTAINER_ALREADY_DEFINED'
+        exit 0
+      fi
+      docker run -d --name anthares-redroid --restart unless-stopped \
+        --privileged --platform linux/arm64 \
+        -p 127.0.0.1:5555:5555 \
+        -v /var/lib/anthares-redroid/android-data:/data \
+        "$IMAGE"
+      sleep 10
+      [ "$(docker inspect -f '{{.State.Running}}' anthares-redroid)" = 'true' ] || exit 75
+      echo 'ANTHARES_REDR0ID_CONTAINER_RUNNING_LOCALHOST_ONLY'
+runcmd:
+  - [ bash, /usr/local/sbin/anthares-redroid-firstboot ]
+final_message: 'Anthares first-boot completed; check /var/log/anthares-redroid-firstboot.log. ReDroid is not proof of authenticated Kwai or MacroDroid.'
