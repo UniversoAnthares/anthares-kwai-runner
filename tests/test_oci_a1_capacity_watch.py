@@ -139,64 +139,64 @@ class SafeDefaults(unittest.TestCase):
                   .parents.__getitem__.return_value.__truediv__.return_value)
         reader.read_bytes.return_value = content
 
-    def test_cloud_init_is_encoded_and_local_only(self):
-        from unittest.mock import patch
-        import base64
-        data = (b'#cloud-config\n--privileged\n127.0.0.1:5555:5555\n'
+    def _valid_cloud_init(self):
+        return (b"#cloud-config\n--privileged\n127.0.0.1:5555:5555\n"
                 + b'--platform "$PLATFORM"\n'
-                + mod.REDROID_ARM64_IMAGE.encode('ascii')
-                + b'\n'
-                + mod.REDROID_AMD64_IMAGE.encode('ascii'))
+                + b'/etc/modules-load.d/anthares-redroid.conf\n'
+                + b'options binder_linux devices=binder,hwbinder,vndbinder\n'
+                + b'docker start anthares-redroid\n'
+                + mod.REDROID_ARM64_IMAGE.encode("ascii")
+                + b"\n" + mod.REDROID_AMD64_IMAGE.encode("ascii"))
+
+    def _assert_bootstrap_rejected(self, data):
+        with patch.object(mod, "Path") as path:
+            self._stub_cloud_init(path, data)
+            with self.assertRaises(ValueError):
+                mod.redroid_cloud_init_data()
+
+    def test_cloud_init_is_encoded_and_local_only(self):
+        import base64
+        data = self._valid_cloud_init()
         with patch.object(mod, "Path") as path:
             self._stub_cloud_init(path, data)
             self.assertEqual(base64.b64decode(
                 mod.redroid_cloud_init_data()), data)
 
     def test_cloud_init_rejects_missing_amd64_digest(self):
-        from unittest.mock import patch
-        data = (b'#cloud-config\n--privileged\n127.0.0.1:5555:5555\n'
-                + b'--platform "$PLATFORM"\n'
-                + mod.REDROID_ARM64_IMAGE.encode('ascii'))
-        with patch.object(mod, "Path") as path:
-            self._stub_cloud_init(path, data)
-            with self.assertRaises(ValueError):
-                mod.redroid_cloud_init_data()
+        data = self._valid_cloud_init().replace(
+            mod.REDROID_AMD64_IMAGE.encode("ascii"), b"MISSING_AMD64")
+        self._assert_bootstrap_rejected(data)
 
     def test_cloud_init_rejects_hardcoded_platform(self):
-        from unittest.mock import patch
-        data = (b'#cloud-config\n--privileged\n127.0.0.1:5555:5555\n'
-                + b'--platform linux/arm64\n'
-                + mod.REDROID_ARM64_IMAGE.encode('ascii')
-                + b'\n' + mod.REDROID_AMD64_IMAGE.encode('ascii'))
-        with patch.object(mod, "Path") as path:
-            self._stub_cloud_init(path, data)
-            with self.assertRaises(ValueError):
-                mod.redroid_cloud_init_data()
+        data = self._valid_cloud_init().replace(
+            b'--platform "$PLATFORM"', b"--platform linux/arm64")
+        self._assert_bootstrap_rejected(data)
+
+    def test_cloud_init_rejects_missing_persistent_binder(self):
+        data = self._valid_cloud_init().replace(
+            b"/etc/modules-load.d/anthares-redroid.conf", b"UNCONFIGURED")
+        self._assert_bootstrap_rejected(data)
+
+    def test_cloud_init_rejects_missing_container_recovery(self):
+        data = self._valid_cloud_init().replace(
+            b"docker start anthares-redroid", b"CONTAINER_RECOVERY_MISSING")
+        self._assert_bootstrap_rejected(data)
 
     def test_cloud_init_rejects_mutable_redroid_tag(self):
-        from unittest.mock import patch
-        data = (b"#cloud-config\n--privileged\n127.0.0.1:5555:5555\n"
-                + b"redroid/redroid:12.0.0_64only-240527")
-        with patch.object(mod, "Path") as path:
-            self._stub_cloud_init(path, data)
-            with self.assertRaises(ValueError):
-                mod.redroid_cloud_init_data()
+        data = self._valid_cloud_init().replace(
+            mod.REDROID_ARM64_IMAGE.encode("ascii"),
+            b"redroid/redroid:12.0.0_64only-240527")
+        self._assert_bootstrap_rejected(data)
 
     def test_cloud_init_rejects_public_adb_binding(self):
-        from unittest.mock import patch
-        data = (b"#cloud-config\n--privileged\n" +
-                b"127.0.0.1:5555:5555 0.0.0.0:5555\n")
-        with patch.object(mod, "Path") as path:
-            self._stub_cloud_init(path, data)
-            with self.assertRaises(ValueError):
-                mod.redroid_cloud_init_data()
+        data = self._valid_cloud_init().replace(
+            b"127.0.0.1:5555:5555", b"0.0.0.0:5555:5555")
+        self._assert_bootstrap_rejected(data)
 
     def test_cloud_init_rejects_missing_header(self):
-        from unittest.mock import patch
-        with patch.object(mod, "Path") as path:
-            self._stub_cloud_init(path, b"--privileged\n127.0.0.1:5555:5555")
-            with self.assertRaises(ValueError):
-                mod.redroid_cloud_init_data()
+        data = self._valid_cloud_init().replace(
+            b"#cloud-config\n", b"BAD_HEADER\n")
+        self._assert_bootstrap_rejected(data)
 
     def test_launch_retry_token_is_stable_and_scope_specific(self):
         from uuid import UUID
