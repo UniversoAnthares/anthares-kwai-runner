@@ -108,18 +108,34 @@ function browserPage(message="",screen=null,verify=null,drag=null){
   })();
   </script>`:"";
   const proof=verify?`<pre>${esc(JSON.stringify(verify,null,2))}</pre>`:"";
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Anthares Browser · TikTok</title><style>body{font-family:system-ui;max-width:1500px;margin:24px auto;padding:0 18px}form{margin:8px 0}button,input{font:inherit;padding:6px}pre{white-space:pre-wrap;background:#f4f4f4;padding:12px}input[type=image]{padding:0;border:1px solid #bbb;max-width:none}#remote-shot{display:block;max-width:100%;height:auto;touch-action:none;user-select:none;cursor:crosshair;border:1px solid #aaa}.remote-wrap{max-width:1365px}#gesture-status{margin:8px 0;color:#333}</style></head><body><h1>Anthares Browser · TikTok</h1><p>Executor: <b>Northflank Chromium</b>. Cloudflare Browser Run: <b>não utilizado</b>.</p>${message?`<p><strong>${esc(message)}</strong></p>`:""}<p>${screen?.url?`URL: ${esc(screen.url)}`:""}</p>${img}<form method="post" action="/owner/tiktok/screen"><button>Atualizar imagem</button></form><form method="post" action="/owner/tiktok/type"><input name="text" type="text" autocomplete="off" placeholder="Texto / usuário / código" size="46" required> <button>Digitar</button></form><form method="post" action="/owner/tiktok/type"><input name="text" type="password" autocomplete="off" placeholder="Senha" size="46" required> <button>Digitar senha</button></form><form method="post" action="/owner/tiktok/key"><button name="key" value="Enter">Enter</button> <button name="key" value="Tab">Tab</button> <button name="key" value="Escape">Esc</button> <button name="key" value="Backspace">Backspace</button></form><form method="post" action="/owner/tiktok/navigate"><button name="url" value="https://www.tiktok.com/login">Login</button> <button name="url" value="https://www.tiktok.com/@universo.anthares">Perfil @universo.anthares</button> <button name="url" value="https://www.tiktok.com/tiktokstudio">TikTok Studio</button></form><form method="post" action="/owner/tiktok/verify"><button>Verificar conta e Studio</button></form><form method="post" action="/owner/tiktok/save"><button>Salvar autenticação e encerrar</button></form>${proof}${gestureScript}<p><a href="/owner">Voltar</a></p></body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Anthares Browser · TikTok</title><style>body{font-family:system-ui;max-width:1500px;margin:24px auto;padding:0 18px}form{margin:8px 0}button,input{font:inherit;padding:6px}pre{white-space:pre-wrap;background:#f4f4f4;padding:12px}input[type=image]{padding:0;border:1px solid #bbb;max-width:none}#remote-shot{display:block;max-width:100%;height:auto;touch-action:none;user-select:none;cursor:crosshair;border:1px solid #aaa}.remote-wrap{max-width:1365px}#gesture-status{margin:8px 0;color:#333}</style></head><body><h1>Anthares Browser · TikTok</h1><p>Executor: <b>Northflank Chromium</b>. Cloudflare Browser Run: <b>não utilizado</b>.</p>${message?`<p><strong>${esc(message)}</strong></p>`:""}<p>${screen?.url?`URL: ${esc(screen.url)}`:""}</p>${img}<form method="post" action="/owner/tiktok/screen"><button>Restaurar sessão salva / atualizar imagem</button></form><form method="post" action="/owner/tiktok/type"><input name="text" type="text" autocomplete="off" placeholder="Texto / usuário / código" size="46" required> <button>Digitar</button></form><form method="post" action="/owner/tiktok/type"><input name="text" type="password" autocomplete="off" placeholder="Senha" size="46" required> <button>Digitar senha</button></form><form method="post" action="/owner/tiktok/key"><button name="key" value="Enter">Enter</button> <button name="key" value="Tab">Tab</button> <button name="key" value="Escape">Esc</button> <button name="key" value="Backspace">Backspace</button></form><form method="post" action="/owner/tiktok/navigate"><button name="url" value="https://www.tiktok.com/login">Login</button> <button name="url" value="https://www.tiktok.com/@universo.anthares">Perfil @universo.anthares</button> <button name="url" value="https://www.tiktok.com/tiktokstudio">TikTok Studio</button></form><form method="post" action="/owner/tiktok/verify"><button>Verificar conta e Studio</button></form><form method="post" action="/owner/tiktok/save"><button>Salvar autenticação e encerrar</button></form>${proof}${gestureScript}<p><a href="/owner">Voltar</a></p></body></html>`;
 }
 
 async function verifySession(env){
-  const started=await ensureStarted(env);if(!started.ok||started.starting)return {ok:false,starting:!!started.starting,error:started.starting?"browser_starting":started.error||"start_failed"};
-  await nf(env,"/interactive-browser/navigate",{method:"POST",body:{url:"https://www.tiktok.com/@universo.anthares"}});await new Promise(r=>setTimeout(r,1800));
-  const p=await nf(env,"/interactive-browser/tiktok-evidence");const profile=p.evidence||{};const identity=!!(!profile.login_gate&&profile.account_marker&&String(profile.host||"").endsWith("tiktok.com"));
+  const started=await ensureStarted(env);
+  if(!started.ok||started.starting)return {ok:false,starting:!!started.starting,error:started.starting?"browser_starting":started.error||"start_failed"};
+  await nf(env,"/interactive-browser/navigate",{method:"POST",body:{url:"https://www.tiktok.com/@universo.anthares"}});
+  await new Promise(r=>setTimeout(r,1800));
+  const p=await nf(env,"/interactive-browser/tiktok-evidence");
+  const profile=p.evidence||{};
+  const profilePath=String(profile.path||"");
+  const identity=!!(p.ok&&!profile.login_gate&&profile.account_marker&&
+    String(profile.host||"").endsWith("tiktok.com")&&profilePath.startsWith("/@universo.anthares"));
   let studio={};let studioOk=false;
-  if(identity){await nf(env,"/interactive-browser/navigate",{method:"POST",body:{url:"https://www.tiktok.com/tiktokstudio"}});await new Promise(r=>setTimeout(r,1800));const s=await nf(env,"/interactive-browser/tiktok-evidence");studio=s.evidence||{};studioOk=!!(!studio.login_gate&&String(studio.host||"").endsWith("tiktok.com"));}
-  const exported=await nf(env,"/interactive-browser/export",{method:"POST",body:{}});
-  let stored=false;if(exported.ok&&exported.state){try{const state=normalizeState(exported.state);const wr=await writePlainState(env,state);stored=!!wr.stored;}catch{}}
-  return {ok:true,persisted_state:stored||!!(await readPlainState(env)),identity_verified:identity,studio_verified:studioOk,session_state:studioOk?"authenticated":identity?"profile_only":profile.login_gate?"unauthenticated":"identity_unproven",backend:"northflank_chromium_cdp",evidence:profile,studio};
+  if(identity){
+    await nf(env,"/interactive-browser/navigate",{method:"POST",body:{url:"https://www.tiktok.com/tiktokstudio"}});
+    await new Promise(r=>setTimeout(r,1800));
+    const s=await nf(env,"/interactive-browser/tiktok-evidence");
+    studio=s.evidence||{};
+    studioOk=!!(s.ok&&!studio.login_gate&&studio.upload_marker&&
+      String(studio.host||"").endsWith("tiktok.com")&&String(studio.path||"").startsWith("/tiktokstudio"));
+  }
+  const saved=await readPlainState(env);
+  return {ok:true,persisted_state:!!saved,saved_cookie_count:saved?.cookies?.length||0,
+    identity_verified:false,studio_verified:studioOk,
+    profile_visible:identity,session_state:studioOk?"studio_ui_visible":identity?"profile_visible":profile.login_gate?"unauthenticated":"unverified",
+    backend:"northflank_chromium_cdp",evidence:profile,studio,
+    note:"Acesso autenticado ao perfil exige comprovar controles de proprietário. Verificação não altera backup criptografado."};
 }
 
 export default {
@@ -129,13 +145,24 @@ export default {
     if(ownerPath&&!(await canonicalOwnerAuthorized(request,env)))return new Response(null,{status:303,headers:{location:"/owner","cache-control":"no-store"}});
 
     if(url.pathname==="/owner/tiktok"&&request.method==="GET"){
-      const status=await nf(env,"/interactive-browser/status");const screen=status.active?await shot(env):null;return html(browserPage(status.active?"Sessão Northflank ativa.":"Sessão pronta para iniciar.",screen));
+      const status=await nf(env,"/interactive-browser/status");
+      const screen=status.active&&status.responsive?await shot(env):null;
+      const saved=await readPlainState(env);
+      const label=status.active&&status.responsive?"Sessão Northflank ativa.":
+        saved?.cookies?.length?"Backup criptografado disponível ("+saved.cookies.length+" cookies). Clique em Restaurar sessão salva / atualizar imagem.":
+        "Nenhuma sessão criptografada foi encontrada. Inicie a sessão manualmente.";
+      return html(browserPage(label,screen));
     }
     if(url.pathname==="/owner/tiktok/start"&&request.method==="POST"){
       const r=await ensureStarted(env);return html(browserPage(r.starting?"Chromium iniciando no Northflank. Atualize a imagem para acompanhar.":r.ok?"Chromium iniciado no Northflank.":`Falha: ${r.error||"desconhecida"}`,r.active?await shot(env):null),r.ok?200:503);
     }
     if((url.pathname==="/owner/tiktok/live"||url.pathname==="/owner/tiktok/screen")&&request.method==="POST"){
-      const r=await ensureStarted(env);const screen=r.ok?await shot(env):null;return html(browserPage(screen?"Imagem atualizada.":`Falha: ${r.error||"screenshot"}`,screen),screen?200:503);
+      const r=await ensureStarted(env);
+      const screen=r.ok&&!r.starting?await shot(env):null;
+      const notice=r.starting?"Restauração iniciada. Clique novamente em Restaurar sessão salva / atualizar imagem para acompanhar.":
+        screen?"Imagem remota atualizada.":r.ok?"Navegador iniciou; a imagem ainda está indisponível.":
+        "Falha na restauração: "+(r.error||"desconhecida");
+      return html(browserPage(notice,screen),r.ok?200:503);
     }
     if(url.pathname==="/owner/tiktok/click"&&request.method==="POST"){
       const f=await request.formData();const x=Number(f.get("x")??f.get("shot.x"));const y=Number(f.get("y")??f.get("shot.y"));const r=await nf(env,"/interactive-browser/click",{method:"POST",body:{x,y}});await new Promise(q=>setTimeout(q,450));return html(browserPage(r.ok?`Clique enviado (${Math.round(x)}, ${Math.round(y)}).`:`Falha: ${r.error}`,await shot(env)),r.ok?200:503);
