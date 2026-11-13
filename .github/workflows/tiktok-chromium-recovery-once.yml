@@ -1,0 +1,77 @@
+name: One-time owned TikTok Chromium recovery if CDP is stuck
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tiktok-chromium-recovery-once.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: anthares-tiktok-chromium-recovery
+  cancel-in-progress: false
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+    steps:
+      - name: Guarded restart of owned Chromium process with same profile directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip -q install pillow
+          python3 - <<'PY'
+          import os,urllib.request,json,time,base64,io
+          from PIL import Image,ImageStat
+          token=os.getenv('ARA_SHARED','')
+          if len(token)<20:raise SystemExit('AUTH_NOT_CONFIGURED')
+          base='https://http--anthares-tiktok-northflank--6f6pbqmvhpv6.code.run'
+          def req(path,method='GET',payload=None,timeout=40):
+              headers={'Authorization':'Bearer '+token,'Accept':'application/json'}
+              data=None
+              if payload is not None:
+                  headers['Content-Type']='application/json'
+                  data=json.dumps(payload).encode()
+              r=urllib.request.Request(base+path,headers=headers,method=method,data=data)
+              with urllib.request.urlopen(r,timeout=timeout) as response:
+                  return json.loads(response.read(1500000))
+          s1=req('/interactive-browser/status')
+          time.sleep(4)
+          s2=req('/interactive-browser/status')
+          print('BEFORE_ACTIVE='+str(bool(s2.get('active'))))
+          print('BEFORE_RESPONSIVE='+str(bool(s1.get('responsive') or s2.get('responsive'))))
+          if not (s1.get('ok') and s2.get('ok') and s1.get('active') and s2.get('active')):
+              raise SystemExit('BROWSER_NO_LONGER_ACTIVE_PRESERVED')
+          if s1.get('responsive') or s2.get('responsive'):
+              print('RESTART_SKIPPED_RESPONSIVE=1')
+          else:
+              diag=req('/interactive-browser/diagnostics')
+              if not diag.get('ok') or not diag.get('profile') or not diag.get('active'):
+                  raise SystemExit('PROFILE_UNVERIFIED_NO_RESTART')
+              print('PROFILE_DIR_CONFIRMED='+str(bool(diag.get('profile'))))
+              reset=req('/interactive-browser/force-restart','POST',{},timeout=105)
+              print('OWNED_PROCESS_RESTART_OK='+str(bool(reset.get('ok') and reset.get('forced_restart'))))
+              if not (reset.get('ok') and reset.get('forced_restart')):
+                  raise SystemExit('RESTART_REJECTED_'+str(reset.get('error'))[:45])
+              afterdiag=req('/interactive-browser/diagnostics')
+              if afterdiag.get('profile')!=diag.get('profile'):
+                  raise SystemExit('PROFILE_PATH_CHANGED')
+          nav=req('/interactive-browser/navigate','POST',{'url':'https://www.tiktok.com/@universo.anthares'},timeout=45)
+          print('PROFILE_NAVIGATION_OK='+str(bool(nav.get('ok'))))
+          time.sleep(5)
+          status=req('/interactive-browser/status')
+          print('AFTER_RESPONSIVE='+str(bool(status.get('responsive'))))
+          shot=req('/interactive-browser/screenshot',timeout=35)
+          if not shot.get('ok'):
+              raise SystemExit('CAPTURE_FAILED_'+str(shot.get('error'))[:40])
+          im=Image.open(io.BytesIO(base64.b64decode(shot.get('image_b64') or '',validate=True))).convert('RGB').resize((120,70))
+          stat=ImageStat.Stat(im)
+          near_white=sum(all(c>=245 for c in px) for px in im.getdata())/(im.width*im.height)
+          print('AFTER_JPEG_VALID=True')
+          print('AFTER_RGB_STDDEV='+','.join(str(round(v,2)) for v in stat.stddev))
+          print('AFTER_NEAR_WHITE_FRACTION='+str(round(near_white,3)))
+          print('AFTER_PROFILE_URL='+str(str(shot.get('url') or '').startswith('https://www.tiktok.com/@universo.anthares')))
+          print('RECOVERY_CHECK_DONE=1')
+          PY
