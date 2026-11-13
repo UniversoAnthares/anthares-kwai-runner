@@ -152,7 +152,7 @@ def redroid_cloud_init_data():
     path = Path(__file__).resolve().parents[1] / (
         "infra/oci-android/redroid-firstboot.cloud-config.yml")
     data = path.read_bytes()
-    if (not data.startswith(b"#cloud-config\\n") or
+    if (not data.startswith(b"#cloud-config\n") or
             len(data) > 12_000 or
             b"127.0.0.1:5555:5555" not in data or
             b"0.0.0.0:5555" in data or
