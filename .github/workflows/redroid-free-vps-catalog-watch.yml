@@ -1,0 +1,58 @@
+name: ReDroid zero-cost VPS catalog watch (read only)
+on:
+  schedule:
+    - cron: '17 12 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/redroid-free-vps-catalog-watch.yml'
+      - 'tools/redroid_free_vps_catalog_watch.py'
+      - 'tests/test_redroid_free_vps_catalog_watch.py'
+permissions:
+  contents: read
+concurrency:
+  group: redroid-free-vps-watch-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test safe parsing and no-approval policy
+        run: python3 -m unittest discover -s tests -p 'test_redroid_free_vps_catalog_watch.py' -v
+      - name: Check public pages without credentials
+        run: |
+          set -euo pipefail
+          python3 tools/redroid_free_vps_catalog_watch.py > redroid-free-vps-status.json
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          data=json.loads(Path('redroid-free-vps-status.json').read_text())
+          assert data['secrets_used'] is False
+          assert data['vm_allocation_checked'] is False
+          assert data['any_provider_approved'] is False
+          assert len(data['results'])==4
+          summary=['## ReDroid free VPS public catalogs',
+                   'Commercial offers or a 200 response **do not prove a delivered VPS**.',
+                   'All credentials and production publisher routing remain untouched.',
+                   '',
+                   '| Provider | Read-only result |',
+                   '|---|---|']
+          for item in data['results']:
+              provider=item['provider']
+              status=item['status']
+              assert provider.isalnum() and status.replace('_','').isalnum()
+              summary.append(f'| {provider} | {status} |')
+              print(f'REDROID_CANDIDATE_{provider.upper()}={status}')
+          summary.append('\nNext gate: confirmed zero-cost allocation + root/binder preflight on actual server.')
+          Path(os.environ['GITHUB_STEP_SUMMARY']).write_text('\n'.join(summary)+'\n')
+          print('REDROID_FREE_VPS_REAL_VM_PROVEN=NO')
+          print('REDROID_CLOUD_KWAI_CUTOVER=DISABLED')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: redroid-free-vps-readonly-status
+          path: redroid-free-vps-status.json
+          retention-days: 7
