@@ -1,0 +1,77 @@
+name: One-time Northflank interactive Chromium TikTok upload read-only check
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/northflank-interactive-upload-check-once.yml']
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      NF_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+    steps:
+      - name: Install Northflank client
+        run: npm install --no-save --no-package-lock --ignore-scripts @northflank/js-client@0.12.0
+      - name: Open authenticated interactive upload page and check file input without posting
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {ApiClient,ApiClientInMemoryContextProvider} from '@northflank/js-client';
+          const token=process.env.NF_TOKEN,auth=process.env.ARA_SHARED;
+          if(!token||token.length<20||!auth||auth.length<20)throw Error('AUTH_MISSING');
+          const root='https://http--anthares-tiktok-northflank--6f6pbqmvhpv6.code.run';
+          async function call(method,path,body,ms=30000){
+           const headers={Authorization:'Bearer '+auth,Accept:'application/json'};
+           if(body!==undefined)headers['Content-Type']='application/json';
+           const r=await fetch(root+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(ms)});
+           return {code:r.status,data:await r.json().catch(()=>({}))};
+          }
+          const health=await call('GET','/health');
+          console.log('IDENTITY_VERIFIED='+Boolean(health.data.identity_verified));
+          if(health.code!==200||!health.data.identity_verified||!health.data.ready_for_tiktok)throw Error('AUTH_NOT_READY');
+          let status=await call('GET','/interactive-browser/status');
+          console.log('INTERACTIVE_INITIAL_ACTIVE='+Boolean(status.data.active));
+          if(!status.data.active||!status.data.responsive){
+           const start=await call('POST','/interactive-browser/start-async',{});
+           console.log('INTERACTIVE_START_HTTP='+start.code);
+           if(start.code>=400||!start.data.ok)throw Error('INTERACTIVE_START_FAILED');
+          }
+          for(let n=0;n<21;n++){
+           await new Promise(r=>setTimeout(r,5000));
+           status=await call('GET','/interactive-browser/status');
+           if(status.code===200&&status.data.active&&status.data.responsive)break;
+          }
+          console.log('INTERACTIVE_RESPONSIVE='+Boolean(status.data.responsive));
+          if(!status.data.active||!status.data.responsive)throw Error('INTERACTIVE_RESTORE_FAILED');
+          const nav=await call('POST','/interactive-browser/navigate',{url:'https://www.tiktok.com/tiktokstudio/upload?from=webapp'});
+          console.log('UPLOAD_NAVIGATE_HTTP='+nav.code);
+          if(nav.code!==200||!nav.data.ok)throw Error('UPLOAD_NAVIGATION_FAILED');
+          const get=async path=>{const r=await fetch('https://api.northflank.com/v1'+path,{headers:{Authorization:'Bearer '+token}});if(!r.ok)throw Error('NF_'+r.status);return r.json()};
+          const found=[];for(const p of (await get('/projects')).data?.projects||[])for(const s of (await get('/projects/'+encodeURIComponent(p.id)+'/services')).data?.services||[])if(s.name==='anthares-tiktok-northflank')found.push([p.id,s.id||s.name]);
+          if(found.length!==1)throw Error('SERVICE_NOT_UNIQUE');
+          const [projectId,serviceId]=found[0],ctx=new ApiClientInMemoryContextProvider();await ctx.addContext({name:'observe',token});const cli=new ApiClient(ctx);
+          const source=String.raw`
+          import sys,json
+          sys.path.insert(0,'/app/render-tiktok-worker')
+          from browser_executor import _cdp
+          expr="""(()=>{const text=document.body?.innerText||'';return {path:location.pathname,ready:document.readyState,title:document.title.slice(0,65),htmlSize:document.documentElement?.outerHTML.length||0,bodySize:text.length,uploadInputs:document.querySelectorAll('input[type=file]').length,scripts:document.scripts.length,rootSize:document.querySelector('#root,#app,[id*=root]')?.innerHTML.length||0,captcha:/captcha|verify to continue|verifique para continuar/i.test(text),login:/log in|sign in|fazer login/i.test(text),uploadText:/upload|carregar vídeo|enviar vídeo/i.test(text)}})()"""
+          try:
+           r=_cdp('Runtime.evaluate',{'expression':expr,'returnByValue':True},timeout=13)
+           value=(r.get('result') or {}).get('value') or {}
+           print('INTERACTIVE_UPLOAD_DOM='+json.dumps(value,ensure_ascii=False,separators=(',',':'))[:850],flush=True)
+          except Exception as exc:print('INTERACTIVE_UPLOAD_CDP_ERROR='+type(exc).__name__,flush=True)
+          `;
+          for(let attempt=0;attempt<5;attempt++){
+           await new Promise(r=>setTimeout(r,13000));
+           const result=await cli.exec.execServiceCommand({projectId,serviceId},{command:['python3','-c',source]});
+           console.log('INTERACTIVE_CHECK_'+(attempt+1)+'_EXIT='+String(result.commandResult?.exitCode));
+           console.log('INTERACTIVE_CHECK_'+(attempt+1)+'_OUT='+String(result.stdOut||'').trim().slice(0,1000).replace(/[\r\n]+/g,' | '));
+           if(String(result.stdOut||'').includes('"uploadInputs":1')){console.log('INTERACTIVE_UPLOAD_READY=1');break;}
+          }
+          console.log('INTERACTIVE_SESSION_LEFT_OPEN=1');
+          console.log('NO_VIDEO_SELECTED_OR_POSTED=1');
+          NODE
