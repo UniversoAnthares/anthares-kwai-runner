@@ -4,7 +4,7 @@ on:
   schedule:
     - cron: '17 */4 * * *'
   workflow_dispatch:
-  # Trigger a read-only first run when this activation workflow is merged.
+  # On changes to this workflow, rerun the guarded capacity and inventory check.
   push:
     branches: [main]
     paths:
@@ -61,7 +61,7 @@ jobs:
         run: |
           {
             echo 'The watcher uses GitHub hosted runners only; no Windows PC or physical Android executor.'
-            echo 'Owner approved read-only monitoring; no repository variable gate is used.'
+            echo 'Owner approved guarded Always Free A1 provisioning when OCI reports AVAILABLE; no repository variable gate is used.'
             echo 'At AVAILABLE only: allow one 1-OCPU/6GiB A1 with 50GiB boot, if all audited free-tier guards pass.'
             echo 'Each capacity poll validates the audited subnet, SSH key fingerprint and locked ingress before enabling future allocation.'
             echo 'Each poll also reports existing A1 Linux instance lifecycle read-only, without assuming Android/Kwai readiness.'
