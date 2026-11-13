@@ -129,18 +129,24 @@ def main():
         if not isinstance(payload, dict):
             raise CloudQueueError("KWAI_CLOUD_LEASE_PAYLOAD_INVALID")
         account = args.account
+        gen = job.get("lease_generation")
+        if (type(gen) is int and gen >= 1):
+            pass
+        elif isinstance(gen, str) and re.fullmatch(r"[1-9][0-9]{0,17}", gen):
+            gen = int(gen)
+        else:
+            raise CloudQueueError("KWAI_CLOUD_LEASE_GENERATION_INVALID")
         if (job.get("target_key") != ACCOUNTS[account] or
                 payload.get("expected_account") != account or
-                type(job.get("lease_generation")) is not int or
-                job["lease_generation"] < 1 or
                 not JOB_ID.fullmatch(str(job.get("id", "")))):
             raise CloudQueueError("KWAI_CLOUD_LEASE_IDENTITY_MISMATCH")
+        job["lease_generation"] = gen
         job["payload"] = payload
         dest = Path(args.lease_file)
-        # Atomic exclusive creation: prevents an old receipt being overwritten
-        # and does not print jobs, media URLs, or secrets into logs.
-        with dest.open("x", encoding="utf-8") as f:
-            os.chmod(dest, 0o600)
+        # O_EXCL + 0600 before any bytes are written; preserve unknown
+        # outcomes rather than overwriting the previous lease receipt.
+        fd = os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(job, f, separators=(",", ":"))
         print("KWAI_CLOUD_LEASE=ACQUIRED")
     else:
