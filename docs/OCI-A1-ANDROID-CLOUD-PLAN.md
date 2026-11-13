@@ -7,11 +7,11 @@
 - Workflow: `.github/workflows/oci-a1-android-cloud-watch.yml`.
 - Cliente: `tools/oci_a1_capacity_watch.py`.
 - Periodicidade proposta: `17 */4 * * *` UTC (seis consultas por dia), runner GitHub hospedado, sem tarefa permanente no computador.
-- Região aprovada: `sa-saopaulo-1`; previsão de VM `VM.Standard.A1.Flex`, 1 OCPU, 6 GiB de RAM, boot de 50 GiB, Ubuntu 24.04 aarch64, sem IP público e sem alteração da fila Kwai.
+- Região aprovada: `sa-saopaulo-1`; previsão de VM `VM.Standard.A1.Flex`, 1 OCPU, 6 GiB de RAM, boot de 50 GiB, Ubuntu 24.04 aarch64 e sem alteração da fila Kwai. O IP público efêmero é permitido somente se a sub-rede pública já existente mantiver firewall estrito SSH TCP/22 de um único CIDR IPv4 /32 e Internet Gateway funcional; caso contrário exige rede privada com NAT.
 - O relatório `create_compute_capacity_report` consulta a configuração antes do lançamento. `OUT_OF_HOST_CAPACITY` encerra a execução sem criar VM.
 - Se a capacidade aparecer, há **duas proteções de habilitação independentes**: `OCI_A1_AUTO_PROVISION=1` e `OCI_A1_LAUNCH_GUARD=ALWAYS_FREE_SINGLE_A1`. Ausência de qualquer uma impede o lançamento.
 - Inventaria instâncias A1 e armazenamento boot/block de todos os compartimentos acessíveis; com inventário inconclusivo, aborta.
-- Zero ações de publicação, zero novos recursos pagos, sem SSH público e sem exponenciar consumo.
+- Zero ações de publicação, zero novos recursos pagos e sem exponenciar consumo. SSH público, quando necessário para inicialização, somente de um IP /32 autorizado com chave SSH; ADB/Android permanecem fechados ao tráfego da internet.
 - Quando houver VM, **o ReDroid, MacroDroid e Kwai ainda exigirão instalação, compatibilidade binder/binderfs e testes operacionais**; provisionar Linux não equivale a concluir o item 8.
 
 ### Variáveis e segredo (configuração ainda pendente)
@@ -39,6 +39,18 @@ A ativação do monitor e do provisionamento deve passar por controle de cota gr
 - Oito testes unitários aprovaram sintaxe/configuração, paginação, rejeição de região, configuração SDK com signer, e validação da rede privada/NAT. Ainda é necessária execução real do workflow GitHub com identidade OCI configurada (Actions Secret/Variables ou federação JWT→RPST com trust IAM e política revisados).
 - **Android local:** MacroDroidService em foreground, serviço de acessibilidade habilitado e app whitelist `deviceidle` confirmados; o aparelho alcançou o endpoint Neon por HTTPS (HEAD retornou 404, método sem autenticação). Isso demonstra prontidão do runtime e conectividade, **sem comprovar macro principal ativa, token, leasing ou publicação**. Não executar ações de postagem ou mudar a prioridade Android físico > MEmu até homologação independente.
 
+
+### Terceira revisão: rede pública restrita já existente (13/11/2026)
+
+O PR #2490 permanece como proteção histórica de rede privada sem NAT. Foi encontrada uma alternativa **sem criar NAT Gateway, nova sub-rede ou rota**: o recurso já existente `anthares-android-subnet` está na VCN `10.92.0.0/16`, com rota IPv4 padrão para Internet Gateway e lista de segurança `anthares-android-ssh-locked`:
+
+- Uma única regra de ingresso: TCP/22 de um CIDR IPv4 `/32` autorizado; nenhum acesso a ADB, ReDroid, MacroDroid, interface Android, portas HTTP ou outras portas.
+- Saída IPv4 permitida para baixar dependências; a Oracle informa que endereços IPv4 públicos efêmeros são gratuitos. Fonte: https://blogs.oracle.com/developers/setting-up-a-virtual-cloud-network-vcn-in-oracle-cloud-infrastructure .
+- O novo guard `safe_instance_network_mode` rejeita public subnet com entrada SSH aberta, regras adicionais, porta diferente de 22, rotas de Internet Gateway indisponíveis ou com associações ambíguas. Com esses requisitos verificados, permite `assign_public_ip=True` e `nsg_ids=[]`. Também conserva o modo NAT privado se uma sub-rede desse tipo for provisionada futuramente com autorização.
+- Consulta real no OCI retornou **`REAL_SAFE_NETWORK_MODE LOCKED_PUBLIC`**, sem criar VM, gateway ou alterá-los. **12 testes unitários passaram**, sem falhas: validação do modo público restrito, negação de `0.0.0.0/0`, ingresso extra e porta ADB.
+- A escolha reduz dependências para a futura VM; ainda são necessários capacidade A1 na região, autenticação Actions e bootstrap Linux/Android em uma instância realmente provisionada.
+- A regra SSH com /32 precisa ser reconfirmada no instante da alocação automática. O monitor realiza essa conferência antes de qualquer tentativa de lançar a VM. Se a origem administrativa autorizada mudar, deverá ser reconciliada pelo titular, sem abertura indiscriminada do firewall.
+
 ## 2. MacroDroid Android físico — consultas independentes
 
 - A API Neon existente já reconhece `kwai-mobile-primary` via credencial própria do aparelho `M2004J19C`; o contrato `kwai-physical-stats` é de leitura. O controle da fila, pacing até 23h, geração de leases, dedupe e estados `STARTED/UNCERTAIN` permanecem em Neon.
@@ -54,7 +66,7 @@ A autonomia integral do Android físico exige que o aparelho consuma a fila cent
 ## 3. Critérios para marcar item 8 🟢
 
 1. Monitor GitHub realmente agendado e autenticado, com ao menos uma execução comprovada sem uso do PC.
-2. Instância A1 gratuita provisionada quando houver capacidade; Linux, Docker, binderfs e ReDroid verificados, sem IP/ADB público.
+2. Instância A1 gratuita provisionada quando houver capacidade; Linux, Docker, binderfs e ReDroid verificados, sem porta ADB pública e SSH acessível apenas de um /32 autorizado, conforme validação real do firewall.
 3. Kwai e MacroDroid instalados e autenticados na VM com prova real de sessão e persistência.
 4. Fencing e confirmações de publicação comprovados de ponta a ponta; Android físico preservado como principal, VM em standby, MEmu local somente reserva legada até a transição controlada.
 5. Nenhuma cobrança, nenhuma duplicata, nenhuma violação do pacing 6h–23h.
