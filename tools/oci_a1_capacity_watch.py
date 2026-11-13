@@ -264,6 +264,40 @@ def occupied_block_volume_gib(volumes):
     return total
 
 
+def observe_existing_a1(compute, identity, tenancy):
+    """Report existing A1 lifecycle using read-only OCI calls.
+
+    Never equate a RUNNING Linux instance with Android/Kwai readiness.
+    Count all accessible active A1 instances to detect ambiguous or foreign VMs.
+    """
+    compartments = [tenancy]
+    compartments.extend(c.id for c in pages(
+        identity.list_compartments, compartment_id=tenancy,
+        compartment_id_in_subtree=True, access_level="ACCESSIBLE")
+        if c.lifecycle_state == "ACTIVE")
+    instances = []
+    for compartment in compartments:
+        instances.extend(x for x in pages(
+            compute.list_instances, compartment_id=compartment)
+            if x.shape == A1 and x.lifecycle_state not in (
+                "TERMINATED", "TERMINATING"))
+    if not instances:
+        report("TARGET_INSTANCE", "NONE")
+        return
+    matching = [x for x in instances if
+                x.display_name == NAME and
+                (getattr(x, "freeform_tags", None) or {}).get(
+                    "anthares-purpose") == "android-redroid-standby" and
+                (getattr(x, "freeform_tags", None) or {}).get(
+                    "cost-policy") == "always-free-single-a1"]
+    if len(instances) != 1 or len(matching) != 1:
+        report("TARGET_INSTANCE", "AMBIGUOUS_OR_OTHER_A1")
+        return
+    status = matching[0].lifecycle_state
+    allowed = {"PROVISIONING", "STARTING", "RUNNING", "STOPPING", "STOPPED"}
+    report("TARGET_INSTANCE", status if status in allowed else "UNKNOWN_STATE")
+
+
 def guarded_launch(compute, request, tenancy, subnet_id):
     """No automatic HTTP retry; one idempotent OCI launch request."""
     return compute.launch_instance(
@@ -306,6 +340,10 @@ def main():
     subnet_id = subnet.id
     report("NETWORK_MODE", mode)
     report("PROVISION_PREFLIGHT", "READY_SSH_SUBNET_NETWORK")
+    # Observe a future VM on every poll, even if free A1 capacity disappears.
+    # Read-only inventory; this never installs apps or opens Android ports.
+    if os.getenv("OCI_A1_OBSERVE_EXISTING") == "1":
+        observe_existing_a1(compute, identity, tenancy)
     if state != "AVAILABLE":
         return 0
 
