@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {runInNewContext} from 'node:vm';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 
@@ -68,4 +69,48 @@ test('both Kwai START transitions recheck 06h-23h inside atomic PostgreSQL UPDAT
    assert.match(sql,/AT TIME ZONE 'America\/Campo_Grande'\)\:\:time < time '23:00'/);
    assert.equal((sql.match(/RETURNING p\.id,p\.status,p\.lease_generation/g)||[]).length,1);
  }
+});
+
+
+test('terminal ACK read is physical-RSA-only, account scoped and never writes SQL',async()=>{
+ const a=source.indexOf('async function kwaiTerminalAckRead(');
+ const z=source.indexOf('// Verified public timestamps',a);
+ assert.ok(a>=0&&z>a);
+ const handler=source.slice(a,z);
+ assert.equal((source.match(/if\(action==='kwai-job-terminal-read'\)return kwaiTerminalAckRead\(b,actor,KWAI_TARGET\);/g)||[]).length,2);
+ let lookup=[],row=null;
+ const query=async(sql,args)=>{
+   assert.match(sql,/^SELECT id,status,lease_generation/);
+   assert.doesNotMatch(sql,/\bUPDATE\b|\bDELETE\b|\bINSERT\b/);
+   lookup.push(args);
+   return row?[row]:[];
+ };
+ const fn=runInNewContext(handler+';kwaiTerminalAckRead',{query});
+ const auth={role:'kwai-physical',workflow:'physical:DESKTOP-FTDK0HP'};
+ const id='kwai-cortes-ua-217fddfeae7c0a86be66d8e8511e2916';
+ const request={id,lease_generation:1};
+ const valid={id,status:'confirmed',lease_generation:1,lease_owner:null,
+   remote_id:'https://www.kwai.com/@universoanthares/video/5244028928629526188',
+   proof_kind:'kwai_three_public_sift_oidc_reconciled_v1',wp_callback_state:'completed'};
+ row=valid;
+ let receipt=await fn(request,auth,'kwai:universoanthares');
+ assert.equal(receipt.terminal,'confirmed');
+ assert.equal(lookup[0][1],'kwai:universoanthares');
+ assert.equal((await fn(request,{role:'kwai-mobile',workflow:'mobile:M2004J19C:universoanthares'},'kwai:universoanthares')).ok,false);
+ assert.equal((await fn({...request,lease_generation:2},auth,'kwai:universoanthares')).ok,false);
+ row={...valid,remote_id:'https://www.kwai.com/@lucasrosalem/video/5244028928629526188'};
+ assert.equal((await fn(request,auth,'kwai:universoanthares')).terminal,null);
+ row={...valid,status:'uncertain'};
+ assert.equal((await fn(request,auth,'kwai:universoanthares')).terminal,null);
+ row={...valid,wp_callback_state:null};
+ assert.equal((await fn(request,auth,'kwai:universoanthares')).terminal,null);
+ row={...valid,lease_owner:'physical_android:DESKTOP-FTDK0HP'};
+ assert.equal((await fn(request,auth,'kwai:universoanthares')).terminal,null);
+ row={...valid,status:'cancelled',remote_id:null,lease_owner:null,
+   proof_kind:'kwai_reconcile_then_disregard_v1',wp_callback_state:null};
+ assert.equal((await fn(request,auth,'kwai:universoanthares')).terminal,'cancelled');
+ row={...row,proof_kind:'unverified_user_claim'};
+ assert.equal((await fn(request,auth,'kwai:universoanthares')).terminal,null);
+ assert.equal((await fn({id:'evil',lease_generation:1},auth,'kwai:universoanthares')).ok,false);
+ assert.match(source,/kwai-job-terminal-read/);
 });
