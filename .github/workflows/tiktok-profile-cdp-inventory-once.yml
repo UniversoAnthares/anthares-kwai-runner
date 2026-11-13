@@ -41,14 +41,39 @@ jobs:
            await new Promise(resolve=>setTimeout(resolve,5000));
           }
           if(!(state.data.active&&state.data.responsive))throw Error('BROWSER_NOT_READY');
-          const nav=await api('POST','/interactive-browser/navigate',{url:'https://www.tiktok.com/tiktokstudio'});
-          console.log('STUDIO_NAVIGATE_HTTP='+nav.code);
-          if(nav.code!==200||!nav.data.ok)throw Error('STUDIO_NAV_FAILED');
-          for(let attempt=0;attempt<9;attempt++){
-            await new Promise(resolve=>setTimeout(resolve,7000));
+          if(!String(state.data.url||'').includes('/tiktokstudio')){
+            const nav=await api('POST','/interactive-browser/navigate',{url:'https://www.tiktok.com/tiktokstudio'});
+            console.log('STUDIO_NAVIGATE_HTTP='+nav.code);
+            if(nav.code!==200||!nav.data.ok)throw Error('STUDIO_NAV_FAILED');
+          }else console.log('STUDIO_ALREADY_ACTIVE=1');
+          for(let attempt=0;attempt<7;attempt++){
+            await new Promise(resolve=>setTimeout(resolve,5000));
             const e=await api('GET','/interactive-browser/tiktok-evidence');
             if(e.code===200&&e.data.ok&&e.data.evidence?.upload_marker){console.log('STUDIO_UPLOAD_HYDRATED=1');break;}
           }
+          const clickScript=String.raw`
+          import sys,json
+          sys.path.insert(0,"/app/render-tiktok-worker")
+          from browser_executor import _cdp
+          expr="""(()=>{
+           const nodes=[...document.querySelectorAll('a,button,[role=button]')];
+           const all=nodes.map(el=>({element:el,label:(el.innerText||el.getAttribute('aria-label')||el.textContent||'').trim().replace(/\\s+/g,' ').slice(0,85)}));
+           const choices=all.filter(x=>/^(posts|publicações|publicacoes|manage posts|gerenciar publicações|content|conteúdo)$/i.test(x.label));
+           const selected=choices[0];
+           if(!selected)return {clicked:false,candidates:all.filter(x=>/post|publica|content/i.test(x.label)).slice(0,8).map(x=>x.label)};
+           const href=selected.element.getAttribute('href')||'';
+           selected.element.click();
+           return {clicked:true,label:selected.label,href:href.slice(0,180)};
+          })()"""
+          r=_cdp("Runtime.evaluate",{"expression":expr,"returnByValue":True},timeout=18)
+          data=(r.get("result") or {}).get("value") or {}
+          print(json.dumps(data,ensure_ascii=False)[:1500])
+          `;
+          const click=await cli.exec.execServiceCommand({projectId,serviceId},{command:['python3','-c',clickScript]});
+          console.log('POSTS_MENU_READ_EXIT='+String(click.commandResult?.exitCode));
+          console.log('POSTS_MENU_RESULT='+String(click.stdOut||'').trim().slice(0,1100));
+          if(click.commandResult?.exitCode!==0)throw Error('POSTS_MENU_FAILED');
+          await new Promise(resolve=>setTimeout(resolve,19000));
           const script=String.raw`
           import json,sys
           sys.path.insert(0,"/app/render-tiktok-worker")
