@@ -1,0 +1,83 @@
+name: One-time safe Northflank TikTok vault resume
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/northflank-vault-resume-once.yml']
+permissions:
+  contents: read
+jobs:
+  resume:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      NF_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+    steps:
+      - name: Install Northflank client
+        run: npm install --no-save --no-package-lock --ignore-scripts @northflank/js-client@0.12.0
+      - name: Resume ONLY when encrypted vault contains cookies and verify owner UI
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {ApiClient,ApiClientInMemoryContextProvider} from '@northflank/js-client';
+          const token=process.env.NF_TOKEN,shared=process.env.ARA_SHARED;
+          if(!token||token.length<20||!shared||shared.length<20)throw Error('AUTH_MISSING');
+          const req=async path=>{
+            const r=await fetch('https://api.northflank.com/v1'+path,{headers:{Authorization:'Bearer '+token}});
+            if(!r.ok)throw Error('NF_API_HTTP_'+r.status);
+            return r.json();
+          };
+          const found=[];
+          for(const p of (await req('/projects')).data?.projects||[]){
+            for(const s of (await req('/projects/'+encodeURIComponent(p.id)+'/services')).data?.services||[])
+              if(s.name==='anthares-tiktok-northflank')found.push([p.id,s.id||s.name]);
+          }
+          if(found.length!==1)throw Error('TARGET_SERVICE_NOT_UNIQUE');
+          const ctx=new ApiClientInMemoryContextProvider();
+          await ctx.addContext({name:'once',token});
+          const client=new ApiClient(ctx);
+          const [projectId,serviceId]=found[0];
+          const command=['python3','-c',"import sys;sys.path.insert(0,'/app/render-tiktok-worker');from browser_state_vault import load_runtime_state;s=load_runtime_state();print('VAULT_COOKIES='+str(len((s or {}).get('cookies') or [])))"];
+          const inspection=await client.exec.execServiceCommand({projectId,serviceId},{command});
+          if(inspection.commandResult?.exitCode!==0)throw Error('VAULT_INSPECTION_ERROR');
+          const value=String(inspection.stdOut||'').match(/VAULT_COOKIES=(\d+)/);
+          if(!value)throw Error('VAULT_COUNT_UNAVAILABLE');
+          const count=Number(value[1]);
+          console.log('NORTHFLANK_ENCRYPTED_VAULT_COOKIE_COUNT='+count);
+          if(count===0){console.log('SAFE_STOP_VAULT_EMPTY=1');process.exit(0);}
+          const root='https://http--anthares-tiktok-northflank--6f6pbqmvhpv6.code.run';
+          const api=async(method,path,obj)=>{
+            const headers={Authorization:'Bearer '+shared,Accept:'application/json','User-Agent':'Anthares-Owner-Safe-Vault-Resume'};
+            if(obj!==undefined)headers['Content-Type']='application/json';
+            const r=await fetch(root+path,{method,headers,body:obj!==undefined?JSON.stringify(obj):undefined,signal:AbortSignal.timeout(30000)});
+            const data=await r.json().catch(()=>({}));
+            return {code:r.status,data};
+          };
+          let s=await api('GET','/interactive-browser/status');
+          console.log('INITIAL_ACTIVE='+Boolean(s.data.active));
+          if(s.code!==200||!s.data.ok)throw Error('BROWSER_STATUS_UNAVAILABLE');
+          if(!(s.data.active&&s.data.responsive)){
+            const start=await api('POST','/interactive-browser/start-async',{});
+            console.log('START_REQUEST_HTTP='+start.code);
+            if(start.code>=400||!start.data.ok)throw Error('START_FAILED');
+          }
+          for(let i=0;i<22;i++){
+            await new Promise(resolve=>setTimeout(resolve,5000));
+            s=await api('GET','/interactive-browser/status');
+            if(s.code===200&&s.data.active&&s.data.responsive)break;
+          }
+          if(!(s.data?.active&&s.data?.responsive))throw Error('BROWSER_RESUME_FAILED');
+          console.log('CHROMIUM_RESTORED=1');
+          console.log('DRAG_BACKEND='+String(s.data.drag_backend||'unknown'));
+          const nav=await api('POST','/interactive-browser/navigate',{url:'https://www.tiktok.com/@universo.anthares'});
+          console.log('PROFILE_NAV_HTTP='+nav.code);
+          if(nav.code!==200||!nav.data.ok)throw Error('PROFILE_NAVIGATION_FAILED');
+          await new Promise(resolve=>setTimeout(resolve,2400));
+          const e=await api('GET','/interactive-browser/tiktok-evidence');
+          const p=e.data.evidence||{};
+          console.log('PROFILE_LOGIN_GATE='+Boolean(p.login_gate));
+          console.log('PROFILE_ACCOUNT_MARKER='+Boolean(p.account_marker));
+          console.log('PROFILE_PATH_EXPECTED='+String(p.path||'').startsWith('/@universo.anthares'));
+          console.log('SESSION_LEFT_OPEN=1');
+          NODE
