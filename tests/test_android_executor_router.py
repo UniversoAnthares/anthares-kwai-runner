@@ -27,8 +27,66 @@ def ready(queue=0, authenticated=True):
 
 class AndroidExecutorRoutingTests(unittest.TestCase):
     def test_physical_device_is_primary(self):
-        self.assertEqual(MANIFEST["android_execution"]["priority"][0], "physical_android")
+        self.assertEqual(MANIFEST["android_execution"]["priority"][0], "cloud_android_verified")
+        self.assertFalse(MANIFEST["android_execution"]["cloud_cutover"]["enabled"])
         self.assertEqual(router.choose(MANIFEST, {"physical_android": ready(), "memu_android": ready()}, "kwai_publish"), "physical_android")
+
+    @staticmethod
+    def cloud_proven(manifest):
+        data = ready()
+        data["online"] = True
+        data["authenticated"] = True
+        data["verified_accounts"] = list(
+            manifest["android_execution"]["cloud_cutover"]["required_accounts"])
+        data["proofs"] = {name: True for name in
+            manifest["android_execution"]["cloud_cutover"]["required_proofs"]}
+        return data
+
+    def test_cloud_runtime_flags_alone_never_preempt_local(self):
+        cloud = self.cloud_proven(MANIFEST)
+        self.assertEqual(router.choose(
+            MANIFEST, {"cloud_android_verified": cloud,
+                       "physical_android": ready()}, "kwai_publish"),
+            "physical_android")
+
+    def test_cloud_cutover_requires_dual_accounts_and_all_proofs(self):
+        import copy
+        cfg = copy.deepcopy(MANIFEST)
+        cfg["android_execution"]["cloud_cutover"]["enabled"] = True
+        cloud = self.cloud_proven(cfg)
+        self.assertEqual(router.choose(
+            cfg, {"cloud_android_verified": cloud,
+                  "physical_android": ready()}, "kwai_publish"),
+            "cloud_android_verified")
+        cloud["proofs"]["independent_public_readback"] = False
+        self.assertIsNone(router.choose(
+            cfg, {"cloud_android_verified": cloud,
+                  "physical_android": ready(),
+                  "memu_android": ready()}, "kwai_publish"))
+        cloud["proofs"]["independent_public_readback"] = True
+        cloud["verified_accounts"] = ["lucasrosalem"]
+        self.assertIsNone(router.choose(
+            cfg, {"cloud_android_verified": cloud,
+                  "physical_android": ready()}, "kwai_publish"))
+
+    def test_cloud_cutover_fails_closed_if_host_loses_session(self):
+        import copy
+        cfg = copy.deepcopy(MANIFEST)
+        cfg["android_execution"]["cloud_cutover"]["enabled"] = True
+        cloud = self.cloud_proven(cfg)
+        cloud["authenticated"] = False
+        self.assertIsNone(router.choose(
+            cfg, {"cloud_android_verified": cloud,
+                  "physical_android": ready(),
+                  "memu_android": ready()}, "kwai_publish"))
+
+    def test_cloud_never_uses_experimental_github_android(self):
+        import copy
+        cfg = copy.deepcopy(MANIFEST)
+        cfg["android_execution"]["cloud_cutover"]["enabled"] = True
+        self.assertIsNone(router.choose(
+            cfg, {"github_android_experimental": ready(),
+                  "physical_android": ready()}, "kwai_publish"))
 
     def test_memu_is_never_primary_while_physical_ready(self):
         self.assertNotEqual(router.choose(MANIFEST, {"physical_android": ready(), "memu_android": ready()}, "kwai_publish"), "memu_android")
