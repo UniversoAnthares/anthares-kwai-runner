@@ -20,3 +20,9 @@ O serviço Neon autorizava o publicador primário do GitHub por token OIDC trans
 5. Validar duas publicações reais com link público e relatório da fila. Testar Android físico e PC desligados, ausência de repetição, recuperação do ReDroid e limites de 06h–23h.
 
 **Estado:** autenticação e cliente preparados e testáveis offline, nenhum token remoto criado ou usado, nenhum host ReDroid em operação, função Neon em produção ainda não recebeu essa atualização comprovada. Não declarar item 4 operacional antes de implantação real do código, habilitação controlada e teste com o host.
+
+## Pacote de implantação auditável
+
+O workflow `.github/workflows/kwai-neon-persistent-cloud-bundle.yml` compila `kwai-neon-function-bundle.zip` contendo `index.mjs`, `kwai-pacing-policy.mjs` e `kwai-persistent-cloud-identity.mjs` no mesmo diretório. Os imports relativos são preservados, com SHA-256 do arquivo e testes Node. O ZIP é artefato de GitHub Actions por sete dias. Essa etapa é somente build: não usa chave de produção, não modifica a Function e não autoriza dispositivo.
+
+Conferência de acesso em 13/11/2026: a conexão Neon acessível por esta conversa mostra os projetos `anthares-git-independent`, `anthares-video-studio`, `anthares-encyclopedia-scheduler` e `anthares-ara-ha`. O serviço identificado pelo endpoint `cortesqueue` não consta da lista. **Não há confirmação de permissão para alterar a Function de produção.** O pacote permanece pronto para uma publicação autenticada quando essa conta/projeto estiver acessível, preservando as variáveis secretas atuais e mantendo os dois novos controles desligados.
