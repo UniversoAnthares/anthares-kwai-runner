@@ -41,15 +41,13 @@ jobs:
            await new Promise(resolve=>setTimeout(resolve,5000));
           }
           if(!(state.data.active&&state.data.responsive))throw Error('BROWSER_NOT_READY');
-          if(!String(state.data.url||'').includes('/@universo.anthares')){
-            const nav=await api('POST','/interactive-browser/navigate',{url:'https://www.tiktok.com/@universo.anthares'});
-            console.log('PROFILE_NAVIGATE_HTTP='+nav.code);
-            if(nav.code!==200||!nav.data.ok)throw Error('PROFILE_NAV_FAILED');
-          }else console.log('PROFILE_REUSED_WITHOUT_NAVIGATION=1');
+          const nav=await api('POST','/interactive-browser/navigate',{url:'https://www.tiktok.com/tiktokstudio'});
+          console.log('STUDIO_NAVIGATE_HTTP='+nav.code);
+          if(nav.code!==200||!nav.data.ok)throw Error('STUDIO_NAV_FAILED');
           for(let attempt=0;attempt<9;attempt++){
             await new Promise(resolve=>setTimeout(resolve,7000));
             const e=await api('GET','/interactive-browser/tiktok-evidence');
-            if(e.code===200&&e.data.ok&&e.data.evidence?.account_marker){console.log('PROFILE_OWNER_HYDRATED=1');break;}
+            if(e.code===200&&e.data.ok&&e.data.evidence?.upload_marker){console.log('STUDIO_UPLOAD_HYDRATED=1');break;}
           }
           const script=String.raw`
           import json,sys
@@ -73,7 +71,7 @@ jobs:
            }catch{}
            return {pathname:location.pathname,ready_state:document.readyState,html_chars:document.documentElement?.outerHTML?.length||0,owner_marker:body.includes('Edit profile')||body.includes('Editar perfil'),cards:cards.length,links:anchors.length,
              labels:labels.slice(0,8),examples:links.slice(0,8),hydration_video_ids:vids,hydration_owner_matches:ucount,
-             description_in_body:body.toLowerCase().includes('conceito de comédia para aristóteles'),
+             studio_title_in_body:body.toLowerCase().includes("tiktok studio"),upload_text_present:/upload|carregar|enviar vídeo/i.test(body),error_text_present:/something went wrong|try again|erro|error/i.test(body),description_in_body:body.toLowerCase().includes('conceito de comédia para aristóteles'),
              page_text_length:body.length};
           })()"""
           r=_cdp("Runtime.evaluate",{"expression":expr,"returnByValue":True},timeout=20)
