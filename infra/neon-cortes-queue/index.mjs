@@ -486,6 +486,10 @@ async function kwaiAction(action,b,actor){
    "WHERE p.id=$1 AND p.target_key=$2 AND p.status='leased' "+
    "AND p.lease_owner=$3 AND p.lease_generation=$4 AND p.lease_until>now() "+
    "AND p.publication_started_at IS NULL "+
+   // Atomic start fence: even a lease issued by an older runtime cannot
+   // start outside the owner's 06:00–23:00 operational window.
+   "AND (now() AT TIME ZONE 'America/Campo_Grande')::time >= time '06:00' "+
+   "AND (now() AT TIME ZONE 'America/Campo_Grande')::time < time '23:00' "+
    "RETURNING p.id,p.status,p.lease_generation";
   const rows=await query(sql,[id,KWAI_TARGET,owner,gen]);
   return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'KWAI_STALE_FENCE_OR_QUOTA'};
@@ -1221,6 +1225,10 @@ async function kwaiSecondaryAction(action,b,actor){
    "WHERE p.id=$1 AND p.target_key=$2 AND p.status='leased' "+
    "AND p.lease_owner=$3 AND p.lease_generation=$4 AND p.lease_until>now() "+
    "AND p.publication_started_at IS NULL "+
+   // Atomic start fence: even a lease issued by an older runtime cannot
+   // start outside the owner's 06:00–23:00 operational window.
+   "AND (now() AT TIME ZONE 'America/Campo_Grande')::time >= time '06:00' "+
+   "AND (now() AT TIME ZONE 'America/Campo_Grande')::time < time '23:00' "+
    "RETURNING p.id,p.status,p.lease_generation";
   const rows=await query(sql,[id,KWAI_TARGET,owner,gen]);
   return rows.length?{ok:true,job:rows[0]}:{ok:false,error:'KWAI_STALE_FENCE_OR_QUOTA'};
