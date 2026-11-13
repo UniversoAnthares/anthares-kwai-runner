@@ -20,6 +20,7 @@ A1 = "VM.Standard.A1.Flex"
 NAME = "anthares-android-redroid-free"
 REGION = "sa-saopaulo-1"
 CPU, MEMORY_GB, BOOT_GB = 1, 6, 50
+MEMORY_FALLBACK_GB = 4  # Minimum accepted Android host memory; 6 GiB remains preferred.
 REDROID_ARM64_IMAGE = "redroid/redroid@sha256:3c7f9450188226bf8042c0159b9b38abe2106f1ceb0dfa45fae1cbc6409cd9bb"
 REDROID_AMD64_IMAGE = "redroid/redroid@sha256:e6f799d56b9a9a2bbc6224b5b7a6dc744c9b4d878ac856f27f0c4ec793ef55d3"
 APPROVED_SUBNET_NAME = "anthares-android-subnet"
@@ -237,15 +238,17 @@ def approved_boot_access(network, tenancy, auth_data):
     return subnet, sshkey, mode
 
 
-def launch_retry_token(tenancy, subnet_id):
+def launch_retry_token(tenancy, subnet_id, memory_gb=MEMORY_GB):
     """Stable OCI idempotency token for this one approved Always Free VM.
 
     The token is tenant/subnet/shape scoped, excludes credentials, and OCI
     deduplicates matching launch requests for up to 24 hours. The separate
     full-tenancy inventory still gates every attempt.
     """
+    if memory_gb not in (MEMORY_GB, MEMORY_FALLBACK_GB):
+        raise ValueError("A1_MEMORY_NOT_APPROVED")
     scope = "|".join((REGION, tenancy, subnet_id, A1, NAME,
-                      str(CPU), str(MEMORY_GB), str(BOOT_GB)))
+                      str(CPU), str(memory_gb), str(BOOT_GB)))
     return str(uuid.uuid5(uuid.NAMESPACE_URL, scope))
 
 
@@ -302,10 +305,35 @@ def observe_existing_a1(compute, identity, tenancy):
     report("TARGET_INSTANCE", status if status in allowed else "UNKNOWN_STATE")
 
 
-def guarded_launch(compute, request, tenancy, subnet_id):
-    """No automatic HTTP retry; one idempotent OCI launch request."""
+def guarded_launch(compute, request, tenancy, subnet_id, memory_gb=MEMORY_GB):
+    """No automatic HTTP retry; one idempotent, memory-scoped OCI launch."""
     return compute.launch_instance(
-        request, opc_retry_token=launch_retry_token(tenancy, subnet_id))
+        request, opc_retry_token=launch_retry_token(tenancy, subnet_id, memory_gb))
+
+
+def capacity_for_memory(compute, tenancy, ad, memory_gb):
+    """Query one exact A1 shape; never infer free availability from other sizes."""
+    if memory_gb not in (MEMORY_GB, MEMORY_FALLBACK_GB):
+        raise ValueError("A1_MEMORY_NOT_APPROVED")
+    cap_req = oci.core.models.CreateComputeCapacityReportDetails(
+        compartment_id=tenancy, availability_domain=ad,
+        shape_availabilities=[
+            oci.core.models.CreateCapacityReportShapeAvailabilityDetails(
+                instance_shape=A1,
+                instance_shape_config=oci.core.models.CapacityReportInstanceShapeConfig(
+                    ocpus=CPU, memory_in_gbs=memory_gb))
+        ]
+    )
+    response = compute.create_compute_capacity_report(cap_req)
+    shape_states = [r.availability_status for r in response.data.shape_availabilities
+                    if r.instance_shape == A1]
+    if len(shape_states) != 1:
+        raise ValueError("INVALID_CAPACITY_REPORT")
+    state = shape_states[0]
+    report("CAPACITY_{}GB".format(memory_gb), state)
+    return state
+
+
 
 
 def main():
@@ -323,22 +351,23 @@ def main():
     if len(ads) != 1:
         raise ValueError("AD_TOPOLOGY_CHANGED")
     ad = ads[0].name
-    cap_req = oci.core.models.CreateComputeCapacityReportDetails(
-        compartment_id=tenancy, availability_domain=ad,
-        shape_availabilities=[
-            oci.core.models.CreateCapacityReportShapeAvailabilityDetails(
-                instance_shape=A1,
-                instance_shape_config=oci.core.models.CapacityReportInstanceShapeConfig(
-                    ocpus=CPU, memory_in_gbs=MEMORY_GB))
-        ]
-    )
-    response = compute.create_compute_capacity_report(cap_req)
-    shape_states = [r.availability_status for r in response.data.shape_availabilities
-                    if r.instance_shape == A1]
-    if len(shape_states) != 1:
-        raise ValueError("INVALID_CAPACITY_REPORT")
-    state = shape_states[0]
+    # The 6-GiB Always Free VM remains preferred. A 4-GiB VM with the SAME
+    # A1 CPU, boot disk and hardened network is an approved fallback only
+    # when the larger option is explicitly OUT_OF_HOST_CAPACITY.
+    preferred = capacity_for_memory(compute, tenancy, ad, MEMORY_GB)
+    selected_memory_gb = MEMORY_GB
+    state = preferred
+    if preferred == "OUT_OF_HOST_CAPACITY":
+        fallback = capacity_for_memory(compute, tenancy, ad, MEMORY_FALLBACK_GB)
+        if fallback == "AVAILABLE":
+            selected_memory_gb = MEMORY_FALLBACK_GB
+            state = fallback
+        elif fallback != "OUT_OF_HOST_CAPACITY":
+            # A quota, policy or unknown failure is never treated as capacity.
+            state = fallback
     report("CAPACITY", state)
+    if state == "AVAILABLE":
+        report("SELECTED_MEMORY_GB", selected_memory_gb)
     # Preflight validates SSH, subnet and firewall even when A1 is out of stock.
     subnet, sshkey, mode = approved_boot_access(network, tenancy, d)
     subnet_id = subnet.id
@@ -389,7 +418,7 @@ def main():
         availability_domain=ad, compartment_id=tenancy,
         display_name=NAME, shape=A1,
         shape_config=oci.core.models.LaunchInstanceShapeConfigDetails(
-            ocpus=CPU, memory_in_gbs=MEMORY_GB),
+            ocpus=CPU, memory_in_gbs=selected_memory_gb),
         source_details=oci.core.models.InstanceSourceViaImageDetails(
             image_id=images[0].id, boot_volume_size_in_gbs=BOOT_GB),
         create_vnic_details=oci.core.models.CreateVnicDetails(
@@ -401,7 +430,8 @@ def main():
                        "cost-policy": "always-free-single-a1"},
     )
     try:
-        instance = guarded_launch(compute, request, tenancy, subnet_id).data
+        instance = guarded_launch(
+            compute, request, tenancy, subnet_id, selected_memory_gb).data
     except ServiceError as e:
         if "Out of host capacity" in str(e.message):
             report("STATE", "HOST_CAPACITY_DISAPPEARED")
