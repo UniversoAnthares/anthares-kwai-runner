@@ -245,6 +245,25 @@ def launch_retry_token(tenancy, subnet_id):
     return str(uuid.uuid5(uuid.NAMESPACE_URL, scope))
 
 
+def occupied_block_volume_gib(volumes):
+    """Count all active boot/block volumes; unknown sizes fail closed."""
+    total = 0
+    for volume in volumes:
+        if volume.lifecycle_state in ("TERMINATED", "TERMINATING"):
+            continue
+        size = volume.size_in_gbs
+        if size is None:
+            raise ValueError("UNKNOWN_ACTIVE_VOLUME_SIZE")
+        try:
+            size = int(size)
+        except (TypeError, ValueError):
+            raise ValueError("INVALID_ACTIVE_VOLUME_SIZE") from None
+        if size <= 0:
+            raise ValueError("INVALID_ACTIVE_VOLUME_SIZE")
+        total += size
+    return total
+
+
 def guarded_launch(compute, request, tenancy, subnet_id):
     """No automatic HTTP retry; one idempotent OCI launch request."""
     return compute.launch_instance(
@@ -306,12 +325,10 @@ def main():
         active_a1.extend(x for x in pages(
             compute.list_instances, compartment_id=compartment)
             if x.shape == A1 and x.lifecycle_state not in ("TERMINATED", "TERMINATING"))
-        allocated_storage_gb += sum(int(x.size_in_gbs or 0) for x in pages(
-            block.list_boot_volumes, compartment_id=compartment, availability_domain=ad)
-            if x.lifecycle_state not in ("TERMINATED", "TERMINATING"))
-        allocated_storage_gb += sum(int(x.size_in_gbs or 0) for x in pages(
-            block.list_volumes, compartment_id=compartment)
-            if x.lifecycle_state not in ("TERMINATED", "TERMINATING"))
+        allocated_storage_gb += occupied_block_volume_gib(pages(
+            block.list_boot_volumes, compartment_id=compartment, availability_domain=ad))
+        allocated_storage_gb += occupied_block_volume_gib(pages(
+            block.list_volumes, compartment_id=compartment))
     if active_a1 or allocated_storage_gb + BOOT_GB > 200:
         report("STATE", "EXISTING_A1_OR_STORAGE_QUOTA_GUARD")
         return 0
