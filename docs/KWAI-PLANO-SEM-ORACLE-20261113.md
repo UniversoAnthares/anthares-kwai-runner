@@ -1,6 +1,7 @@
 # Kwai — plano operacional de 13/11/2026: zero custo, sem Oracle, sem PC ou Android físico
 
 STATUS: REVISED_AFTER_REGRESSION_2576. Decisão original relevante: `test-hub/findings/20261005-1741-architecture-decisoes-aceitacao.md`.
+NENHUMA PROPOSTA DE PLANO PAGO, TESTE COM CARTÃO, CONTRATAÇÃO, PATROCÍNIO QUE EXIJA ESPERAR RESPOSTA OU EXCEÇÃO FINANCEIRA. Esta regra é definitiva na fase atual e está fixada em `ci-hub/executor-routing.json` (`android_execution.financial_policy`).
 Custo incremental autorizado: R$ 0; operações comerciais e duas contas brasileiras: `lucasrosalem` e `universoanthares`. Prazo de publicação diária: entre 06h e 23h, horários calculados proporcionalmente pela fila Neon.
 
 ## Caminhos encerrados — reabertura somente por decisão explícita e prova nova
@@ -21,8 +22,8 @@ O Kwai Brasil não tem interface pública de postagem programática documentada/
 
 ## Plano executável, com decisões binárias
 
-### Etapa 1 — Qualificar **uma oferta de cessão gratuita** (BLOQUEADA até oferta real)
-Buscar provedor reconhecido, patrocinador institucional ou comunidade que autorize **expressamente** a atividade e a persistência, com custo R$0 sem expiração nem billing obrigatório, root KVM/VM, kernel binder/binderfs, 2 vCPU, 4 GiB RAM, 20 GiB disponíveis e rede suficiente para os uploads. Não solicitar cadastro em site suspeito nem empregar conta de fórum que não tenha elegibilidade demonstrada. O patrocinador pode oferecer uma máquina própria; o serviço ainda precisa permitir uso comercial legítimo e sessões persistentes. Exigir documentação da oferta/contrato e identificação do operador; comprovada a cessão, passar para a etapa 2. **O monitor de catálogos atual é somente de leitura; não provisiona.**
+### Etapa 1 — Verificar somente infraestrutura gratuita já acessível (BLOQUEADA para migração)
+Usar exclusivamente recursos que já existam nas contas conectadas, com custo incremental comprovadamente R$ 0 e disponibilidade imediata: Linux com root real, binder/binderfs, 2 vCPU, 4 GiB RAM, 20 GiB livres e tráfego suficiente. **Não solicitar cadastros, patrocínios, aprovações externas ou contratação.** Serviços existentes de containers podem controlar a fila sem suportar o Android. Sem host qualificado, encerrar esta etapa como BLOQUEADA e prosseguir somente com correções offline da fila. O monitor de catálogos é apenas leitura e não comprova VM entregue.
 
 ### Etapa 2 — Pré-teste em VM entregue (CÓDIGO PRONTO)
 No novo host aprovado, rodar `tools/redroid_free_vps_preflight.py`. Exigir KVM/VM equivalente com controle de kernel, Docker privilegiado, dispositivos binder reais e capacidade de upload. `CANDIDATE_FOR_ISOLATED_INSTALL_TEST` autoriza apenas o teste isolado, sem senhas Kwai. Se falhar, encerrar esta oferta e preservar a fila, sem gastar.
@@ -36,8 +37,10 @@ Implantar a função `cortesqueue` no projeto Neon efetivamente autorizado, com 
 ### Etapa 5 — Migrar sem perda ou duplicação (AINDA NÃO AUTORIZADA)
 Exigir todos os oito comprovantes `android_execution.cloud_cutover.required_proofs`; só então aprovar `cloud_cutover.enabled=true` por alteração revisada. Confirmar ciclo completo com computador e Android físico desligados, persistência após reboot, links públicos nas duas contas e custo zero. Se o executor remoto falhar, deixar tarefas na fila; nunca repostar estado incerto.
 
-## Se nenhuma cessão gratuita cumprir requisitos
-O requisito financeiro impede o provisionamento em hospedagem comercial. A solução passa a depender de **nova decisão explícita do titular** para uma das alternativas: autorizar um servidor pago de baixo custo, permitir temporariamente hardware Android remoto do próprio usuário ou negociar cessão/patrocínio gratuito com termos aprovados. Sem essa decisão ou uma VPS cedida, o plano encerra a fase de pesquisa como BLOQUEADO_POR_RECURSO_REAL. Não reabrir Oracle, CutMotions ou GitHub Android para simular progresso.
+## Limite absoluto de zero custo e nenhum tempo aguardando terceiros
+O titular proibiu recomendações de qualquer plano pago, teste com cartão, contratação, sugestão de exceção orçamentária e candidaturas que dependam de resposta externa. **Não sugerir novamente** VPS comercial, promoção, trial com forma de pagamento, sponsorship application ou aguardar aprovação. Manter Oracle, CutMotions, Kuaishou e emulador GitHub excluídos.
+Apenas executar tarefas possíveis imediatamente em serviços **já conectados e gratuitos**, sem habilitar publicadores experimentais: correções seguras da fila Neon, identidades de conta, pacing até 23h, deduplicação, testes em CI, reconciliação sem repetição e preservação do publicador atual.
+O objetivo de publicação integralmente na nuvem, com PC/Android físico desligados, permanece **BLOQUEADO_POR_RECURSO_REAL** enquanto não houver servidor autorizado efetivamente disponível com custo zero. O desenvolvimento de código não equivale a um host em execução, e nunca autoriza simular publicações nem alterar o roteamento.
 
 ## Referências diretas
 - Evidência de exclusões: `test-hub/findings/20261005-1741-architecture-decisoes-aceitacao.md`.
