@@ -164,6 +164,23 @@ class SafeDefaults(unittest.TestCase):
             with self.assertRaises(ValueError):
                 mod.redroid_cloud_init_data()
 
+    def test_launch_retry_token_is_stable_and_scope_specific(self):
+        from uuid import UUID
+        first = mod.launch_retry_token("tenancy-a", "subnet-a")
+        self.assertEqual(UUID(first).version, 5)
+        self.assertEqual(first, mod.launch_retry_token("tenancy-a", "subnet-a"))
+        self.assertNotEqual(first, mod.launch_retry_token("tenancy-b", "subnet-a"))
+        self.assertNotEqual(first, mod.launch_retry_token("tenancy-a", "subnet-b"))
+
+    def test_guarded_launch_passes_stable_oci_retry_token(self):
+        from unittest.mock import Mock
+        compute = Mock()
+        request = object()
+        mod.guarded_launch(compute, request, "tenancy-a", "subnet-a")
+        compute.launch_instance.assert_called_once_with(
+            request, opc_retry_token=mod.launch_retry_token(
+                "tenancy-a", "subnet-a"))
+
     def test_region_constant_is_home_approved(self):
         self.assertEqual(mod.REGION, "sa-saopaulo-1")
         self.assertEqual((mod.CPU, mod.MEMORY_GB, mod.BOOT_GB), (1, 6, 50))
