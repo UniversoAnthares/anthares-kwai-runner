@@ -1,0 +1,74 @@
+name: TikTok Studio Northflank read-only check once
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/tiktok-studio-check-once.yml']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+    steps:
+      - name: Verify active Chromium and navigate to TikTok Studio without publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,time,json,urllib.request,urllib.error
+          root='https://http--anthares-tiktok-northflank--6f6pbqmvhpv6.code.run'
+          secret=os.getenv('ARA_SHARED','')
+          if len(secret)<20:raise SystemExit('MISSING_NORTHFLANK_AUTH')
+          def req(path,method='GET',body=None):
+              data=json.dumps(body).encode() if body is not None else None
+              headers={'Authorization':'Bearer '+secret,'Accept':'application/json','User-Agent':'Anthares-Owner-Studio-ReadOnly/1.0'}
+              if data is not None:headers['Content-Type']='application/json'
+              q=urllib.request.Request(root+path,method=method,headers=headers,data=data)
+              try:
+                  with urllib.request.urlopen(q,timeout=35) as r:return r.status,json.loads(r.read(100000))
+              except urllib.error.HTTPError as e:
+                  return e.code,{}
+          status,initial=req('/interactive-browser/status')
+          print('CHROMIUM_STATUS_HTTP='+str(status))
+          print('CHROMIUM_ACTIVE='+str(bool(initial.get('active'))))
+          print('CHROMIUM_RESPONSIVE='+str(bool(initial.get('responsive'))))
+          print('DRAG_BACKEND='+str(initial.get('drag_backend','unknown')))
+          if status!=200 or not(initial.get('ok') and initial.get('active') and initial.get('responsive')):
+              print('STUDIO_CHECK=BLOCKED_NO_ACTIVE_SESSION')
+              raise SystemExit(2)
+          before,profile=req('/interactive-browser/tiktok-evidence')
+          profile_data=profile.get('evidence') or {}
+          print('PROFILE_HOST_TIKTOK='+str(str(profile_data.get('host','')).endswith('tiktok.com')))
+          print('PROFILE_PATH_EXPECTED='+str(str(profile_data.get('path','')).startswith('/@universo.anthares')))
+          print('PROFILE_ACCOUNT_MARKER='+str(bool(profile_data.get('account_marker'))))
+          print('PROFILE_LOGIN_GATE='+str(bool(profile_data.get('login_gate'))))
+          code,nav=req('/interactive-browser/navigate','POST',{'url':'https://www.tiktok.com/tiktokstudio'})
+          print('STUDIO_NAV_HTTP='+str(code))
+          if code!=200 or not nav.get('ok'):raise SystemExit('STUDIO_NAVIGATION_FAILED')
+          time.sleep(4)
+          sc,snapshot=req('/interactive-browser/status')
+          ec,evidence=req('/interactive-browser/tiktok-evidence')
+          d=evidence.get('evidence') or {}
+          print('STUDIO_STATUS_HTTP='+str(sc))
+          print('STUDIO_EVIDENCE_HTTP='+str(ec))
+          print('STUDIO_HOST_TIKTOK='+str(str(d.get('host','')).endswith('tiktok.com')))
+          print('STUDIO_PATH='+str(d.get('path',''))[:120])
+          print('STUDIO_EXPECTED_PATH='+str(str(d.get('path','')).startswith('/tiktokstudio')))
+          print('STUDIO_LOGIN_GATE='+str(bool(d.get('login_gate'))))
+          print('STUDIO_UPLOAD_UI='+str(bool(d.get('upload_marker'))))
+          print('STUDIO_ACCOUNT_MARKER='+str(bool(d.get('account_marker'))))
+          print('STUDIO_BROWSER_RESPONSIVE='+str(bool(snapshot.get('responsive'))))
+          if sc!=200 or ec!=200 or not evidence.get('ok'):raise SystemExit('STUDIO_EVIDENCE_FAILED')
+          if not str(d.get('path','')).startswith('/tiktokstudio'):
+              print('STUDIO_ACCESS=REDIRECTED_OR_BLOCKED')
+          elif d.get('login_gate'):
+              print('STUDIO_ACCESS=LOGIN_REQUIRED')
+          elif d.get('upload_marker'):
+              print('STUDIO_ACCESS=UI_VISIBLE')
+          else:
+              print('STUDIO_ACCESS=INCONCLUSIVE')
+          print('CHROMIUM_LEFT_RUNNING=1')
+          print('NO_POSTS_OR_ACCOUNT_CHANGES=1')
+          PY
