@@ -892,7 +892,14 @@ async function kwaiUnprovenAction(b,actor,target){
 
 async function kwaiSecondaryAction(action,b,actor){
  const KWAI_TARGET='kwai:universoanthares';
- if(!((actor.role==='kwai-physical'&&actor.workflow==='physical:DESKTOP-FTDK0HP')||(actor.role==='kwai-mobile'&&actor.workflow==='mobile:M2004J19C:universoanthares')))return{ok:false,error:'KWAI_SECONDARY_PUBLISHER_ONLY'};
+ // The independent ReDroid identity is authenticated and disabled by default
+ // in kwaiPersistentCloudIdentity(). Keep only the exact registered role pair.
+ const secondaryCloudIdentity=actor.role==='kwai-persistent-cloud'&&
+  actor.workflow==='cloud:android:redroid';
+ if(!((actor.role==='kwai-physical'&&actor.workflow==='physical:DESKTOP-FTDK0HP')||
+      (actor.role==='kwai-mobile'&&actor.workflow==='mobile:M2004J19C:universoanthares')||
+      secondaryCloudIdentity))
+  return{ok:false,error:'KWAI_SECONDARY_PUBLISHER_ONLY'};
  if(b.target_key!==KWAI_TARGET||b.expected_account!=='universoanthares')return{ok:false,error:'KWAI_SECONDARY_ACCOUNT_MISMATCH'};
  if(action==='kwai-unproven')return kwaiUnprovenAction(b,actor,KWAI_TARGET);
  if(!['kwai-physical-stats','kwai-lease','kwai-renew','kwai-start','kwai-confirm','kwai-fail'].includes(action))return{ok:false,error:'KWAI_SECONDARY_UNSUPPORTED_ACTION'};

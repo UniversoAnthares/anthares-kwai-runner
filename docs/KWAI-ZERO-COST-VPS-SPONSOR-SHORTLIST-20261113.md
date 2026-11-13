@@ -1,4 +1,8 @@
-# Kwai ReDroid — candidaturas legítimas para VPS patrocinada (13/11/2026)
+# ARQUIVADO — pesquisa histórica de patrocínios, fora das próximas ações (13/11/2026)
+
+**REVOGADO PARA PLANEJAMENTO:** o titular descartou qualquer proposta que exija aguardar respostas, aprovações, cadastros ou patrocínios. Este arquivo é somente evidência histórica, jamais uma lista de tarefas. Não enviar pedidos a estes provedores. Plano atual: `docs/KWAI-PLANO-SEM-ORACLE-20261113.md` e política obrigatória `ci-hub/executor-routing.json`.
+
+# Kwai ReDroid — candidaturas pesquisadas anteriormente (histórico)
 
 **Objetivo:** duas contas brasileiras `lucasrosalem`/`universoanthares`, servidor independente do PC e Android físico, software oficial Kwai/Kwai Lite, publicação 06h–23h com fila Neon, sem mensalidade nova (R$0), operação contínua. **Status:** candidatos reais de patrocínio encontrados, nenhuma concessão/VM emitida ou autorização de uso recebida. Oracle, CutMotions, Kuaishou Open e Android publicador em GitHub Actions permanecem vetados.
 

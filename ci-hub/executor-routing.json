@@ -26,6 +26,16 @@
   },
   "android_execution": {
     "purpose": "kwai_only",
+    "financial_policy": {
+      "max_incremental_recurring_brl": 0,
+      "paid_providers_forbidden": true,
+      "billing_or_card_trials_forbidden": true,
+      "recommend_paid_plans": false,
+      "paid_exception_suggestions_forbidden": true,
+      "approval_waitlists_out_of_scope": true,
+      "only_existing_authorized_zero_cost_resources": true,
+      "policy_owner_decision": "2026-11-13: no payments, no paid alternative proposals, and no external-approval wait."
+    },
     "primary_device": "physical_android",
     "fallback_device": "memu_android",
     "priority": [

@@ -33,6 +33,21 @@ class KwaiRoutePolicyTests(unittest.TestCase):
                          "experimental_only")
         self.assertFalse(cfg["android_execution"]["cloud_cutover"]["enabled"])
 
+    def test_strict_zero_cost_and_no_paid_recommendations(self):
+        cfg = json.loads(ROUTING.read_text(encoding="utf-8"))
+        finance = cfg["android_execution"]["financial_policy"]
+        self.assertEqual(finance["max_incremental_recurring_brl"], 0)
+        for prop in ("paid_providers_forbidden",
+                     "billing_or_card_trials_forbidden",
+                     "paid_exception_suggestions_forbidden",
+                     "approval_waitlists_out_of_scope",
+                     "only_existing_authorized_zero_cost_resources"):
+            self.assertIs(finance[prop], True, prop)
+        self.assertIs(finance["recommend_paid_plans"], False)
+        plan = PLAN.read_text(encoding="utf-8")
+        self.assertNotIn("autorizar um servidor pago", plan)
+        self.assertIn("NENHUMA PROPOSTA DE PLANO PAGO", plan)
+
     def test_oracle_workflows_are_inert_and_unscheduled(self):
         for path in OCI_WORKFLOWS:
             with self.subTest(path=str(path)):
