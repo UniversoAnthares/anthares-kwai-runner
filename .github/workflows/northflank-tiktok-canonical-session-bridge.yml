@@ -12,7 +12,7 @@ concurrency:
 jobs:
   recover:
     runs-on: ubuntu-24.04
-    timeout-minutes: 11
+    timeout-minutes: 13
     env:
       ARA_SHARED: ${{ secrets.ARA_SHARED }}
       PYTHONUNBUFFERED: '1'
@@ -31,7 +31,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import os,sys,json,urllib.request,urllib.error,urllib.parse
+          import os,sys,json,urllib.request,urllib.error,urllib.parse,time
           sys.path.insert(0,'tools')
           sys.path.insert(0,'direct-tiktok-publisher')
           from cortes_tiktok_hosted_publish import preflight_vault
@@ -54,9 +54,18 @@ jobs:
               except Exception as ex:
                   print('NF_SESSION_BRIDGE_NETWORK='+type(ex).__name__+' path='+path,flush=True)
                   return 0,{}
+          EXPECTED='2026-11-12-browser-ffmpeg-session-v16'
+          for wait in range(25):
+              rc,revision=call('/interactive-browser/revision',timeout=15)
+              if rc==200 and revision.get('revision')==EXPECTED:
+                  print('NF_V16_REVISION_PROVEN=1',flush=True)
+                  break
+              if wait%5==0:print('NF_V16_WAITING_FOR_RELEASE=1',flush=True)
+              time.sleep(10)
+          else:raise SystemExit('NF_V16_NOT_DEPLOYED_SAFE_STOP')
           c,health=call('/health',timeout=18)
           if c!=200 or health.get('ok') is not True or health.get('ffmpeg_ready') is not True:
-              raise SystemExit('NF_V13_CODEC_PREFLIGHT_UNAVAILABLE')
+              raise SystemExit('NF_V16_CODEC_PREFLIGHT_UNAVAILABLE')
           state=preflight_vault()
           cookies=state.get('cookies') or []
           if not cookies or len(cookies)>256:raise SystemExit('NF_CANONICAL_OWNER_STATE_INVALID')
@@ -67,15 +76,26 @@ jobs:
           print('NF_CANONICAL_OWNER_BOOTSTRAP_HTTP='+str(c),flush=True)
           if c!=200 or boot.get('ok') is not True:
               raise SystemExit('NF_OWNER_SESSION_BOOTSTRAP_FAILED')
-          c,result=call('/session-test',method='POST',data={},timeout=150)
-          print('NF_OWNER_SESSION_TEST_HTTP='+str(c),flush=True)
-          print('NF_OWNER_SESSION_TEST_SUCCESS='+str(bool(result.get('ok'))),flush=True)
-          print('NF_OWNER_IDENTITY_VERIFIED='+str(bool(result.get('identity_verified'))),flush=True)
-          print('NF_OWNER_CENTRAL_PERSISTED='+str(bool(result.get('central_persisted'))),flush=True)
-          # Never print session-test stdout/stderr, state, token or cookie values.
+          code,start=call('/session-test/async-start',method='POST',data={},timeout=20)
+          print('NF_OWNER_ASYNC_START_HTTP='+str(code),flush=True)
+          if code!=202 or start.get('started') is not True:
+              raise SystemExit('NF_OWNER_ASYNC_START_BLOCKED')
+          for poll in range(28):
+              time.sleep(7)
+              status,check=call('/session-test/async-status',timeout=18)
+              if status!=200 or check.get('ok') is not True:
+                  print('NF_OWNER_ASYNC_POLL_HTTP='+str(status),flush=True)
+                  continue
+              phase=check.get('status')
+              if poll%4==0:print('NF_OWNER_ASYNC_PHASE='+str(phase),flush=True)
+              if phase in ('verified','failed'):
+                  break
+          else:raise SystemExit('NF_OWNER_ASYNC_STATUS_TIMED_OUT')
+          print('NF_OWNER_ASYNC_FINAL_STATUS='+str(check.get('status')),flush=True)
+          print('NF_OWNER_ASYNC_FAILURE_CLASS='+str(check.get('reason') or 'none')[:80],flush=True)
           c2,h2=call('/health',timeout=18)
           print('NF_OWNER_FINAL_READY='+str(bool(h2.get('ready_for_tiktok'))),flush=True)
-          if c!=200 or result.get('ok') is not True or result.get('identity_verified') is not True or c2!=200 or h2.get('ready_for_tiktok') is not True:
+          if check.get('status')!='verified' or check.get('identity_verified') is not True or c2!=200 or h2.get('ready_for_tiktok') is not True:
               raise SystemExit('NF_OWNER_REMOTE_IDENTITY_STILL_UNVERIFIED')
           print('NF_CANONICAL_OWNER_SESSION_RECOVERED=1',flush=True)
           PY
