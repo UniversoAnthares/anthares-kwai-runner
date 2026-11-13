@@ -58,12 +58,47 @@ function browserPage(message="",screen=null,verify=null,drag=null){
   const gestureScript=screen?.image_b64?`<script>
   (()=>{
     const el=document.getElementById("remote-shot"),status=document.getElementById("gesture-status");
-    let start=null,active=false,busy=false;
-    function pos(e){const r=el.getBoundingClientRect();return {x:Math.max(0,Math.min(1365,Math.round((e.clientX-r.left)*1365/r.width))),y:Math.max(0,Math.min(768,Math.round((e.clientY-r.top)*768/r.height)))};}
+    let start=null,active=false,busy=false,pointerId=null;
+    const svgNS="http://www.w3.org/2000/svg";
+    const svg=document.createElementNS(svgNS,"svg");
+    svg.setAttribute("viewBox","0 0 1365 768");
+    svg.setAttribute("preserveAspectRatio","none");
+    svg.setAttribute("aria-hidden","true");
+    svg.style.cssText="position:absolute;pointer-events:none;display:none;overflow:visible;z-index:5";
+    const line=document.createElementNS(svgNS,"line");
+    line.setAttribute("stroke","#007be8");line.setAttribute("stroke-width","5");
+    line.setAttribute("stroke-linecap","round");
+    const dot=document.createElementNS(svgNS,"circle");
+    dot.setAttribute("r","11");dot.setAttribute("fill","#007be8");
+    dot.setAttribute("stroke","white");dot.setAttribute("stroke-width","3");
+    svg.append(line,dot);
+    el.parentElement.style.position="relative";
+    el.insertAdjacentElement("afterend",svg);
+    function pos(e){const r=el.getBoundingClientRect();return {x:Math.round(Math.max(0,Math.min(1365,(e.clientX-r.left)*1365/r.width))),y:Math.round(Math.max(0,Math.min(768,(e.clientY-r.top)*768/r.height)))};}
+    function show(p){if(!start)return;svg.style.display="block";svg.style.left=el.offsetLeft+"px";svg.style.top=el.offsetTop+"px";svg.style.width=el.clientWidth+"px";svg.style.height=el.clientHeight+"px";line.setAttribute("x1",start.x);line.setAttribute("y1",start.y);line.setAttribute("x2",p.x);line.setAttribute("y2",p.y);dot.setAttribute("cx",p.x);dot.setAttribute("cy",p.y);}
+    function reset(){active=false;start=null;pointerId=null;svg.style.display="none";}
     el.addEventListener("dragstart",e=>e.preventDefault());
-    el.addEventListener("pointerdown",e=>{if(busy||e.button!==0)return;e.preventDefault();start=pos(e);active=true;el.setPointerCapture(e.pointerId);status.textContent="Movimente o ponteiro e solte no destino.";});
-    el.addEventListener("pointercancel",()=>{start=null;active=false;status.textContent="Movimento cancelado.";});
-    el.addEventListener("pointerup",async e=>{if(!active||!start||busy)return;e.preventDefault();active=false;const end=pos(e),origin=start;start=null;busy=true;status.textContent="Enviando movimento ao navegador remoto...";const moved=Math.hypot(end.x-origin.x,end.y-origin.y)>8;const path=moved?"/owner/tiktok/drag":"/owner/tiktok/click";const form=new FormData();if(moved){form.set("x1",String(origin.x));form.set("y1",String(origin.y));form.set("x2",String(end.x));form.set("y2",String(end.y));}else{form.set("x",String(end.x));form.set("y",String(end.y));}try{const response=await fetch(path,{method:"POST",body:form,credentials:"same-origin"});if(!response.ok)throw Error("HTTP "+response.status);if(response.redirected||new URL(response.url).pathname==="/owner")throw Error("Sessão administrativa expirada");location.replace("/owner/tiktok");}catch(err){status.textContent="Falha ao enviar: "+err.message+"; tente atualizar a imagem.";busy=false;}});
+    el.addEventListener("pointerdown",e=>{if(busy||e.button!==0)return;e.preventDefault();start=pos(e);active=true;pointerId=e.pointerId;try{el.setPointerCapture(e.pointerId);}catch{}show(start);status.textContent="Arrastando: mova e solte no destino.";});
+    el.addEventListener("pointermove",e=>{if(!active||e.pointerId!==pointerId)return;e.preventDefault();const p=pos(e);show(p);status.textContent="Arrastando até ("+p.x+", "+p.y+"). Solte para enviar.";});
+    async function finish(e){
+      if(!active||busy||e.pointerId!==pointerId)return;
+      e.preventDefault();const origin=start,target=pos(e);reset();busy=true;
+      const moved=Math.hypot(target.x-origin.x,target.y-origin.y)>=7;
+      status.textContent="Transmitindo "+(moved?"arraste":"clique")+" e atualizando imagem...";
+      const form=new FormData();form.set("mode",moved?"drag":"click");form.set("x1",String(origin.x));form.set("y1",String(origin.y));form.set("x2",String(target.x));form.set("y2",String(target.y));
+      try{
+        const response=await fetch("/owner/tiktok/gesture",{method:"POST",body:form,credentials:"same-origin",cache:"no-store",headers:{"Accept":"application/json"}});
+        if(response.redirected||new URL(response.url).pathname==="/owner")throw Error("Sessão administrativa expirada");
+        const data=await response.json();
+        if(!response.ok||!data.ok)throw Error(data.error||"Falha ao transmitir o movimento");
+        if(data.frame&&data.frame.image_b64){el.src="data:"+(data.frame.mime||"image/jpeg")+";base64,"+data.frame.image_b64;status.textContent=moved?"Arraste concluído; imagem remota atualizada.":"Clique concluído; imagem remota atualizada.";}
+        else status.textContent="Movimento enviado. Use Atualizar imagem para obter uma captura.";
+      }catch(err){status.textContent="Erro: "+err.message+". Use Atualizar imagem e tente novamente.";}finally{busy=false;}
+    }
+    el.addEventListener("pointerup",finish);
+    window.addEventListener("pointerup",finish);
+    el.addEventListener("pointercancel",e=>{if(active&&e.pointerId===pointerId){reset();status.textContent="Movimento cancelado pelo navegador."; }});
+    el.addEventListener("lostpointercapture",e=>{if(active&&e.pointerId===pointerId){reset();status.textContent="Captura de mouse perdida. Tente novamente."; }});
   })();
   </script>`:"";
   const proof=verify?`<pre>${esc(JSON.stringify(verify,null,2))}</pre>`:"";
@@ -98,6 +133,18 @@ export default {
     }
     if(url.pathname==="/owner/tiktok/click"&&request.method==="POST"){
       const f=await request.formData();const x=Number(f.get("x")??f.get("shot.x"));const y=Number(f.get("y")??f.get("shot.y"));const r=await nf(env,"/interactive-browser/click",{method:"POST",body:{x,y}});await new Promise(q=>setTimeout(q,450));return html(browserPage(r.ok?`Clique enviado (${Math.round(x)}, ${Math.round(y)}).`:`Falha: ${r.error}`,await shot(env)),r.ok?200:503);
+    }
+    if(url.pathname==="/owner/tiktok/gesture"&&request.method==="POST"){
+      const form=await request.formData();
+      const mode=String(form.get("mode")||"");
+      const x1=Number(form.get("x1")),y1=Number(form.get("y1")),x2=Number(form.get("x2")),y2=Number(form.get("y2"));
+      const valid=["click","drag"].includes(mode)&&[x1,y1,x2,y2].every(Number.isFinite)&&x1>=0&&x1<=1365&&x2>=0&&x2<=1365&&y1>=0&&y1<=768&&y2>=0&&y2<=768;
+      if(!valid)return json({ok:false,error:"invalid_coordinates"},400);
+      const r=await nf(env,mode==="drag"?"/interactive-browser/drag":"/interactive-browser/click",{method:"POST",body:mode==="drag"?{x1,y1,x2,y2}:{x:x2,y:y2}});
+      if(!r.ok)return json({ok:false,error:r.error||"remote_gesture_failed"},503);
+      await new Promise(done=>setTimeout(done,450));
+      const frame=await shot(env);
+      return json({ok:true,gesture:mode,frame:frame?{image_b64:frame.image_b64,mime:frame.mime,width:frame.width,height:frame.height,url:frame.url}:null});
     }
     if(url.pathname==="/owner/tiktok/drag"&&request.method==="POST"){
       const f=await request.formData();
