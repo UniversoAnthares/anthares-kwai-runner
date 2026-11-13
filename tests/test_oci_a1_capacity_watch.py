@@ -142,7 +142,8 @@ class SafeDefaults(unittest.TestCase):
     def test_cloud_init_is_encoded_and_local_only(self):
         from unittest.mock import patch
         import base64
-        data = (b"#cloud-config\n--privileged\n127.0.0.1:5555:5555\n"\n                + mod.REDROID_ARM64_IMAGE.encode("ascii"))
+        data = (b"#cloud-config\n--privileged\n127.0.0.1:5555:5555\n"
+                + mod.REDROID_ARM64_IMAGE.encode("ascii"))
         with patch.object(mod, "Path") as path:
             self._stub_cloud_init(path, data)
             self.assertEqual(base64.b64decode(
