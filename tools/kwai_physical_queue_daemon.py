@@ -140,14 +140,14 @@ def save_cut_attempts(data):
   _CUT_ATTEMPTS_CACHE['data']=data
 
 def compute_schedule(posted_today, pending, cap, now=None, stats=None):
-  """Independent v2 verification: actual confirmed post + remaining slots to 23h.
+  """Independent v3 verification: actual confirmed post + remaining slots to 23h.
 
   The Neon lease gate is authoritative. A mismatched schedule fails closed.
   A same-day backlog refill recomputes intervals without arbitrary fixed delays.
   """
   import datetime
   if now is None:now=datetime.datetime.now().astimezone()
-  if not stats or stats.get('pacing_version')!='kwai-public-post-proportional-v2':
+  if not stats or stats.get('pacing_version')!='kwai-public-post-proportional-06to23-v3':
     raise RuntimeError('kwai_pacing_version_unverified')
   if stats.get('target_key')!='kwai:'+EXPECTED_ACCOUNT:
     raise RuntimeError('kwai_pacing_account_mismatch')
@@ -160,6 +160,10 @@ def compute_schedule(posted_today, pending, cap, now=None, stats=None):
   server_deadline=parse_iso(stats.get('deadline_at'))
   if server_deadline is None or abs((server_deadline-deadline).total_seconds())>2:
     raise RuntimeError('kwai_pacing_deadline_mismatch')
+  open_at=now.replace(hour=6,minute=0,second=0,microsecond=0)
+  server_open=parse_iso(stats.get('window_open_at'))
+  if server_open is None or abs((server_open-open_at).total_seconds())>2:
+    raise RuntimeError('kwai_pacing_open_window_mismatch')
   posted=int(stats.get('confirmed_today',-1))
   used=int(stats.get('started_today',-1))
   remaining=min(pending,max(0,cap-used))
@@ -173,9 +177,13 @@ def compute_schedule(posted_today, pending, cap, now=None, stats=None):
          'last_at':last.isoformat() if last else None,
          'first_at':first.isoformat() if first else None,
          'deadline':deadline.isoformat(),
-         'pacing_version':'kwai-public-post-proportional-v2'}
-  if now>=deadline or remaining<=0:
-    entry.update({'interval':0,'next_at':None,'status':'BLOCKED'})
+         'pacing_version':'kwai-public-post-proportional-06to23-v3'}
+  if now<open_at:
+    entry.update({'interval':0,'next_at':open_at.isoformat(),'status':'WAIT_OPEN'})
+  elif now>=deadline:
+    entry.update({'interval':0,'next_at':None,'status':'BLOCKED_SAME_DAY_CAPACITY'})
+  elif remaining<=0:
+    entry.update({'interval':0,'next_at':None,'status':'BLOCKED_PLATFORM_LIMIT'})
   elif not last:
     if posted>0 or first is not None:raise RuntimeError('kwai_pacing_missing_first_post_clock')
     entry.update({'interval':0,'next_at':now.isoformat(),'status':'DUE'})
@@ -850,7 +858,7 @@ def once():
   except Exception as stats_err:
    log('PUBLICATION_STATS_UNAVAILABLE exception='+type(stats_err).__name__+' no_lease=1')
    return 0
-  if not stats.get('ok') or stats.get('pacing_version')!='kwai-public-post-proportional-v2':
+  if not stats.get('ok') or stats.get('pacing_version')!='kwai-public-post-proportional-06to23-v3':
    log('PUBLICATION_PACING_VERSION_REQUIRED account='+EXPECTED_ACCOUNT+' no_lease=1')
    return 0
   pending=int(stats.get('pending',-1))
