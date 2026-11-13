@@ -19,9 +19,9 @@ concurrency:
 
 jobs:
   capacity-watch:
-    # Owner explicitly enabled monitoring on 2026-11-13. A repository
-    # variable value of 0 remains an opt-out; absent variable defaults on.
-    if: ${{ vars.OCI_A1_WATCH_ENABLED != '0' }}
+    # Owner explicitly approved the read-only monitor on 2026-11-13.
+    # No variable-driven job skip; disabling requires workflow change.
+    # This can never allocate a machine: OCI_A1_AUTO_PROVISION is forced 0.
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     env:
@@ -55,7 +55,7 @@ jobs:
         run: |
           {
             echo 'The watcher uses GitHub hosted runners only.'
-            echo 'Owner enabled monitoring; OCI_A1_WATCH_ENABLED=0 explicitly disables it.'
+            echo 'Owner approved read-only monitoring; no repository variable gate is used.'
             echo 'Automatic allocation is disabled by forced OCI_A1_AUTO_PROVISION=0 until separately reviewed.'
             echo 'It never posts to Kwai or modifies physical Android/MEmu routing.'
             echo 'An allocated Linux VM is not proof of ReDroid, MacroDroid or Kwai operation.'
