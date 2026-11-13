@@ -170,7 +170,11 @@ def redroid_cloud_init_data():
             b'--platform "$PLATFORM"' not in data or
             b"/etc/modules-load.d/anthares-redroid.conf" not in data or
             b"options binder_linux devices=binder,hwbinder,vndbinder" not in data or
-            b"docker start anthares-redroid" not in data):
+            b"docker start anthares-redroid" not in data or
+            b"adb connect 127.0.0.1:5555" not in data or
+            b"sys.boot_completed" not in data or
+            b"ANDROID_BOOT_READY_ADB_LOCAL" not in data or
+            b"anthares-redroid-health.timer" not in data):
         raise ValueError("UNSAFE_OR_MISSING_REDR0ID_BOOTSTRAP")
     return base64.b64encode(data).decode("ascii")
 
