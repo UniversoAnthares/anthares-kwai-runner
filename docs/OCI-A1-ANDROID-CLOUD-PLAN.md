@@ -94,3 +94,9 @@ A autonomia integral do Android físico exige que o aparelho consuma a fila cent
 5. Nenhuma cobrança, nenhuma duplicata, nenhuma violação do pacing 6h–23h.
 
 **Estado atual:** fluxo do GitHub preparado em branch; macro de status validada para importação; execução hospedada, autenticação secreta e ReDroid ainda pendentes. Item 8 segue 🔴 até homologação operacional.
+
+### Imagem ReDroid ARM64 imutável — 13/11/2026
+
+O Docker Hub confirmou que a tag original `redroid/redroid:12.0.0_64only-240527` foi publicada em 28/05/2024 e oferece uma imagem `linux/arm64` com digest `sha256:3c7f9450188226bf8042c0159b9b38abe2106f1ceb0dfa45fae1cbc6409cd9bb`. A primeira inicialização passa a baixar `redroid/redroid@sha256:3c7f9450188226bf8042c0159b9b38abe2106f1ceb0dfa45fae1cbc6409cd9bb`; a função `redroid_cloud_init_data` rejeita bootstraps sem esse identificador aprovado.
+
+O endpoint público `https://hub.docker.com/v2/repositories/redroid/redroid/tags/12.0.0_64only-240527` foi consultado em 13/11/2026 e devolveu as arquiteturas ARM64 e AMD64 com digests diferentes; somente o ARM64 foi aceito. Foi testado o conteúdo real do arquivo cloud-init: **18 testes Python, 0 falhas/0 erros**, `CLOUD_CONFIG_PARSED=True`, `ARM64_DIGEST_PINNED=True`, `DIGEST_FORMAT=True` (ARA `b4ea4a5d3a76a2c45e7fbe5b101cee5d`) e `REPRODUCIBLE_REDR0ID_BASH_SYNTAX=PASS` (ARA `84d0fffb4c81338daafb78acdc6454ba`). Nenhuma VM foi criada; a execução do bootstrap em host permanece sem prova. Fonte oficial: https://hub.docker.com/r/redroid/redroid/tags .
