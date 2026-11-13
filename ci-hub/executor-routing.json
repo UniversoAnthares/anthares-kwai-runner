@@ -35,6 +35,17 @@
       "github_android_experimental"
     ],
     "github_actions": "experimental_only",
+    "retired_publication_paths": [
+      "oracle_a1",
+      "cutmotions",
+      "cp_kwai_legacy",
+      "kuaishou_open_for_brazil",
+      "kwai_studio_for_regular_videos",
+      "github_android_experimental_as_production",
+      "pc_as_final_executor",
+      "memu_as_final_executor"
+    ],
+    "reentry_policy": "Owner explicit new direction AND independent real capability proof required; no agent may reactivate retired paths based on marketing or past mock tests.",
     "cloud_cutover": {
       "enabled": false,
       "disable_local_executors": true,
