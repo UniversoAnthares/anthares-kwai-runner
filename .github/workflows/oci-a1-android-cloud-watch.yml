@@ -1,0 +1,52 @@
+name: Anthares OCI A1 Always Free capacity watch
+
+on:
+  schedule:
+    - cron: '17 */4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: anthares-oci-a1-free-single-allocation
+  cancel-in-progress: false
+
+jobs:
+  capacity-watch:
+    # Activation requires explicit owner-set repository variable.
+    if: ${{ vars.OCI_A1_WATCH_ENABLED == '1' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      OCI_A1_WATCH_AUTH_JSON: ${{ secrets.OCI_A1_WATCH_AUTH_JSON }}
+      OCI_A1_AUTO_PROVISION: ${{ vars.OCI_A1_AUTO_PROVISION }}
+      OCI_A1_LAUNCH_GUARD: ${{ vars.OCI_A1_LAUNCH_GUARD }}
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assert canonical hosted runtime and cost guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = 'UniversoAnthares/anthares-kwai-runner'
+          test "$GITHUB_REF" = 'refs/heads/main'
+          test "$OCI_A1_AUTO_PROVISION" != 1 || test "$OCI_A1_LAUNCH_GUARD" = ALWAYS_FREE_SINGLE_A1
+          test -f tools/oci_a1_capacity_watch.py
+      - name: Install pinned Oracle SDK
+        run: python -m pip install --disable-pip-version-check 'oci==2.187.1'
+      - name: Read OCI A1 capacity; guarded allocation optional
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/oci_a1_capacity_watch.py
+      - name: Document execution scope
+        if: always()
+        run: |
+          {
+            echo 'The watcher uses GitHub hosted runners only.'
+            echo 'It is disabled until OCI_A1_WATCH_ENABLED=1.'
+            echo 'Auto-allocation requires OCI_A1_AUTO_PROVISION=1 and OCI_A1_LAUNCH_GUARD=ALWAYS_FREE_SINGLE_A1.'
+            echo 'It never posts to Kwai or modifies physical Android/MEmu routing.'
+            echo 'An allocated Linux VM is not proof of ReDroid, MacroDroid or Kwai operation.'
+          } >> "$GITHUB_STEP_SUMMARY"
