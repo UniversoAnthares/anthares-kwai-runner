@@ -54,18 +54,18 @@ jobs:
               except Exception as ex:
                   print('NF_SESSION_BRIDGE_NETWORK='+type(ex).__name__+' path='+path,flush=True)
                   return 0,{}
-          EXPECTED='2026-11-12-browser-ffmpeg-session-v16'
+          EXPECTED='2026-11-12-browser-ffmpeg-session-v17'
           for wait in range(25):
               rc,revision=call('/interactive-browser/revision',timeout=15)
               if rc==200 and revision.get('revision')==EXPECTED:
-                  print('NF_V16_REVISION_PROVEN=1',flush=True)
+                  print('NF_V17_REVISION_PROVEN=1',flush=True)
                   break
-              if wait%5==0:print('NF_V16_WAITING_FOR_RELEASE=1',flush=True)
+              if wait%5==0:print('NF_V17_WAITING_FOR_RELEASE=1',flush=True)
               time.sleep(10)
-          else:raise SystemExit('NF_V16_NOT_DEPLOYED_SAFE_STOP')
+          else:raise SystemExit('NF_V17_NOT_DEPLOYED_SAFE_STOP')
           c,health=call('/health',timeout=18)
           if c!=200 or health.get('ok') is not True or health.get('ffmpeg_ready') is not True:
-              raise SystemExit('NF_V16_CODEC_PREFLIGHT_UNAVAILABLE')
+              raise SystemExit('NF_V17_CODEC_PREFLIGHT_UNAVAILABLE')
           state=preflight_vault()
           cookies=state.get('cookies') or []
           if not cookies or len(cookies)>256:raise SystemExit('NF_CANONICAL_OWNER_STATE_INVALID')
@@ -87,12 +87,15 @@ jobs:
                   print('NF_OWNER_ASYNC_POLL_HTTP='+str(status),flush=True)
                   continue
               phase=check.get('status')
-              if poll%4==0:print('NF_OWNER_ASYNC_PHASE='+str(phase),flush=True)
+              if poll%4==0:
+                  print('NF_OWNER_ASYNC_PHASE='+str(phase),flush=True)
+                  print('NF_OWNER_ASYNC_BROWSER_STAGE='+str(check.get('phase') or 'none')[:80],flush=True)
               if phase in ('verified','failed'):
                   break
           else:raise SystemExit('NF_OWNER_ASYNC_STATUS_TIMED_OUT')
           print('NF_OWNER_ASYNC_FINAL_STATUS='+str(check.get('status')),flush=True)
           print('NF_OWNER_ASYNC_FAILURE_CLASS='+str(check.get('reason') or 'none')[:80],flush=True)
+          print('NF_OWNER_ASYNC_LAST_BROWSER_STAGE='+str(check.get('phase') or 'none')[:80],flush=True)
           c2,h2=call('/health',timeout=18)
           print('NF_OWNER_FINAL_READY='+str(bool(h2.get('ready_for_tiktok'))),flush=True)
           if check.get('status')!='verified' or check.get('identity_verified') is not True or c2!=200 or h2.get('ready_for_tiktok') is not True:
