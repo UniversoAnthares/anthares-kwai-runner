@@ -59,3 +59,21 @@ test('both canonical account handlers and HTTP entry route the same gated role',
  assert.match(src,/async function kwaiSecondaryAction\(/);
  assert.match(src,/async function kwaiAction\(/);
 });
+
+test('secondary account early gate admits only authenticated persistent-cloud role',()=>{
+ const src=readFileSync(new URL('./index.mjs',import.meta.url),'utf8');
+ const start=src.indexOf('async function kwaiSecondaryAction(');
+ const end=src.indexOf("if(action==='kwai-unproven')",start);
+ assert.ok(start>0&&end>start,'secondary guard must precede unproven action');
+ const gate=src.slice(start,end);
+ assert.match(gate,/actor\.role==='kwai-persistent-cloud'&&\s*actor\.workflow==='cloud:android:redroid'/);
+ assert.match(gate,/secondaryCloudIdentity\)\)/);
+ assert.match(gate,/KWAI_SECONDARY_PUBLISHER_ONLY/);
+ assert.match(gate,/actor\.role==='kwai-mobile'&&actor\.workflow==='mobile:M2004J19C:universoanthares'/);
+ assert.match(gate,/actor\.role==='kwai-physical'&&actor\.workflow==='physical:DESKTOP-FTDK0HP'/);
+ assert.doesNotMatch(gate,/kwai-publisher/);
+ // The only authentication mechanism for this role remains disabled
+ // without an explicit environment flag and a fresh, exact token hash.
+ assert.equal(kwaiPersistentCloudIdentity(request(),'kwai-lease',{}),null);
+ assert.equal(kwaiPersistentCloudIdentity(request(),'kwai-lease',env)?.role,'kwai-persistent-cloud');
+});
