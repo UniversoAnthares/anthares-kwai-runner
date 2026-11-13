@@ -91,7 +91,13 @@ function browserPage(message="",screen=null,verify=null,drag=null){
         if(response.redirected||new URL(response.url).pathname==="/owner")throw Error("Sessão administrativa expirada");
         const data=await response.json();
         if(!response.ok||!data.ok)throw Error(data.error||"Falha ao transmitir o movimento");
-        if(data.frame&&data.frame.image_b64){el.src="data:"+(data.frame.mime||"image/jpeg")+";base64,"+data.frame.image_b64;status.textContent=moved?"Arraste concluído; imagem remota atualizada.":"Clique concluído; imagem remota atualizada.";}
+        if(data.frame&&data.frame.image_b64){
+          el.src="data:"+(data.frame.mime||"image/jpeg")+";base64,"+data.frame.image_b64;
+          if(moved && data.visual_change_detected===false)status.textContent="Arraste transmitido, mas a imagem permaneceu igual. O TikTok pode ter rejeitado o gesto ou o desafio expirou.";
+          else if(moved && data.visual_change_detected===true)status.textContent="Arraste transmitido; houve alteração visual na captura. Confira se a verificação foi aceita.";
+          else if(moved)status.textContent="Arraste enviado ao executor; a aceitação pelo TikTok ainda precisa ser confirmada.";
+          else status.textContent="Clique enviado; confira o resultado na imagem.";
+        }
         else status.textContent="Movimento enviado. Use Atualizar imagem para obter uma captura.";
       }catch(err){status.textContent="Erro: "+err.message+". Use Atualizar imagem e tente novamente.";}finally{busy=false;}
     }
@@ -140,11 +146,14 @@ export default {
       const x1=Number(form.get("x1")),y1=Number(form.get("y1")),x2=Number(form.get("x2")),y2=Number(form.get("y2"));
       const valid=["click","drag"].includes(mode)&&[x1,y1,x2,y2].every(Number.isFinite)&&x1>=0&&x1<=1365&&x2>=0&&x2<=1365&&y1>=0&&y1<=768&&y2>=0&&y2<=768;
       if(!valid)return json({ok:false,error:"invalid_coordinates"},400);
+      const before=mode==="drag"?await shot(env):null;
       const r=await nf(env,mode==="drag"?"/interactive-browser/drag":"/interactive-browser/click",{method:"POST",body:mode==="drag"?{x1,y1,x2,y2}:{x:x2,y:y2}});
       if(!r.ok)return json({ok:false,error:r.error||"remote_gesture_failed"},503);
       await new Promise(done=>setTimeout(done,450));
       const frame=await shot(env);
-      return json({ok:true,gesture:mode,frame:frame?{image_b64:frame.image_b64,mime:frame.mime,width:frame.width,height:frame.height,url:frame.url}:null});
+      const visualChange=mode==="drag"&&frame&&before?frame.image_b64!==before.image_b64:null;
+      return json({ok:true,gesture:mode,visual_change_detected:r.visual_change_detected??visualChange,
+        frame:frame?{image_b64:frame.image_b64,mime:frame.mime,width:frame.width,height:frame.height,url:frame.url}:null});
     }
     if(url.pathname==="/owner/tiktok/drag"&&request.method==="POST"){
       const f=await request.formData();
