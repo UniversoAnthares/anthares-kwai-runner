@@ -57,7 +57,7 @@ def evaluate(name, status_code, text):
     if name == "vpsfree":
         # Marketed tiers above the plan table do not establish a free offer.
         if "192mb nat vps" in low and ("$0.00" in low or "free" in low):
-            return "FREE_LISTING_BELOW_REDRIOD_MINIMUM"
+            return "FREE_LISTING_BELOW_REDROID_MINIMUM"
         return "FREE_CATALOG_UNVERIFIED"
     if name == "verta":
         if "4gb ram" in low and ("free" in low or "grátis" in low):
@@ -101,7 +101,7 @@ def report():
         "schema": "anthares.redroid.free_vps_catalog.v1",
         "checked_at_utc": datetime.now(timezone.utc).isoformat(),
         "results": results,
-        "any_vm_allocated": False,
+        "vm_allocation_checked": False,
         "any_provider_approved": False,
         "secrets_used": False,
         "next_gate": "ACCOUNT_ELIGIBILITY_AND_REAL_VM_DELIVERY_PROOF",
