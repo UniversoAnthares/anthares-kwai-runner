@@ -1,0 +1,49 @@
+name: Kwai persistent cloud Android security contract
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/kwai-persistent-cloud-contract.yml'
+      - 'infra/neon-cortes-queue/index.mjs'
+      - 'infra/neon-cortes-queue/kwai-persistent-cloud-identity.mjs'
+      - 'infra/neon-cortes-queue/kwai-persistent-cloud-identity.test.mjs'
+      - 'tools/kwai_persistent_cloud_queue.py'
+      - 'tests/test_kwai_persistent_cloud_queue.py'
+      - 'kwai_queue_publish_runtime.sh'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: kwai-cloud-identity-ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  fail-closed:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Neon function and local script syntax
+        run: |
+          set -euo pipefail
+          node --check infra/neon-cortes-queue/index.mjs
+          node --check infra/neon-cortes-queue/kwai-persistent-cloud-identity.mjs
+          bash -n kwai_queue_publish_runtime.sh
+      - name: Prove both account credential isolation and local stop
+        run: |
+          set -euo pipefail
+          node --test infra/neon-cortes-queue/kwai-persistent-cloud-identity.test.mjs
+          python3 -m unittest discover -s tests -p 'test_kwai_persistent_cloud_queue.py' -v
+      - name: Assert cloud production is unconfigured by default
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          code=Path('infra/neon-cortes-queue/kwai-persistent-cloud-identity.mjs').read_text()
+          assert "env.KWAI_PERSISTENT_CLOUD_PUBLISH_ENABLED === '1'" in code
+          assert "env.KWAI_PERSISTENT_CLOUD_TOKEN_SHA256" in code
+          import json
+          manifest=json.loads(Path('ci-hub/executor-routing.json').read_text())
+          assert manifest['android_execution']['cloud_cutover']['enabled'] is False
+          print('KWAI_PERSISTENT_CLOUD_SERVER_ARMED=NO')
+          print('KWAI_LOCAL_PRIMARY_PRESERVED=YES')
+          PY
