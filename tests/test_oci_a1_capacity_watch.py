@@ -485,6 +485,85 @@ class SafeDefaults(unittest.TestCase):
                 "TARGET_INSTANCE", "AMBIGUOUS_OR_OTHER_A1")
         compute.launch_instance.assert_not_called()
 
+    def test_four_gb_fallback_only_after_six_gb_is_out_of_capacity(self):
+        """Two exact capacity reports and one idempotent Always Free launch."""
+        h = self._mock_available_a1_launch()
+        def cap(state):
+            return SimpleNamespace(data=SimpleNamespace(shape_availabilities=[
+                SimpleNamespace(instance_shape=mod.A1, availability_status=state)]))
+        h["compute"].create_compute_capacity_report.side_effect = [
+            cap("OUT_OF_HOST_CAPACITY"), cap("AVAILABLE")]
+        with patch.dict(os.environ, {
+                "OCI_A1_AUTO_PROVISION": "1",
+                "OCI_A1_LAUNCH_GUARD": "ALWAYS_FREE_SINGLE_A1"}, clear=True), \
+             patch.object(mod, "auth", return_value=(
+                 {"tenancy": "tenancy"}, h["compute"], h["network"],
+                 h["block"], h["identity"])), \
+             patch.object(mod, "pages", side_effect=h["pages"]), \
+             patch.object(mod, "redroid_cloud_init_data", return_value="dGVzdA=="), \
+             patch.object(mod, "approved_boot_access",
+                          return_value=(h["subnet"], h["ssh"],
+                                        "LOCKED_PUBLIC")):
+            self.assertEqual(mod.main(), 0)
+        queries = h["compute"].create_compute_capacity_report.call_args_list
+        self.assertEqual(len(queries), 2)
+        sizes = [call.args[0].shape_availabilities[0].instance_shape_config.memory_in_gbs
+                 for call in queries]
+        self.assertEqual(sizes, [6, 4])
+        h["compute"].launch_instance.assert_called_once()
+        args, kwargs = h["compute"].launch_instance.call_args
+        self.assertEqual(args[0].shape_config.ocpus, 1)
+        self.assertEqual(args[0].shape_config.memory_in_gbs, 4)
+        self.assertEqual(args[0].source_details.boot_volume_size_in_gbs, 50)
+        self.assertEqual(kwargs["opc_retry_token"], mod.launch_retry_token(
+            "tenancy", h["subnet"].id, 4))
+        self.assertNotEqual(mod.launch_retry_token("tenancy", h["subnet"].id, 4),
+                            mod.launch_retry_token("tenancy", h["subnet"].id, 6))
+
+    def test_four_gb_quota_or_policy_rejection_never_allocates(self):
+        """Only AVAILABLE (never LIMIT_EXCEEDED) can authorize a launch."""
+        h = self._mock_available_a1_launch()
+        def cap(state):
+            return SimpleNamespace(data=SimpleNamespace(shape_availabilities=[
+                SimpleNamespace(instance_shape=mod.A1, availability_status=state)]))
+        h["compute"].create_compute_capacity_report.side_effect = [
+            cap("OUT_OF_HOST_CAPACITY"), cap("LIMIT_EXCEEDED")]
+        with patch.dict(os.environ, {
+                "OCI_A1_AUTO_PROVISION": "1",
+                "OCI_A1_LAUNCH_GUARD": "ALWAYS_FREE_SINGLE_A1"}, clear=True), \
+             patch.object(mod, "auth", return_value=(
+                 {"tenancy": "tenancy"}, h["compute"], h["network"],
+                 h["block"], h["identity"])), \
+             patch.object(mod, "pages", side_effect=h["pages"][:2]), \
+             patch.object(mod, "approved_boot_access",
+                          return_value=(h["subnet"], h["ssh"],
+                                        "LOCKED_PUBLIC")):
+            self.assertEqual(mod.main(), 0)
+        h["compute"].launch_instance.assert_not_called()
+        self.assertEqual(h["compute"].create_compute_capacity_report.call_count, 2)
+
+    def test_no_fallback_for_noncapacity_primary_errors(self):
+        h = self._mock_available_a1_launch()
+        h["compute"].create_compute_capacity_report.return_value.data.shape_availabilities = [
+            SimpleNamespace(instance_shape=mod.A1, availability_status="LIMIT_EXCEEDED")]
+        with patch.dict(os.environ, {}, clear=True), \
+             patch.object(mod, "auth", return_value=(
+                 {"tenancy": "tenancy"}, h["compute"], h["network"],
+                 h["block"], h["identity"])), \
+             patch.object(mod, "pages", side_effect=h["pages"][:2]), \
+             patch.object(mod, "approved_boot_access",
+                          return_value=(h["subnet"], h["ssh"],
+                                        "LOCKED_PUBLIC")):
+            self.assertEqual(mod.main(), 0)
+        h["compute"].create_compute_capacity_report.assert_called_once()
+        h["compute"].launch_instance.assert_not_called()
+
+    def test_reject_memory_below_four_gb_even_in_retry_token(self):
+        for gib in (1, 2, 3, 5, 12):
+            with self.subTest(memory_gb=gib):
+                with self.assertRaisesRegex(ValueError, "MEMORY_NOT_APPROVED"):
+                    mod.launch_retry_token("tenancy", "subnet", gib)
+
     def test_region_constant_is_home_approved(self):
         self.assertEqual(mod.REGION, "sa-saopaulo-1")
         self.assertEqual((mod.CPU, mod.MEMORY_GB, mod.BOOT_GB), (1, 6, 50))
