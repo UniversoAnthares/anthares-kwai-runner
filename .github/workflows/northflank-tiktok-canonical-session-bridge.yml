@@ -54,7 +54,7 @@ jobs:
               except Exception as ex:
                   print('NF_SESSION_BRIDGE_NETWORK='+type(ex).__name__+' path='+path,flush=True)
                   return 0,{}
-          EXPECTED='2026-11-12-browser-ffmpeg-session-v18'
+          EXPECTED='2026-11-12-browser-ffmpeg-session-v19'
           for wait in range(25):
               rc,revision=call('/interactive-browser/revision',timeout=15)
               if rc==200 and revision.get('revision')==EXPECTED:
