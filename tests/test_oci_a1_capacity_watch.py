@@ -294,9 +294,10 @@ class SafeDefaults(unittest.TestCase):
             instance_shape=mod.A1, availability_status="OUT_OF_HOST_CAPACITY")
         compute.create_compute_capacity_report.return_value.data.shape_availabilities = [shape]
         subnet = self._approved_subnet_fixture()
-        with patch.object(mod, "auth", return_value=(
+        with patch.dict(os.environ, {"OCI_A1_OBSERVE_EXISTING": "1"}), \
+             patch.object(mod, "auth", return_value=(
                 signer, compute, network, block, identity)), \
-             patch.object(mod, "pages", side_effect=[[region], [ad]]), \
+             patch.object(mod, "pages", side_effect=[[region], [ad], [], []]), \
              patch.object(mod, "approved_boot_access",
                           return_value=(subnet, "ssh-ed25519 AAAA_PUBLIC", "LOCKED_PUBLIC")
                           ) as preflight:
