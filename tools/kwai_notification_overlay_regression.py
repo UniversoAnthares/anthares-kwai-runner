@@ -26,6 +26,43 @@ try:
   assert tab.attrib.get('resource-id')==prefix+'.basis:id/id_home_bottom_tab_me'
   assert len(calls)==2
   print('KWAI_OPTIONAL_NOTIFICATION_'+account.upper()+'_PASS')
+ # Real secondary popup geometry was observed in the pre-publication UI dump.
+ # Whitelist only an exact three-ID optional promotion, then re-read the profile.
+ n.ACCOUNT='universoanthares'
+ promo=ET.fromstring('<hierarchy>'
+  '<node resource-id="com.kwai.video.basis:id/view_content" bounds="[80,532][997,1596]" />'
+  '<node resource-id="com.kwai.video:id/colored_button_bg" clickable="true" bounds="[216,1401][861,1533]" />'
+  '<node resource-id="com.kwai.video:id/close_button" clickable="true" enabled="true" bounds="[905,532][977,604]"/>'
+  '</hierarchy>')
+ secondary_profile=ET.fromstring('<hierarchy><node resource-id="com.kwai.video.basis:id/id_home_bottom_tab_me" clickable="true" enabled="true" bounds="[900,2100][1070,2300]"/></hierarchy>')
+ taps=[];reads=[]
+ def read_promo(serial,name):
+  reads.append(name)
+  return (promo if len(reads)==1 else secondary_profile),None
+ n.dump=read_promo;n.tap=lambda serial,node:taps.append(node.attrib.get('resource-id'))
+ _,tab,_=n.wait('simulated',n.RID_PROFILE,'promo-recovered',seconds=3)
+ assert taps==['com.kwai.video:id/close_button'],taps
+ assert tab.attrib.get('resource-id')=='com.kwai.video.basis:id/id_home_bottom_tab_me'
+ assert len(reads)==2
+ print('KWAI_SECONDARY_EXACT_PROMO_DISMISS_PASS')
+ # A similarly named security popup, incomplete IDs or disabled close fail closed.
+ for invalid in [
+  '<hierarchy><node resource-id="com.kwai.video:id/close_button" clickable="true" enabled="true" bounds="[905,532][977,604]"/></hierarchy>',
+  '<hierarchy><node resource-id="com.kwai.video.basis:id/view_content"/><node resource-id="com.kwai.video:id/colored_button_bg"/><node resource-id="com.kwai.video:id/close_button" clickable="false" enabled="true" bounds="[905,532][977,604]"/></hierarchy>',
+  '<hierarchy><node resource-id="com.kwai.video.basis:id/view_content"/><node resource-id="com.kwai.video:id/colored_button_bg"/><node resource-id="com.kwai.video:id/close_button" clickable="true" enabled="false" bounds="[905,532][977,604]"/></hierarchy>',
+ ]:
+  bad=ET.fromstring(invalid)
+  taps=[];reads=[]
+  def read_invalid(serial,name):
+   reads.append(name)
+   if len(reads)==1:return bad,None
+   raise n.E('UNKNOWN_PROMPT_PRESERVED')
+  n.dump=read_invalid;n.tap=lambda serial,node:taps.append(node)
+  try:n.wait('simulated',n.RID_PROFILE,'invalid-promo',seconds=3)
+  except n.E as exc:assert 'UNKNOWN_PROMPT_PRESERVED' in str(exc)
+  else:raise AssertionError('Untrusted popup accepted')
+  assert not taps
+ print('KWAI_SECONDARY_PROMO_INVALID_NO_TAP_PASS')
  # A guessed/wrong notification title may never authorize an arbitrary close.
  n.ACCOUNT='universoanthares';wrong=ET.fromstring(
   '<hierarchy><node resource-id="com.kwai.video.basis:id/tv_dialog_title" text="Security approval required"/>'
