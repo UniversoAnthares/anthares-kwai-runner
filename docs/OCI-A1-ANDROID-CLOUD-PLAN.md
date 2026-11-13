@@ -51,6 +51,19 @@ O PR #2490 permanece como proteção histórica de rede privada sem NAT. Foi enc
 - A escolha reduz dependências para a futura VM; ainda são necessários capacidade A1 na região, autenticação Actions e bootstrap Linux/Android em uma instância realmente provisionada.
 - A regra SSH com /32 precisa ser reconfirmada no instante da alocação automática. O monitor realiza essa conferência antes de qualquer tentativa de lançar a VM. Se a origem administrativa autorizada mudar, deverá ser reconciliada pelo titular, sem abertura indiscriminada do firewall.
 
+
+### Bootstrap automático do Android na primeira inicialização (13/11/2026)
+
+- O watcher anexa ao campo OCI `user_data` (Base64) o contrato `infra/oci-android/redroid-firstboot.cloud-config.yml`. Apenas metadados públicos de inicialização são transmitidos; **nenhum token Kwai, MacroDroid, OAuth ou chave OCI**.
+- No Ubuntu 24.04 ARM64 da futura VM A1, o cloud-init instala Docker, tenta carregar `binder_linux` e valida a existência de `/dev/binder`, `/dev/hwbinder` e `/dev/vndbinder`. Se o kernel da imagem Oracle não fornecer esses dispositivos, interrompe explicitamente a instalação sem promover a VM a reserva Android.
+- Após os requisitos do kernel, baixa a imagem oficial ARM64 `redroid/redroid:12.0.0_64only-240527`, cria um único container `anthares-redroid` com persistência em `/var/lib/anthares-redroid/android-data` e `--restart unless-stopped`.
+- **Segurança de ADB:** encaminha a porta apenas para `127.0.0.1:5555`, mantendo-a inacessível pela internet mesmo com IP público efêmero. A security list já permite somente SSH TCP/22 de IPv4 /32. Acesso administrativo futuro deve usar túnel SSH restrito.
+- O script é idempotente: se o container já existe, encerra sem recriá-lo. Uma falha de kernel, Docker ou container deixa prova local em `/var/log/anthares-redroid-firstboot.log`, sem alterar o publicador atual.
+- **Validação concluída:** sintaxe YAML com PyYAML `PASS`; codificação Base64 do `user_data` `PASS`; Bash `-n` `PASS`; **15 testes do monitor `PASS`**, incluindo recusa de bootstrap com ADB público ou cabeçalho ausente.
+- **Ainda pendente:** A1 com capacidade real disponível, segredo/variáveis do GitHub Actions configurados, primeira execução cloud hospedada, confirmação de `cloud-init` no Linux, instalação/autenticação de MacroDroid e Kwai na VM, e prova de failover e publicação com leases Neon. Nenhuma VM foi provisionada nesta etapa.
+
+Fontes: [reDroid arm64 e imagens](https://hub.docker.com/r/redroid/redroid), [documentação de instalação](https://github.com/remote-android/redroid-doc/blob/master/deploy/ubuntu.md), [binder kernel modules](https://github.com/remote-android/redroid-modules).
+
 ## 2. MacroDroid Android físico — consultas independentes
 
 - A API Neon existente já reconhece `kwai-mobile-primary` via credencial própria do aparelho `M2004J19C`; o contrato `kwai-physical-stats` é de leitura. O controle da fila, pacing até 23h, geração de leases, dedupe e estados `STARTED/UNCERTAIN` permanecem em Neon.
