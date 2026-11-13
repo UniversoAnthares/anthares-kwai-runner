@@ -44,10 +44,14 @@ async function ensureStarted(env){
 async function shot(env){const d=await nf(env,"/interactive-browser/screenshot");return d.ok?d:null;}
 function normalizeState(input){if(!input||typeof input!=="object")throw new Error("invalid_state");const cookies=(Array.isArray(input.cookies)?input.cookies:[]).filter(c=>c&&c.name&&typeof c.value==="string"&&String(c.domain||"").toLowerCase().includes("tiktok.com")).slice(0,256);if(!cookies.length)throw new Error("no_tiktok_cookies");const origins=Array.isArray(input.origins)?input.origins.slice(0,16):[];return {schema:"anthares.tiktok-browser-state.v1",cookies,origins,saved_at:new Date().toISOString()};}
 
-function browserPage(message="",screen=null,verify=null){
-  const img=screen?.image_b64?`<form method="post" action="/owner/tiktok/click"><p><strong>Clique diretamente na imagem para interagir.</strong></p><input type="image" name="shot" src="data:${esc(screen.mime||"image/jpeg")};base64,${screen.image_b64}" width="1365" height="768" alt="TikTok remoto"></form>`:"<p>Nenhuma imagem disponível. Inicie a sessão.</p>";
+function browserPage(message="",screen=null,verify=null,drag=null){
+  const dragging=drag?.phase==="start"||drag?.phase==="end";
+  const action=drag?.phase==="start"?"/owner/tiktok/drag-start":drag?.phase==="end"?"/owner/tiktok/drag-end":"/owner/tiktok/click";
+  const prompt=drag?.phase==="start"?"Arrastar: clique no ponto inicial do controle remoto.":drag?.phase==="end"?"Arrastar: clique no ponto final. O movimento será transmitido pelo navegador remoto.":"Clique diretamente na imagem para interagir.";
+  const inputs=drag?.phase==="end"?`<input type="hidden" name="x1" value="${esc(drag.x1)}"><input type="hidden" name="y1" value="${esc(drag.y1)}">`:"";
+  const img=screen?.image_b64?`<form method="post" action="${action}"><p><strong>${esc(prompt)}</strong></p>${inputs}<input type="image" name="shot" src="data:${esc(screen.mime||"image/jpeg")};base64,${screen.image_b64}" width="1365" height="768" alt="TikTok remoto"></form>`:"<p>Nenhuma imagem disponível. Inicie a sessão.</p>";
   const proof=verify?`<pre>${esc(JSON.stringify(verify,null,2))}</pre>`:"";
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Anthares Browser · TikTok</title><style>body{font-family:system-ui;max-width:1500px;margin:24px auto;padding:0 18px}form{margin:8px 0}button,input{font:inherit;padding:6px}pre{white-space:pre-wrap;background:#f4f4f4;padding:12px}input[type=image]{padding:0;border:1px solid #bbb;max-width:none}</style></head><body><h1>Anthares Browser · TikTok</h1><p>Executor: <b>Northflank Chromium</b>. Cloudflare Browser Run: <b>não utilizado</b>.</p>${message?`<p><strong>${esc(message)}</strong></p>`:""}<p>${screen?.url?`URL: ${esc(screen.url)}`:""}</p>${img}<form method="post" action="/owner/tiktok/screen"><button>Atualizar imagem</button></form><form method="post" action="/owner/tiktok/type"><input name="text" type="text" autocomplete="off" placeholder="Texto / usuário / código" size="46" required> <button>Digitar</button></form><form method="post" action="/owner/tiktok/type"><input name="text" type="password" autocomplete="off" placeholder="Senha" size="46" required> <button>Digitar senha</button></form><form method="post" action="/owner/tiktok/key"><button name="key" value="Enter">Enter</button> <button name="key" value="Tab">Tab</button> <button name="key" value="Escape">Esc</button> <button name="key" value="Backspace">Backspace</button></form><form method="post" action="/owner/tiktok/navigate"><button name="url" value="https://www.tiktok.com/login">Login</button> <button name="url" value="https://www.tiktok.com/@universo.anthares">Perfil @universo.anthares</button> <button name="url" value="https://www.tiktok.com/tiktokstudio">TikTok Studio</button></form><form method="post" action="/owner/tiktok/verify"><button>Verificar conta e Studio</button></form><form method="post" action="/owner/tiktok/save"><button>Salvar autenticação e encerrar</button></form>${proof}<p><a href="/owner">Voltar</a></p></body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Anthares Browser · TikTok</title><style>body{font-family:system-ui;max-width:1500px;margin:24px auto;padding:0 18px}form{margin:8px 0}button,input{font:inherit;padding:6px}pre{white-space:pre-wrap;background:#f4f4f4;padding:12px}input[type=image]{padding:0;border:1px solid #bbb;max-width:none}</style></head><body><h1>Anthares Browser · TikTok</h1><p>Executor: <b>Northflank Chromium</b>. Cloudflare Browser Run: <b>não utilizado</b>.</p>${message?`<p><strong>${esc(message)}</strong></p>`:""}<p>${screen?.url?`URL: ${esc(screen.url)}`:""}</p>${img}<form method="post" action="/owner/tiktok/screen"><button>Atualizar imagem</button></form><form method="post" action="/owner/tiktok/drag-mode"><button>Arrastar na imagem (selecionar início e fim)</button></form><form method="post" action="/owner/tiktok/type"><input name="text" type="text" autocomplete="off" placeholder="Texto / usuário / código" size="46" required> <button>Digitar</button></form><form method="post" action="/owner/tiktok/type"><input name="text" type="password" autocomplete="off" placeholder="Senha" size="46" required> <button>Digitar senha</button></form><form method="post" action="/owner/tiktok/key"><button name="key" value="Enter">Enter</button> <button name="key" value="Tab">Tab</button> <button name="key" value="Escape">Esc</button> <button name="key" value="Backspace">Backspace</button></form><form method="post" action="/owner/tiktok/navigate"><button name="url" value="https://www.tiktok.com/login">Login</button> <button name="url" value="https://www.tiktok.com/@universo.anthares">Perfil @universo.anthares</button> <button name="url" value="https://www.tiktok.com/tiktokstudio">TikTok Studio</button></form><form method="post" action="/owner/tiktok/verify"><button>Verificar conta e Studio</button></form><form method="post" action="/owner/tiktok/save"><button>Salvar autenticação e encerrar</button></form>${proof}<p><a href="/owner">Voltar</a></p></body></html>`;
 }
 
 async function verifySession(env){
@@ -78,6 +82,26 @@ export default {
     }
     if(url.pathname==="/owner/tiktok/click"&&request.method==="POST"){
       const f=await request.formData();const x=Number(f.get("shot.x"));const y=Number(f.get("shot.y"));const r=await nf(env,"/interactive-browser/click",{method:"POST",body:{x,y}});await new Promise(q=>setTimeout(q,450));return html(browserPage(r.ok?`Clique enviado (${Math.round(x)}, ${Math.round(y)}).`:`Falha: ${r.error}`,await shot(env)),r.ok?200:503);
+    }
+    if(url.pathname==="/owner/tiktok/drag-mode"&&request.method==="POST"){
+      const screen=await shot(env);
+      return html(browserPage("Selecione o ponto inicial com um clique na imagem.",screen,null,{phase:"start"}),screen?200:503);
+    }
+    if(url.pathname==="/owner/tiktok/drag-start"&&request.method==="POST"){
+      const f=await request.formData();const x1=Number(f.get("shot.x"));const y1=Number(f.get("shot.y"));
+      if(!Number.isFinite(x1)||!Number.isFinite(y1)||x1<0||x1>1365||y1<0||y1>768)return html(browserPage("Ponto inicial inválido."),400);
+      const screen=await shot(env);
+      return html(browserPage("Ponto inicial escolhido. Clique no ponto final do arrasto.",screen,null,{phase:"end",x1,y1}),screen?200:503);
+    }
+    if(url.pathname==="/owner/tiktok/drag-end"&&request.method==="POST"){
+      const f=await request.formData();
+      const x1=Number(f.get("x1")),y1=Number(f.get("y1")),x2=Number(f.get("shot.x")),y2=Number(f.get("shot.y"));
+      const valid=[x1,y1,x2,y2].every(Number.isFinite)&&x1>=0&&x1<=1365&&x2>=0&&x2<=1365&&y1>=0&&y1<=768&&y2>=0&&y2<=768;
+      if(!valid)return html(browserPage("Pontos do arrasto inválidos."),400);
+      const r=await nf(env,"/interactive-browser/drag",{method:"POST",body:{x1,y1,x2,y2}});
+      await new Promise(q=>setTimeout(q,600));
+      const screen=await shot(env);
+      return html(browserPage(r.ok?"Arrasto enviado. Atualize a imagem para conferir o resultado.":`Falha no arrasto: ${r.error||"desconhecida"}`,screen),r.ok?200:503);
     }
     if(url.pathname==="/owner/tiktok/type"&&request.method==="POST"){
       const f=await request.formData();const text=String(f.get("text")||"");const r=await nf(env,"/interactive-browser/type",{method:"POST",body:{text}});return html(browserPage(r.ok?"Texto enviado.":`Falha: ${r.error}`,await shot(env)),r.ok?200:503);
