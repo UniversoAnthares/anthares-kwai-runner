@@ -1,0 +1,75 @@
+name: One-time TikTok Studio DOM read-only diagnostic
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/tiktok-studio-ui-diagnostic-once.yml']
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      NF_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+    steps:
+      - name: Install Northflank client
+        run: npm install --no-save --no-package-lock --ignore-scripts @northflank/js-client@0.12.0
+      - name: Inspect current TikTok Studio DOM only
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {ApiClient,ApiClientInMemoryContextProvider} from '@northflank/js-client';
+          const token=process.env.NF_TOKEN;
+          if(!token||token.length<20)throw Error('NO_NF_ACCESS');
+          const api=async(path)=>{
+            const r=await fetch('https://api.northflank.com/v1'+path,{headers:{Authorization:'Bearer '+token}});
+            if(!r.ok)throw Error('NF_HTTP_'+r.status);
+            return r.json();
+          };
+          const projects=(await api('/projects')).data?.projects||[];
+          const found=[];
+          for(const p of projects){
+            const services=(await api('/projects/'+encodeURIComponent(p.id)+'/services')).data?.services||[];
+            for(const svc of services)if(svc.name==='anthares-tiktok-northflank')found.push([p.id,svc.id||svc.name]);
+          }
+          if(found.length!==1)throw Error('NF_TARGET_UNVERIFIED');
+          const ctx=new ApiClientInMemoryContextProvider();
+          await ctx.addContext({name:'readonly',token});
+          const client=new ApiClient(ctx);
+          const py=String.raw`
+import sys,json
+sys.path.insert(0,"/app/render-tiktok-worker")
+from browser_executor import _cdp
+expr = """(()=>{
+ const body=(document.body?.innerText||"").toLowerCase();
+ const nav=[...document.querySelectorAll('button,a,[role=button]')].map(e=>(e.innerText||e.getAttribute('aria-label')||"").trim().toLowerCase()).filter(Boolean).slice(0,150);
+ return {
+   pathname:location.pathname,
+   host:location.hostname,
+   title_present:!!document.title,
+   ready_state:document.readyState,
+   visible_text_length:body.length,
+   studio_title_visible:body.includes('tiktok studio'),
+   upload_control:nav.some(s=>/upload|carregar|enviar vídeo|postar vídeo/.test(s)),
+   analytics_control:nav.some(s=>/analytics|análises|estatísticas/.test(s)),
+   management_control:nav.some(s=>/manage|gerenciar|conteúdo|content/.test(s)),
+   login_prompt:!!document.querySelector('input[type=password]')||/log in|fazer login|sign in|entrar na conta/.test(body),
+   error_visible:/something went wrong|something isn't working|try again later|access denied|error occurred|ocorreu um erro|não foi possível|tente novamente/.test(body),
+   captchas_visible:/drag the slider|verify to continue|captcha|verificar sua identidade/.test(body),
+   page_shell_visible:!!document.querySelector('main,[role=main],#root,#app'),
+   upload_input_count:document.querySelectorAll('input[type=file]').length
+ };
+})()"""
+r=_cdp("Runtime.evaluate",{"expression":expr,"returnByValue":True})
+v=(r.get("result") or {}).get("value") or {}
+if not isinstance(v,dict):raise SystemExit("DOM_QUERY_FAILED")
+for key,val in v.items():print("STUDIO_DOM_"+str(key).upper()+"="+str(val)[:180])
+`;
+          const [projectId,serviceId]=found[0];
+          const result=await client.exec.execServiceCommand({projectId,serviceId},{command:['python3','-c',py]});
+          console.log('NF_DOM_EXIT_CODE='+String(result.commandResult?.exitCode));
+          console.log('NF_DOM_OUTPUT='+String(result.stdOut||'').slice(0,2300).replace(/[\r\n]+/g,' | '));
+          console.log('NF_DOM_STDERR='+String(result.stdErr||'').slice(0,180).replace(/[\r\n]+/g,' '));
+          if(result.commandResult?.exitCode!==0)throw Error('DOM_INSPECTION_FAILED');
+          NODE
