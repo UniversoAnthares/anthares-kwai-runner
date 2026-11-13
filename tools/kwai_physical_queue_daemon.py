@@ -588,10 +588,12 @@ def repair_wp_callbacks():
   notify_completed(row['job'],row['remote_id'])
 
 
-def mark_ack(jid):
+def mark_ack(jid,state='completed_acknowledged'):
+ if state not in ('completed_acknowledged','cancelled_acknowledged'):
+  raise ValueError('kwai_terminal_ack_invalid_state')
  try:d=json.loads(ACK.read_text(encoding='utf-8'))
  except Exception:d={}
- row=d.setdefault(jid,{});row['state']='completed_acknowledged';row['acknowledged_at']=int(time.time());ACK.parent.mkdir(parents=True,exist_ok=True);ACK.write_text(json.dumps(d,ensure_ascii=False,indent=2),encoding='utf-8')
+ row=d.setdefault(jid,{});row['state']=state;row['acknowledged_at']=int(time.time());ACK.parent.mkdir(parents=True,exist_ok=True);ACK.write_text(json.dumps(d,ensure_ascii=False,indent=2),encoding='utf-8')
 def preserve_pending_callback_job(job):
  """Retain only origin-callback fields for completion after delayed public proof."""
  jid=str(job['id'])
@@ -615,11 +617,39 @@ def complete_origin_callback(jid,row,proof):
  else:
   log('KWAI_CONFIRMED_ORIGIN_CALLBACK_CONTEXT_MISSING '+jid)
 
+def terminal_ack_decision(jid,local,remote):
+ """Accept only an authenticated Neon terminal receipt for this account/lease."""
+ if not isinstance(local,dict) or local.get('state') not in ('published_pending_ack','quarantined_uncertain'):
+  return None
+ if not isinstance(remote,dict) or remote.get('ok') is not True:
+  return None
+ try:local_gen=int(local.get('lease_generation') or 0);remote_gen=int(remote.get('lease_generation') or 0)
+ except (ValueError,TypeError):return None
+ if local_gen<1 or local_gen!=remote_gen or remote.get('id')!=jid or remote.get('target_key')!='kwai:'+EXPECTED_ACCOUNT:
+  return None
+ state=remote.get('terminal')
+ if state=='confirmed':return 'completed_acknowledged'
+ if state=='cancelled':return 'cancelled_acknowledged'
+ return None
+
+
 def repair_pending():
  try:d=json.loads(ACK.read_text(encoding='utf-8'))
  except Exception:return
  for jid,row in list(d.items()):
   if not isinstance(row,dict) or row.get('state') not in ('published_pending_ack','quarantined_uncertain'):continue
+  # Neon is authoritative. This ACK path only reads server state and updates
+  # the existing local receipt; it sends neither video nor SQL mutations.
+  try:
+   from cortes_neon_queue_client import call
+   receipt=call('terminal',{'id':jid,'lease_generation':int(row.get('lease_generation') or 0)})
+   decision=terminal_ack_decision(jid,row,receipt)
+   if decision:
+    mark_ack(jid,decision)
+    log('KWAI_LOCAL_ACK_TERMINAL_READ_VERIFIED '+jid+' state='+decision+' no_new_post=1')
+    continue
+  except Exception as exc:
+   log('KWAI_LOCAL_ACK_TERMINAL_READ_UNAVAILABLE '+jid+' error='+type(exc).__name__+' no_mutation=1')
   st=pubstate(jid)
   if st.get('state')!='verified':continue
   proofdir=ROOT/'.state'/'kwai-memu-evidence'/re.sub(r'[^A-Za-z0-9._-]+','_',jid)[-100:]
