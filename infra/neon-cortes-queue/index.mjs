@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import {kwaiPersistentCloudIdentity,localBlockedByCloudCutover} from './kwai-persistent-cloud-identity.mjs';
 import {deriveKwaiPacing,KWAI_PACING_VERSION} from './kwai-pacing-policy.mjs';
+import {validateOneoffKwaiPublicProof,ONEOFF_WORKFLOW,ONEOFF_RECONCILED_KIND} from './kwai-oneoff-public-reconcile.mjs';
 // Canonical CORTES ledger is Neon PostgreSQL. No local queue or Vercel dependency.
 // This function never publishes media and never accepts device-PC authentication.
 const AUD='https://anthares-remote-primary.vercel.app/api/cortes-queue';
@@ -89,6 +90,7 @@ async function identity(request){
   else if(PROBE_WORKFLOWS.has(wf))role='probe';
   else if(wf==='cortes-neon-ha-oidc-proof.yml'){role='probe';platform='linkedin';}
   else if(wf==='cortes-kwai-cloud-publisher.yml'){role='kwai-publisher';platform='kwai';}
+  else if(wf===ONEOFF_WORKFLOW){role='kwai-oneoff-reconciler';platform='kwai';}
   else if(wf==='cortes-linkedin-personal-cloud.yml'||wf==='cortes-linkedin-personal-fallback-cloud.yml'){
    // Two separate hosted execution paths share one Neon ledger, identity,
    // owner lease and quota. Neither path can replay an uncertain delivery.
@@ -703,6 +705,75 @@ async function kwaiPhysicalSourceFrameConfirm(target,owner,b,proof,remote){
 // Reconciled source-video confirmations also update the canonical CORTES origin.
 // Read the WordPress callback token ONLY inside Neon. Never return or log it.
 // Retried callbacks are idempotent; a failed callback never rolls back a real post.
+// Time-limited OIDC controller: exactly three public posts already verified
+// by independent public-feed, source MP4 and six-frame SIFT readback.
+async function kwaiOneoffPublicReconcile(body,actor){
+ if(actor?.role!=='kwai-oneoff-reconciler'||actor.workflow!==ONEOFF_WORKFLOW)
+  return{ok:false,error:'ONEOFF_OIDC_ROLE_REQUIRED'};
+ const p=validateOneoffKwaiPublicProof(body);
+ if(!p)return{ok:false,error:'ONEOFF_THREE_PUBLIC_PROOF_INVALID'};
+ const prior=await query(
+  "SELECT id,status,lease_owner,lease_until,lease_generation,publication_started_at,"+
+  "remote_id,media_sha256,payload->>'media_hash_kind' AS hash_kind,"+
+  "payload->>'video_url' AS source_url,confirmation_evidence "+
+  "FROM cortes_publications WHERE id=$1 AND target_key=$2 LIMIT 1",
+  [p.id,p.target]);
+ if(prior.length!==1)return{ok:false,error:'ONEOFF_JOB_MISSING'};
+ const row=prior[0],state=row.status;
+ let previous=row.confirmation_evidence;
+ if(typeof previous==='string'){try{previous=JSON.parse(previous);}catch{previous={};}}
+ if(state==='confirmed'&&row.remote_id===p.publicUrl&&
+    previous?.kind===ONEOFF_RECONCILED_KIND)
+   return{ok:true,already_reconciled:true,job:{id:p.id,status:'confirmed',remote_id:p.publicUrl}};
+ if(state!==p.initialStatus||row.remote_id!=null||
+    Number(row.lease_generation)!==p.generation||
+    row.media_sha256!==p.dispatch||row.hash_kind!=='dispatch_identity'||
+    row.source_url!==p.source||
+    Math.abs(new Date(row.publication_started_at).getTime()-p.started)>1000||
+    (row.lease_until!=null&&new Date(row.lease_until).getTime()>Date.now()))
+   return{ok:false,error:'ONEOFF_LEASE_SOURCE_OR_STATUS_CHANGED'};
+ if(state==='cancelled'&&
+    !(previous?.kind==='kwai_reconcile_then_disregard_v1'&&
+      previous?.no_retry===true&&previous?.disregard_reason==='scan_failed_bounded'))
+   return{ok:false,error:'ONEOFF_CANCEL_PROOF_MISMATCH'};
+ if(state==='uncertain'&&row.lease_owner!=null)
+   return{ok:false,error:'ONEOFF_UNCERTAIN_OWNER_BUSY'};
+ if(state==='started'&&row.lease_owner!=='physical_android:DESKTOP-FTDK0HP')
+   return{ok:false,error:'ONEOFF_STARTED_OWNER_MISMATCH'};
+ const evidence={
+   kind:ONEOFF_RECONCILED_KIND,account:p.account,job_id:p.id,
+   public_url:p.publicUrl,photo_id:p.publicUrl.split('/').at(-1),
+   source_video_url:p.source,media_sha256:p.dispatch,
+   media_hash_kind:'dispatch_identity',observed_source_file_sha256:p.sourceSha,
+   public_media_sha256:p.publicSha,public_post_timestamp_ms:p.posted,
+   original_started_ms:p.started,verified_by:'github_actions_oidc_exact_oneoff_public_sift',
+   source_best_inliers:p.scores,qualifying_distinct_frames:6,
+   media_match_kind:'sift_source_to_public_cdn_v1',
+   source_duration_seconds:p.duration,public_duration_seconds:p.duration,
+   public_author_verified:true,no_media_upload:true,no_retry:true,
+   prior_status:state,prior_evidence:state==='cancelled'?previous:null,
+   reconciled_at:new Date().toISOString()
+ };
+ // CAS executes as a single update; existing START counters stay unchanged.
+ const rows=await query(
+  "UPDATE cortes_publications p SET status='confirmed',remote_id=$4,"+
+  "confirmation_evidence=$5::jsonb,lease_owner=NULL,lease_until=NULL,updated_at=now() "+
+  "WHERE p.id=$1 AND p.target_key=$2 AND p.media_sha256=$3 "+
+  "AND p.status=$6 AND p.remote_id IS NULL AND p.lease_generation=$7 "+
+  "AND p.payload->>'video_url'=$9 "+
+  "AND abs(extract(epoch FROM (p.publication_started_at-to_timestamp($8/1000.0))))<1 "+
+  "AND (p.lease_until IS NULL OR p.lease_until<now()) "+
+  "AND (p.lease_owner IS NULL OR p.lease_owner='physical_android:DESKTOP-FTDK0HP') "+
+  "AND NOT EXISTS(SELECT 1 FROM cortes_publications d WHERE d.target_key=p.target_key "+
+  "AND d.id<>p.id AND d.status='confirmed' AND d.remote_id=$4) "+
+  "RETURNING p.id,p.target_key,p.status,p.remote_id",
+  [p.id,p.target,p.dispatch,p.publicUrl,JSON.stringify(evidence),
+   state,p.generation,p.started,p.source]);
+ if(rows.length!==1)return{ok:false,error:'ONEOFF_ATOMIC_RECONCILE_CONFLICT'};
+ const wp=await kwaiSyncReconciledWordpress(p.target,p.id);
+ return{ok:true,reconciled:true,job:rows[0],wp_callback:wp};
+}
+
 async function kwaiSyncReconciledWordpress(target,jobId=''){
  const account=target.split(':')[1];
  const id=String(jobId||'');
@@ -711,7 +782,7 @@ async function kwaiSyncReconciledWordpress(target,jobId=''){
  const rows=await query(
   "SELECT p.id,p.remote_id,p.payload FROM cortes_publications p "+
   "WHERE p.target_key=$1 AND p.status='confirmed' "+
-  "AND p.confirmation_evidence->>'kind'='kwai_authenticated_source_frames_reconciled_v1' "+
+  "AND p.confirmation_evidence->>'kind' IN ('kwai_authenticated_source_frames_reconciled_v1','kwai_three_public_sift_oidc_reconciled_v1') "+
   "AND coalesce(p.confirmation_evidence->>'wp_callback_state','')<>'completed' "+
   (id?"AND p.id=$2 ":"")+
   "ORDER BY p.updated_at ASC LIMIT 2",id?[target,id]:[target]);
@@ -765,7 +836,7 @@ async function kwaiSyncReconciledWordpress(target,jobId=''){
     "confirmation_evidence||jsonb_build_object('wp_callback_state','completed',"+
     "'wp_callback_verified_at',now(),'wp_callback_transport','neon-cortesqueue') "+
     "WHERE id=$1 AND target_key=$2 AND status='confirmed' AND remote_id=$3 "+
-    "AND confirmation_evidence->>'kind'='kwai_authenticated_source_frames_reconciled_v1' "+
+    "AND confirmation_evidence->>'kind' IN ('kwai_authenticated_source_frames_reconciled_v1','kwai_three_public_sift_oidc_reconciled_v1') "+
     "RETURNING id",
     [row.id,target,remote]);
    succeeded=saved.length===1;
@@ -2650,6 +2721,12 @@ export default {async fetch(request){
   if(action.startsWith('personal-')){
    if(actor.role!=='personal')return answer({ok:false,error:'PERSONAL_WORKFLOW_ONLY'},403);
    const out=await personalAction(action.slice('personal-'.length),body);
+   return answer(out,out.ok?200:409);
+  }
+  if(action==='kwai-oneoff-confirm-public'){
+   if(actor.role!=='kwai-oneoff-reconciler'||actor.workflow!==ONEOFF_WORKFLOW)
+    return answer({ok:false,error:'ONEOFF_OIDC_ROLE_REQUIRED'},403);
+   const out=await kwaiOneoffPublicReconcile(body,actor);
    return answer(out,out.ok?200:409);
   }
   if(action.startsWith('kwai-')){
