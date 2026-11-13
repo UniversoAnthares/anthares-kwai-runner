@@ -106,6 +106,12 @@ def wait(s,r,name,seconds=30):
   # Both Kwai variants can display an optional notifications promotion over
   # the authenticated profile tab. Dismiss only its exact close control, never
   # the permission/enable button; preserve account and privacy settings.
+  # Preserve the previously installed, account-scoped creator-level popup guard.
+  if r==RID_PROFILE and ACCOUNT=='universoanthares':
+   level_owner=any(n.attrib.get('resource-id')=='com.kwai.video.basis_extension:id/create_user_text' and (n.attrib.get('text') or '').strip()=='Universo Anthares' for n in root.iter('node'))
+   level_close=[n for n in root.iter('node') if n.attrib.get('resource-id')=='com.kwai.video.basis_extension:id/create_cancel_button' and (n.attrib.get('text') or '').strip()=='Fechar' and n.attrib.get('clickable')=='true' and n.attrib.get('enabled')=='true' and center(n.attrib.get('bounds',''))]
+   if level_owner and len(level_close)==1:
+    tap(s,level_close[0]);out('KWAI_CREATOR_LEVEL_POPUP_DISMISSED=1');time.sleep(1);continue
   prefix='com.kwai.video' if ACCOUNT=='universoanthares' else 'kwai.lite.video'
   # Secondary Kwai may present the same optional promotional popup already
   # handled in kwai_up.py. Match all three exact controls before closing it.
