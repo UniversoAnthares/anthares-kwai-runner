@@ -100,25 +100,25 @@ jobs:
               (target[2].get('deployment') or {}).get('instances')!=1):
               raise SystemExit('NF_TIKTOK_TARGET_NOT_CANONICAL_SAFE_STOP')
           current=(target[2].get('billing') or {}).get('deploymentPlan')
-          if current not in ('nf-compute-10','nf-compute-50'):
+          if current not in ('nf-compute-10','nf-compute-20'):
               raise SystemExit('NF_UNKNOWN_INITIAL_PLAN_SAFE_STOP')
-          projected=12.0+2.70
+          projected=5.4+2.70
           if projected>20 or free_credit>0:
               raise SystemExit('NF_ACCOUNT_BASELINE_INCONSISTENT_SAFE_STOP')
           print('NF_SANDBOX_PROJECTED_MONTHLY_RESOURCE_DOLLARS='+str(projected),flush=True)
           print('NF_SANDBOX_MAX_RESOURCE_ALLOWANCE_DOLLARS=20',flush=True)
           target_path='/projects/'+target[0]+'/services/combined/'+target[1]
           if current=='nf-compute-10':
-              c,result=api(target_path,method='PATCH',body={'billing':{'deploymentPlan':'nf-compute-50'}},timeout=28)
+              c,result=api(target_path,method='PATCH',body={'billing':{'deploymentPlan':'nf-compute-20'}},timeout=28)
               print('NF_TIKTOK_COMPUTE_RESIZE_HTTP='+str(c),flush=True)
               if c not in (200,201,202):
                   raise SystemExit('NF_COMPUTE_PLAN_UPGRADE_REJECTED')
           else:
-              print('NF_TIKTOK_COMPUTE_ALREADY_1GB=1',flush=True)
+              print('NF_TIKTOK_COMPUTE_ALREADY_512MB=1',flush=True)
           for attempt in range(28):
               code,details=api('/projects/'+target[0]+'/services/'+target[1])
-              if code==200 and ((details.get('data') or {}).get('billing') or {}).get('deploymentPlan')=='nf-compute-50':
-                  print('NF_TIKTOK_COMPUTE_PLAN_1GB_VERIFIED=1',flush=True)
+              if code==200 and ((details.get('data') or {}).get('billing') or {}).get('deploymentPlan')=='nf-compute-20':
+                  print('NF_TIKTOK_COMPUTE_PLAN_512MB_VERIFIED=1',flush=True)
                   break
               time.sleep(5)
           else:raise SystemExit('NF_COMPUTE_RESIZE_UNVERIFIED')
