@@ -304,6 +304,103 @@ class SafeDefaults(unittest.TestCase):
             preflight.assert_called_once_with(network, "tenancy", signer)
             compute.launch_instance.assert_not_called()
 
+    def test_active_block_volume_sizes_are_accounted_strictly(self):
+        item = lambda state, size: SimpleNamespace(
+            lifecycle_state=state, size_in_gbs=size)
+        self.assertEqual(mod.occupied_block_volume_gib([
+            item("AVAILABLE", 40), item("PROVISIONING", 50),
+            item("TERMINATED", None)]), 90)
+        for invalid in (None, 0, -1, "bad"):
+            with self.subTest(size=invalid):
+                with self.assertRaises(ValueError):
+                    mod.occupied_block_volume_gib([
+                        item("AVAILABLE", invalid)])
+
+    def _mock_available_a1_launch(self, *, boot_gib=0,
+                                   capacity="AVAILABLE"):
+        from unittest.mock import Mock
+        compute, network, block, identity = Mock(), Mock(), Mock(), Mock()
+        shape = SimpleNamespace(
+            instance_shape=mod.A1, availability_status=capacity)
+        compute.create_compute_capacity_report.return_value.data.shape_availabilities = [shape]
+        compute.launch_instance.return_value.data.lifecycle_state = "PROVISIONING"
+        region = SimpleNamespace(region_name=mod.REGION, status="READY")
+        ad = SimpleNamespace(name="AD-1")
+        subnet = self._approved_subnet_fixture()
+        image = SimpleNamespace(
+            id="ocid1.image.oc1.sa-saopaulo-1.approved",
+            display_name="Canonical-Ubuntu-24.04-aarch64-2026.11.05-0",
+            lifecycle_state="AVAILABLE",
+            time_created="2026-11-05T00:00:00Z",
+        )
+        boot = [SimpleNamespace(lifecycle_state="AVAILABLE",
+                                size_in_gbs=boot_gib)] if boot_gib else []
+        returned = [[region], [ad], [], [], boot, [], [image]]
+        return {
+            "compute": compute,
+            "network": network,
+            "block": block,
+            "identity": identity,
+            "subnet": subnet,
+            "pages": returned,
+            "ssh": "ssh-ed25519 AAAATESTONLY",
+        }
+
+    def test_only_one_guarded_always_free_a1_vm_can_be_requested(self):
+        h = self._mock_available_a1_launch()
+        with patch.dict(os.environ, {
+                "OCI_A1_AUTO_PROVISION": "1",
+                "OCI_A1_LAUNCH_GUARD": "ALWAYS_FREE_SINGLE_A1"}, clear=True), \
+             patch.object(mod, "auth", return_value=(
+                 {"tenancy": "tenancy"}, h["compute"], h["network"],
+                 h["block"], h["identity"])), \
+             patch.object(mod, "pages", side_effect=h["pages"]), \
+             patch.object(mod, "approved_boot_access",
+                          return_value=(h["subnet"], h["ssh"],
+                                        "LOCKED_PUBLIC")):
+            self.assertEqual(mod.main(), 0)
+        h["compute"].launch_instance.assert_called_once()
+        args, kwargs = h["compute"].launch_instance.call_args
+        request = args[0]
+        self.assertEqual(request.shape, mod.A1)
+        self.assertEqual(request.shape_config.ocpus, 1)
+        self.assertEqual(request.shape_config.memory_in_gbs, 6)
+        self.assertEqual(request.source_details.boot_volume_size_in_gbs, 50)
+        self.assertEqual(request.metadata["ssh_authorized_keys"], h["ssh"])
+        self.assertEqual(request.create_vnic_details.assign_public_ip, True)
+        self.assertEqual(kwargs["opc_retry_token"], mod.launch_retry_token(
+            "tenancy", h["subnet"].id))
+
+    def test_volume_over_free_limit_prevents_vm_launch(self):
+        h = self._mock_available_a1_launch(boot_gib=160)
+        with patch.dict(os.environ, {
+                "OCI_A1_AUTO_PROVISION": "1",
+                "OCI_A1_LAUNCH_GUARD": "ALWAYS_FREE_SINGLE_A1"}, clear=True), \
+             patch.object(mod, "auth", return_value=(
+                 {"tenancy": "tenancy"}, h["compute"], h["network"],
+                 h["block"], h["identity"])), \
+             patch.object(mod, "pages", side_effect=h["pages"]), \
+             patch.object(mod, "approved_boot_access",
+                          return_value=(h["subnet"], h["ssh"],
+                                        "LOCKED_PUBLIC")):
+            self.assertEqual(mod.main(), 0)
+        h["compute"].launch_instance.assert_not_called()
+
+    def test_missing_launch_guard_prevents_vm_even_when_capacity_ready(self):
+        h = self._mock_available_a1_launch()
+        with patch.dict(os.environ, {
+                "OCI_A1_AUTO_PROVISION": "0",
+                "OCI_A1_LAUNCH_GUARD": "DISABLED_FOR_MONITORING"}, clear=True), \
+             patch.object(mod, "auth", return_value=(
+                 {"tenancy": "tenancy"}, h["compute"], h["network"],
+                 h["block"], h["identity"])), \
+             patch.object(mod, "pages", side_effect=h["pages"][:2]), \
+             patch.object(mod, "approved_boot_access",
+                          return_value=(h["subnet"], h["ssh"],
+                                        "LOCKED_PUBLIC")):
+            self.assertEqual(mod.main(), 0)
+        h["compute"].launch_instance.assert_not_called()
+
     def test_region_constant_is_home_approved(self):
         self.assertEqual(mod.REGION, "sa-saopaulo-1")
         self.assertEqual((mod.CPU, mod.MEMORY_GB, mod.BOOT_GB), (1, 6, 50))
