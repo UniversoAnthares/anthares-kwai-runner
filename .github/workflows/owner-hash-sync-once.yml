@@ -1,0 +1,33 @@
+name: One-time sync reserve owner approval hash
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/owner-hash-sync-once.yml']
+permissions:
+  contents: read
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Update only OWNER_APPROVAL_HASH
+        working-directory: anthares-reserva-browser
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          OWNER_HASH_SYNC: ${{ secrets.OWNER_HASH_SYNC }}
+        run: |
+          set -euo pipefail
+          test "${#OWNER_HASH_SYNC}" -eq 64
+          [[ "$OWNER_HASH_SYNC" =~ ^[0-9a-f]{64}$ ]]
+          echo "::add-mask::$OWNER_HASH_SYNC"
+          printf '%s' "$OWNER_HASH_SYNC" | npx --yes wrangler@4 secret put OWNER_APPROVAL_HASH
+          echo 'OWNER_HASH_UPDATED=1'
+      - name: Verify owner login endpoint available
+        run: |
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 https://anthares-reserva-browser.anthares1.workers.dev/owner)
+          test "$code" = 200
+          echo 'OWNER_ENDPOINT_OK=1'
