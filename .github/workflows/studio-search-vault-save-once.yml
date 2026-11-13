@@ -1,0 +1,58 @@
+name: One-time TikTok Studio search UI inspect and guarded vault save
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/studio-search-vault-save-once.yml']
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      NF_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+    steps:
+      - name: Install Northflank client
+        run: npm install --no-save --no-package-lock --ignore-scripts @northflank/js-client@0.12.0
+      - name: Inspect search field and invoke guarded save-vault in existing service
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {ApiClient,ApiClientInMemoryContextProvider} from '@northflank/js-client';
+          const token=process.env.NF_TOKEN,shared=process.env.ARA_SHARED;
+          if(!token||token.length<20||!shared||shared.length<20)throw Error('AUTH_MISSING');
+          const get=async p=>{const r=await fetch('https://api.northflank.com/v1'+p,{headers:{Authorization:'Bearer '+token}});if(!r.ok)throw Error('NF_'+r.status);return r.json()};
+          const found=[];for(const p of (await get('/projects')).data?.projects||[])for(const s of (await get('/projects/'+encodeURIComponent(p.id)+'/services')).data?.services||[])if(s.name==='anthares-tiktok-northflank')found.push([p.id,s.id||s.name]);
+          if(found.length!==1)throw Error('SERVICE_NOT_UNIQUE');
+          const [projectId,serviceId]=found[0],ctx=new ApiClientInMemoryContextProvider();await ctx.addContext({name:'safe',token});const cli=new ApiClient(ctx);
+          const code=String.raw`
+          import sys,json
+          sys.path.insert(0,"/app/render-tiktok-worker")
+          from browser_executor import _cdp
+          expr=r"""(()=>{
+           const el=document.querySelector('input[placeholder*="Search for post description"]');
+           if(!el)return {exists:false};
+           const parent=el.closest('form')||el.parentElement?.parentElement?.parentElement;
+           return {exists:true,outer:el.outerHTML.slice(0,800),parent:parent?.outerHTML.slice(0,5000)||'',filterText:el.value,
+           buttonsNear:[...(parent?.querySelectorAll('button')||[])].map(b=>({text:b.innerText,aria:b.getAttribute('aria-label'),outer:b.outerHTML.slice(0,450)})),route:location.pathname};
+          })()"""
+          v=_cdp("Runtime.evaluate",{"expression":expr,"returnByValue":True},timeout=17)
+          d=(v.get("result") or {}).get("value") or {}
+          for k,x in d.items():
+           print("SEARCH_CONTROL_"+str(k).upper()+"="+json.dumps(x,ensure_ascii=False)[:5100],flush=True)
+          `;
+          const obj=await cli.exec.execServiceCommand({projectId,serviceId},{command:['python3','-c',code]});
+          console.log('SEARCH_CONTROL_EXIT='+String(obj.commandResult?.exitCode));
+          console.log('SEARCH_CONTROL_DETAILS='+String(obj.stdOut||'').replace(/[\r\n]+/g,' | ').slice(0,9000));
+          if(obj.commandResult?.exitCode!==0)throw Error('SEARCH_CONTROL_INSPECTION_FAILED');
+          const url='https://http--anthares-tiktok-northflank--6f6pbqmvhpv6.code.run';
+          const r=await fetch(url+'/interactive-browser/save-vault',{method:'POST',headers:{Authorization:'Bearer '+shared,Accept:'application/json','Content-Type':'application/json'},body:'{}',signal:AbortSignal.timeout(45000)});
+          const result=await r.json().catch(()=>({}));
+          console.log('VAULT_SAVE_HTTP='+r.status);
+          console.log('VAULT_SAVE_PERSISTED='+Boolean(result.persisted));
+          console.log('VAULT_SAVE_COOKIE_COUNT='+Number(result.cookie_count||0));
+          console.log('VAULT_SAVE_ERROR_CODE='+String(result.error||'').slice(0,70));
+          
+          NODE
