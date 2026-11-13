@@ -79,5 +79,17 @@ jobs:
           console.log('PROFILE_LOGIN_GATE='+Boolean(p.login_gate));
           console.log('PROFILE_ACCOUNT_MARKER='+Boolean(p.account_marker));
           console.log('PROFILE_PATH_EXPECTED='+String(p.path||'').startsWith('/@universo.anthares'));
+          let latest=p;
+          for(let attempt=0;attempt<6 && !latest.account_marker;attempt++){
+            await new Promise(resolve=>setTimeout(resolve,5000));
+            const next=await api('GET','/interactive-browser/tiktok-evidence');
+            if(next.code===200&&next.data.ok)latest=next.data.evidence||{};
+          }
+          console.log('PROFILE_ACCOUNT_MARKER_AFTER_HYDRATION='+Boolean(latest.account_marker));
+          console.log('PROFILE_LOGIN_GATE_AFTER_HYDRATION='+Boolean(latest.login_gate));
+          const py="import sys;sys.path.insert(0,'/app/render-tiktok-worker');from browser_executor import _cdp;r=_cdp('Runtime.evaluate',{'expression':'(()=>{const b=document.body?.innerText||\\\"\\\";return {edit:b.includes(\\\"Edit profile\\\")||b.includes(\\\"Editar perfil\\\"),upload:b.includes(\\\"Upload\\\")||b.includes(\\\"Carregar\\\")};})()','returnByValue':True});v=(r.get('result') or {}).get('value') or {};print('OWNER_EDIT_VISIBLE='+str(bool(v.get('edit'))));print('OWNER_UPLOAD_VISIBLE='+str(bool(v.get('upload'))))";
+          const own=await client.exec.execServiceCommand({projectId,serviceId},{command:['python3','-c',py]});
+          console.log('OWNER_INSPECT_EXIT='+String(own.commandResult?.exitCode));
+          console.log('OWNER_INSPECT_OUTPUT='+String(own.stdOut||'').trim().replace(/[\\r\\n]+/g,' | ').slice(0,330));
           console.log('SESSION_LEFT_OPEN=1');
           NODE
