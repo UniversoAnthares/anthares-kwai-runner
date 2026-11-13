@@ -20,6 +20,7 @@ NAME = "anthares-android-redroid-free"
 REGION = "sa-saopaulo-1"
 CPU, MEMORY_GB, BOOT_GB = 1, 6, 50
 REDROID_ARM64_IMAGE = "redroid/redroid@sha256:3c7f9450188226bf8042c0159b9b38abe2106f1ceb0dfa45fae1cbc6409cd9bb"
+REDROID_AMD64_IMAGE = "redroid/redroid@sha256:e6f799d56b9a9a2bbc6224b5b7a6dc744c9b4d878ac856f27f0c4ec793ef55d3"
 
 
 def report(key, value):
@@ -159,7 +160,9 @@ def redroid_cloud_init_data():
             b"127.0.0.1:5555:5555" not in data or
             b"0.0.0.0:5555" in data or
             b"--privileged" not in data or
-            REDROID_ARM64_IMAGE.encode("ascii") not in data):
+            REDROID_ARM64_IMAGE.encode("ascii") not in data or
+            REDROID_AMD64_IMAGE.encode("ascii") not in data or
+            b'--platform "$PLATFORM"' not in data):
         raise ValueError("UNSAFE_OR_MISSING_REDR0ID_BOOTSTRAP")
     return base64.b64encode(data).decode("ascii")
 
