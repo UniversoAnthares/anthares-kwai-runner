@@ -355,6 +355,7 @@ class SafeDefaults(unittest.TestCase):
                  {"tenancy": "tenancy"}, h["compute"], h["network"],
                  h["block"], h["identity"])), \
              patch.object(mod, "pages", side_effect=h["pages"]), \
+             patch.object(mod, "redroid_cloud_init_data", return_value="dGVzdA=="), \
              patch.object(mod, "approved_boot_access",
                           return_value=(h["subnet"], h["ssh"],
                                         "LOCKED_PUBLIC")):
