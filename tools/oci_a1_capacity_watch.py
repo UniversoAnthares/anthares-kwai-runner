@@ -127,7 +127,7 @@ def main():
         return 0
 
     images = pages(compute.list_images, compartment_id=tenancy,
-                   operating_system="Canonical Ubuntu", shape=A1)
+                   operating_system="Canonical Ubuntu")
     images = [x for x in images if "Ubuntu-24.04" in x.display_name
               and "aarch64" in x.display_name
               and "Minimal" not in x.display_name
