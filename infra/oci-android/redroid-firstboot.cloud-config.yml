@@ -27,7 +27,7 @@ write_files:
       esac
       export DEBIAN_FRONTEND=noninteractive
       apt-get update -qq
-      apt-get install -y --no-install-recommends ca-certificates docker.io kmod
+      apt-get install -y --no-install-recommends ca-certificates docker.io kmod adb
       if ! modprobe binder_linux devices=binder,hwbinder,vndbinder; then
         echo 'ANTHARES_REDR0ID_BINDER_MODULE_LOAD_FAILED'
         apt-get install -y --no-install-recommends "linux-modules-extra-$(uname -r)" || exit 72
@@ -60,6 +60,64 @@ write_files:
       sleep 10
       [ "$(docker inspect -f '{{.State.Running}}' anthares-redroid)" = 'true' ] || exit 75
       echo 'ANTHARES_REDR0ID_CONTAINER_RUNNING_LOCALHOST_ONLY'
+  # Local-only, credentials-free Android readiness probe. Runs on first boot
+  # and later from a systemd timer; success requires Android boot completed.
+  - path: /usr/local/sbin/anthares-redroid-readiness-check
+    owner: root:root
+    permissions: '0700'
+    content: |
+      #!/usr/bin/env bash
+      set -Eeuo pipefail
+      umask 077
+      install -d -m 0700 /var/lib/anthares-redroid
+      STATE=/var/lib/anthares-redroid/readiness-state
+      printf '%s\n' 'NOT_READY' > "$STATE"
+      if [ "$(docker inspect -f '{{.State.Running}}' anthares-redroid 2>/dev/null || true)" != 'true' ]; then
+        echo 'ANTHARES_REDR0ID_HEALTH_CONTAINER_NOT_RUNNING'
+        exit 81
+      fi
+      PORT="$(docker port anthares-redroid 5555/tcp 2>/dev/null || true)"
+      if [ "$PORT" != "127.0.0.1:5555" ]; then
+        echo 'ANTHARES_REDR0ID_HEALTH_ADB_BIND_INVALID'
+        exit 82
+      fi
+      # Bounded to ~7 minutes; never expose ADB beyond localhost.
+      for attempt in $(seq 1 30); do
+        timeout 8 adb connect 127.0.0.1:5555 >/dev/null 2>&1 || true
+        RESULT="$(timeout 8 adb -s 127.0.0.1:5555 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r\n' || true)"
+        if [ "$RESULT" = '1' ]; then
+          printf '%s\n' 'ANDROID_BOOT_READY_ADB_LOCAL' > "$STATE"
+          echo 'ANTHARES_REDR0ID_HEALTH_ANDROID_BOOT_READY'
+          exit 0
+        fi
+        sleep 5
+      done
+      echo 'ANTHARES_REDR0ID_HEALTH_ANDROID_NOT_READY'
+      exit 83
+  - path: /etc/systemd/system/anthares-redroid-health.service
+    owner: root:root
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Anthares ReDroid Android boot and local ADB readiness check
+      After=docker.service
+      Wants=docker.service
+      [Service]
+      Type=oneshot
+      TimeoutStartSec=8min
+      ExecStart=/usr/local/sbin/anthares-redroid-readiness-check
+  - path: /etc/systemd/system/anthares-redroid-health.timer
+    owner: root:root
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Anthares ReDroid local readiness recheck after reboot
+      [Timer]
+      OnBootSec=10min
+      OnUnitInactiveSec=15min
+      Unit=anthares-redroid-health.service
+      [Install]
+      WantedBy=timers.target
   # Persist binder module selection across host reboot, before Docker starts.
   - path: /etc/modules-load.d/anthares-redroid.conf
     owner: root:root
@@ -73,4 +131,7 @@ write_files:
       options binder_linux devices=binder,hwbinder,vndbinder
 runcmd:
   - [ bash, /usr/local/sbin/anthares-redroid-firstboot ]
-final_message: 'Anthares first-boot completed; check /var/log/anthares-redroid-firstboot.log. ReDroid is not proof of authenticated Kwai or MacroDroid.'
+  - [ systemctl, daemon-reload ]
+  - [ systemctl, enable, --now, anthares-redroid-health.timer ]
+  - [ systemctl, start, anthares-redroid-health.service ]
+final_message: 'Anthares first-boot attempted; inspect /var/log/anthares-redroid-firstboot.log and /var/lib/anthares-redroid/readiness-state. Android readiness is not Kwai/MacroDroid authentication.'
