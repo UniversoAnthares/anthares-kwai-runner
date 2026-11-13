@@ -40,7 +40,8 @@ class KwaiRoutePolicyTests(unittest.TestCase):
                 self.assertNotIn("schedule:", src)
                 self.assertNotIn("cron:", src)
                 self.assertNotIn("OCI_A1_WATCH_AUTH_JSON", src)
-                self.assertNotIn("oci_a1_capacity_watch.py", src)
+                self.assertNotIn("python tools/oci_a1_capacity_watch.py", src)
+                self.assertNotIn("OCI_A1_AUTO_PROVISION", src)
                 self.assertNotIn("launch_instance", src)
                 self.assertIn("OCI_A1_MONITOR=DISABLED_BY_OWNER", src)
 
