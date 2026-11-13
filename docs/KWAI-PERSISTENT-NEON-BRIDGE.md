@@ -21,6 +21,14 @@ O serviço Neon autorizava o publicador primário do GitHub por token OIDC trans
 
 **Estado atualizado em 13/11/2026:** o código atualizado das duas rotas foi implantado na função Neon `cortesqueue`, branch `br-crimson-unit-b89nau08`, deployment de produção **#74 (completed/active)**. O deployment **#8** da branch QA `br-silent-mud-b8fzvqta` também foi concluído e respondeu `ok=true`, `database_ok=true`. A identidade `kwai-persistent-cloud` continua bloqueada por flag/token desativados; nenhum token remoto foi criado, nenhum ReDroid ou postagem de teste foi ativado. Próximas pendências: obter executor real gratuito autorizado, autenticar duas contas, provas independentes e cutover explícito. A implantação do código NÃO equivale à ativação do publicador.
 
+## Atualização operacional — 13/11/2026 após reconciliação
+
+- As três publicações anteriormente em `uncertain`, `started` e `cancelled` foram comprovadas por seis quadros SIFT cada, reconciliadas como `confirmed` no Neon e reconhecidas como `completed` pelo WordPress; resta **0** tarefa `started` ou `uncertain` nas duas contas. Provas: [run #43516677494](https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/43516677494) e `test-hub/findings/20261113-kwai-three-posts-confirmed-oneoff-revoked-neon76.md`.
+- A autorização temporária do workflow OIDC foi revogada no PR #2590 e implantada em Neon `cortesqueue` **produção #76 (completed/active)** e **QA #10 (completed/active)**. Identidade cloud ReDroid permanece desativada até servidor real e provas específicas.
+- A função de produção está localizada no projeto Neon `anthares-ara-ha` `purple-flower-35918989`, branch `br-crimson-unit-b89nau08`. O antigo diagnóstico de falta de acesso está obsoleto.
+- **RLS continua pendente:** `cortes_publications` tem `relrowsecurity=false`, `pg_policies=[]`; a função utiliza `DATABASE_URL` com papel administrativo e o health declara `UNPROVEN_SQL_ROLE_AND_RLS_SCOPE`. A migração de função/credenciais/políticas exige segregação em QA antes de qualquer implantação de política SQL de produção.
+- Custo incremental R$0; Oracle, CutMotions, fornecedores pagos e novos pedidos dependentes de aprovação continuam descartados. Os publicadores atuais permanecem em operação, `cloud_cutover.enabled=false`.
+
 ## Pacote de implantação auditável
 
 O workflow `.github/workflows/kwai-neon-persistent-cloud-bundle.yml` compila `kwai-neon-function-bundle.zip` contendo `index.mjs`, `kwai-pacing-policy.mjs` e `kwai-persistent-cloud-identity.mjs` no mesmo diretório. Os imports relativos são preservados, com SHA-256 do arquivo e testes Node. O ZIP é artefato de GitHub Actions por sete dias. Essa etapa é somente build: não usa chave de produção, não modifica a Function e não autoriza dispositivo.
