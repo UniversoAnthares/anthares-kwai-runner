@@ -424,6 +424,7 @@ async function kwaiAction(action,b,actor){
  if(b.target_key!==KWAI_TARGET||b.expected_account!=='lucasrosalem')
   return{ok:false,error:'KWAI_ACCOUNT_IDENTITY_MISMATCH'};
  const owner=physical?'physical_android:DESKTOP-FTDK0HP':mobilePrimary?'mobile_android:M2004J19C:lucasrosalem':'kwai-cloud:'+actor.workflow;
+ if(action==='kwai-job-terminal-read')return kwaiTerminalAckRead(b,actor,KWAI_TARGET);
  if(action==='kwai-physical-stats'){
   if(!physical&&!mobilePrimary)return{ok:false,error:'KWAI_DEVICE_ONLY'};
   const rows=await query("SELECT status,count(*)::int AS n FROM cortes_publications WHERE target_key=$1 GROUP BY status",[KWAI_TARGET]);
@@ -976,6 +977,7 @@ async function kwaiSecondaryAction(action,b,actor){
       secondaryCloudIdentity))
   return{ok:false,error:'KWAI_SECONDARY_PUBLISHER_ONLY'};
  if(b.target_key!==KWAI_TARGET||b.expected_account!=='universoanthares')return{ok:false,error:'KWAI_SECONDARY_ACCOUNT_MISMATCH'};
+ if(action==='kwai-job-terminal-read')return kwaiTerminalAckRead(b,actor,KWAI_TARGET);
  if(action==='kwai-unproven')return kwaiUnprovenAction(b,actor,KWAI_TARGET);
  if(!['kwai-physical-stats','kwai-lease','kwai-renew','kwai-start','kwai-confirm','kwai-fail'].includes(action))return{ok:false,error:'KWAI_SECONDARY_UNSUPPORTED_ACTION'};
  if(action==='kwai-physical-repair-no-post'){
@@ -1479,6 +1481,37 @@ async function writeProbe(body){
 }
 // Production deadline gate for every Neon-backed account/destination. Cron and
 // redundant triggers wake workers; only the computed due time authorizes lease.
+// Authenticated terminal-state read for stale on-device ACKs: no SQL writes or lease.
+async function kwaiTerminalAckRead(b,actor,targetKey){
+ if(actor?.role!=='kwai-physical'||actor.workflow!=='physical:DESKTOP-FTDK0HP')
+   return {ok:false,error:'KWAI_TERMINAL_READ_PHYSICAL_ONLY'};
+ const id=String(b.id||''),gen=Number(b.lease_generation);
+ if(!/^kwai-cortes-[A-Za-z0-9_-]{10,180}$/.test(id)||
+    !Number.isSafeInteger(gen)||gen<1||gen>10000000)
+   return {ok:false,error:'KWAI_TERMINAL_READ_INVALID_ID_OR_GENERATION'};
+ const rows=await query(
+   "SELECT id,status,lease_generation,lease_owner,remote_id,"+
+   "confirmation_evidence->>'kind' AS proof_kind,"+
+   "confirmation_evidence->>'wp_callback_state' AS wp_callback_state "+
+   "FROM cortes_publications WHERE id=$1 AND target_key=$2 LIMIT 1",
+   [id,targetKey]);
+ if(rows.length!==1)return {ok:false,error:'KWAI_TERMINAL_READ_MISSING'};
+ const r=rows[0];
+ if(r.id!==id||Number(r.lease_generation)!==gen)
+   return {ok:false,error:'KWAI_TERMINAL_READ_STALE_GENERATION'};
+ const author=targetKey.slice('kwai:'.length);
+ const validRemote=typeof r.remote_id==='string'&&
+   new RegExp('^https://www\\.kwai\\.com/@'+author+'/video/[0-9]{16,21}$').test(r.remote_id);
+ const confirmed=(r.status==='confirmed'&&r.lease_owner==null&&validRemote&&
+   r.wp_callback_state==='completed'&&
+   ['kwai_three_public_sift_oidc_reconciled_v1',
+    'kwai_authenticated_source_frames_reconciled_v1'].includes(r.proof_kind));
+ const cancelled=(r.status==='cancelled'&&r.lease_owner==null&&
+   r.remote_id==null&&r.proof_kind==='kwai_reconcile_then_disregard_v1');
+ return {ok:true,id,target_key:targetKey,lease_generation:gen,
+   terminal:confirmed?'confirmed':cancelled?'cancelled':null};
+}
+
 // Verified public timestamps, rather than ledger updates, control Kwai pacing.
 // Both accounts share this canonical server-side lease guard; the PC computes
 // an independent estimate but cannot override the production lease decision.
