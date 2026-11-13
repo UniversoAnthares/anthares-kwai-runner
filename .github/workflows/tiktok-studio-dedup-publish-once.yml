@@ -1,0 +1,170 @@
+name: One-time verified TikTok Studio deduplication and controlled publish
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/tiktok-studio-dedup-publish-once.yml']
+permissions:
+  contents: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    env:
+      NF_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+    steps:
+      - name: Install Northflank client
+        run: npm install --no-save --no-package-lock --ignore-scripts @northflank/js-client@0.12.0
+      - name: Restore memory budget, prove Studio search with positive control, publish one only if absent
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {ApiClient,ApiClientInMemoryContextProvider} from '@northflank/js-client';
+          const nfToken=process.env.NF_TOKEN,secret=process.env.ARA_SHARED;
+          if(!nfToken||nfToken.length<20||!secret||secret.length<20)throw Error('AUTH_MISSING');
+          const root='https://http--anthares-tiktok-northflank--6f6pbqmvhpv6.code.run';
+          async function server(method,path,payload,ms=30000){
+           const h={'Authorization':'Bearer '+secret,'Accept':'application/json'};
+           if(payload!==undefined)h['Content-Type']='application/json';
+           const r=await fetch(root+path,{method,headers:h,body:payload===undefined?undefined:JSON.stringify(payload),signal:AbortSignal.timeout(ms)});
+           return {code:r.status,value:await r.json().catch(()=>({}))};
+          }
+          const req=async path=>{const r=await fetch('https://api.northflank.com/v1'+path,{headers:{Authorization:'Bearer '+nfToken}});if(!r.ok)throw Error('NF_API_'+r.status);return r.json();};
+          const services=[];for(const p of (await req('/projects')).data?.projects||[])for(const s of (await req('/projects/'+encodeURIComponent(p.id)+'/services')).data?.services||[])if(s.name==='anthares-tiktok-northflank')services.push([p.id,s.id||s.name]);
+          if(services.length!==1)throw Error('SERVICE_NOT_UNIQUE');
+          const [projectId,serviceId]=services[0],cp=new ApiClientInMemoryContextProvider();await cp.addContext({name:'once',token:nfToken});const cli=new ApiClient(cp);
+          async function run(script,name){
+           const r=await cli.exec.execServiceCommand({projectId,serviceId},{command:['python3','-c',script]});
+           const out=String(r.stdOut||'');
+           console.log(name+'_EXEC_EXIT='+String(r.commandResult?.exitCode));
+           console.log(name+'_EXEC_RESULTS='+out.replace(/[\r\n]+/g,' | ').slice(0,4400));
+           if(r.commandResult?.exitCode!==0)throw Error(name+'_EXEC_FAILED');
+           return out;
+          }
+          const pre=String.raw`
+          import sys,time
+          sys.path.insert(0,'/app/render-tiktok-worker')
+          from browser_state_vault import load_runtime_state
+          s=None
+          for i in range(3):
+           s=load_runtime_state(timeout=12)
+           if s and len(s.get('cookies') or [])>=20:break
+           time.sleep(2)
+          if not s or len(s.get('cookies') or [])<20:raise SystemExit("SAFE_STOP_NO_DURABLE_VAULT")
+          print("SAVED_COOKIE_COUNT="+str(len(s.get('cookies') or [])),flush=True)
+          auth={'sessionid','sessionid_ss','sid_tt','sid_guard','uid_tt','uid_tt_ss'}
+          print("SAVED_AUTH_COOKIE_PRESENT="+str(any(str(x.get('name') or '').lower() in auth for x in s.get('cookies') or [])),flush=True)
+          if not any(str(x.get('name') or '').lower() in auth for x in s.get('cookies') or []):
+           raise SystemExit("SAFE_STOP_NO_AUTH_COOKIE")
+          `;
+          await run(pre,'VAULT_PREFLIGHT');
+          const status=await server('GET','/interactive-browser/status');
+          console.log('BROWSER_ACTIVE_BEFORE='+Boolean(status.value.active));
+          if(status.code!==200||!status.value.ok)throw Error('BROWSER_STATUS_UNAVAILABLE');
+          if(status.value.active){
+           const closed=await server('POST','/interactive-browser/close',{});
+           console.log('BROWSER_CLOSE_HTTP='+closed.code);
+           if(closed.code!==200||!closed.value.ok)throw Error('BROWSER_CLOSE_FAILED');
+          }
+          for(let i=0;i<6;i++){
+           const check=await server('GET','/interactive-browser/status');
+           if(check.code===200&&!check.value.active){console.log('BROWSER_MEMORY_RELEASE_CONFIRMED=1');break;}
+           if(i===5)throw Error('BROWSER_STILL_ACTIVE');
+           await new Promise(r=>setTimeout(r,2200));
+          }
+          const script=String.raw`
+          import os,sys,time,json,re
+          sys.path.insert(0,'/app/render-tiktok-worker')
+          from browser_state_vault import load_runtime_state
+          from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
+          state=load_runtime_state(timeout=15)
+          if not state or len(state.get('cookies') or [])<20:raise SystemExit("NO_DURABLE_SESSION")
+          print("READ_ONLY_STUDIO_SESSION_COOKIES="+str(len(state.get('cookies') or [])),flush=True)
+          def mem():
+           try:return round(int(open('/sys/fs/cgroup/memory.current').read().strip())/1048576,1)
+           except:return -1
+          print("MEMORY_BEFORE_STUDIO_MB="+str(mem()),flush=True)
+          args=["--no-sandbox","--disable-dev-shm-usage","--disable-gpu","--no-zygote","--renderer-process-limit=1","--disable-extensions","--disable-background-networking","--disable-component-update","--disable-default-apps","--disable-sync","--no-first-run"]
+          safe=False
+          with sync_playwright() as engine:
+           import tempfile
+           with tempfile.TemporaryDirectory(prefix='anthares-tiktok-studio-readonly-') as profile:
+            context=engine.chromium.launch_persistent_context(user_data_dir=profile,executable_path='/usr/bin/chromium',headless=True,args=args,viewport={'width':1280,'height':800},locale='pt-BR',timeout=65000)
+            try:
+             context.add_cookies(state.get('cookies') or [])
+             origin=next((o for o in state.get('origins') or [] if o.get('origin')=='https://www.tiktok.com'),{})
+             pairs={str(x.get('name')):str(x.get('value')) for x in (origin.get('localStorage') or []) if x.get('name') is not None and x.get('value') is not None}
+             context.add_init_script("(()=>{if(location.origin==='https://www.tiktok.com'){const x="+json.dumps(pairs,ensure_ascii=True)+";for(const [k,v] of Object.entries(x))localStorage.setItem(k,v)}})()")
+             page=context.pages[0] if context.pages else context.new_page()
+             page.route("**/*",lambda route:(route.abort() if route.request.resource_type in {'image','font','media'} else route.continue_()))
+             page.goto("https://www.tiktok.com/tiktokstudio/content",wait_until='commit',timeout=35000)
+             print("STUDIO_PAGE_COMMITTED=1",flush=True)
+             field=page.get_by_placeholder("Search for post description")
+             field.wait_for(state="visible",timeout=65000)
+             print("STUDIO_SEARCH_VISIBLE=1",flush=True)
+             print("STUDIO_PATH="+str(page.url.split('?')[0])[-85:],flush=True)
+             if '/tiktokstudio/content' not in page.url:raise SystemExit("STUDIO_WRONG_PAGE")
+             def items():
+              out=page.locator('a[href*="/video/"]').evaluate_all("(es)=>es.slice(0,35).map(x=>({url:x.href,text:(x.innerText||x.getAttribute('title')||'').trim()}))")
+              return out if isinstance(out,list) else []
+             def set_search(phrase):
+              field.fill(phrase,timeout=20000)
+              field.press("Enter",timeout=20000)
+              print("SEARCH_TYPED="+('positive' if 'Enganar' in phrase else 'candidate'),flush=True)
+             set_search("Enganar a si mesmo")
+             positives=[]
+             for i in range(8):
+              time.sleep(5)
+              positives=items()
+              if positives and all('enganar a si mesmo' in x.get('text','').lower() for x in positives):break
+             confirmed=bool(positives) and all('enganar a si mesmo' in x.get('text','').lower() for x in positives)
+             print("POSITIVE_SEARCH_MATCHED="+str(confirmed),flush=True)
+             print("POSITIVE_SEARCH_COUNT="+str(len(positives)),flush=True)
+             if not confirmed:raise SystemExit("SEARCH_FILTER_UNVERIFIED_SAFE_STOP")
+             set_search("Conceito de Comédia para Aristóteles")
+             candidates=[]
+             empty=False
+             for i in range(9):
+              time.sleep(5)
+              candidates=items()
+              body=page.locator("body").inner_text(timeout=10000).lower()
+              empty=bool(re.search(r"no posts|no results|no data|nenhum resultado|nenhuma publicação|não foram encontrados",body))
+              if empty or any('aristóteles' in x.get('text','').lower() for x in candidates):break
+             print("CANDIDATE_SEARCH_COUNT="+str(len(candidates)),flush=True)
+             print("CANDIDATE_EMPTY_MARKER="+str(empty),flush=True)
+             if candidates:
+              print("CANDIDATE_FOUND_LINKS="+json.dumps([x.get('url') for x in candidates[:5]])[:650],flush=True)
+              raise SystemExit("CANDIDATE_POSSIBLY_DUPLICATED_SAFE_STOP")
+             if not empty:raise SystemExit("CANDIDATE_ABSENCE_UNVERIFIED_SAFE_STOP")
+             safe=True
+             print("STUDIO_DUPLICATE_SEARCH_SAFE=1",flush=True)
+            finally:
+             context.close()
+          print("MEMORY_AFTER_STUDIO_MB="+str(mem()),flush=True)
+          if not safe:raise SystemExit("STUDIO_DUPLICATE_CHECK_FAILED")
+          `;
+          const read=await run(script,'STUDIO_DEDUP');
+          if(!read.includes('STUDIO_DUPLICATE_SEARCH_SAFE=1'))throw Error('DEDUP_NOT_PROVEN');
+          const health=await server('GET','/health');
+          console.log('OWNER_IDENTITY_VERIFIED='+Boolean(health.value.identity_verified));
+          console.log('READY_FOR_TIKTOK='+Boolean(health.value.ready_for_tiktok));
+          if(health.code!==200||!health.value.identity_verified||!health.value.ready_for_tiktok)throw Error('OWNER_NOT_VERIFIED');
+          const dry=await server('POST','/publish-dry-run',{test:'08'},30000);
+          console.log('DRY_RUN_HTTP='+dry.code);
+          if(dry.code!==200||!dry.value.ok||!dry.value.identity_verified)throw Error('PUBLISH_GUARD_NOT_READY');
+          const media='https://anthares.us/wp-content/uploads/anthares-clips/2026/10/short_9CIk-I_3VhM_g1_6619_6657.mp4';
+          const plan={segment_id:'g1:9CIk-I_3VhM:6619:6657',source_id:'9CIk-I_3VhM',title:'O Conceito de Comédia para Aristóteles',source_title:'A Poética de Aristóteles - Parte 2',summary:'Aristóteles define a comédia pela imitação de personagens inferiores, com ênfase no ridículo e na deformidade sem dor.'};
+          const dryMedia=await server('POST','/publish-dry-run',{test:'09',media_url:media,plan},50000);
+          console.log('MEDIA_DRY_RUN_HTTP='+dryMedia.code);
+          if(dryMedia.code!==200||!dryMedia.value.ok||!dryMedia.value.media_accepted)throw Error('MEDIA_NOT_ACCEPTED');
+          console.log('CONTROLLED_PUBLISH_ATTEMPT_MAX=1');
+          const post=await server('POST','/publish-url',{media_url:media,plan},390000);
+          console.log('PUBLISH_HTTP='+post.code);
+          console.log('PUBLISH_CONFIRMED='+Boolean(post.value.confirmed));
+          console.log('PUBLISH_REMOTE_ID='+String(post.value.remote_id||'') .slice(0,110));
+          console.log('PUBLISH_RESULT_CODE='+String(post.value.code||''));
+          if(post.code!==200||!post.value.confirmed)throw Error('PUBLICATION_NOT_CONFIRMED_NO_RETRY');
+          console.log('ONE_APPROVED_CLIP_PUBLISHED=1');
+          
+          NODE
