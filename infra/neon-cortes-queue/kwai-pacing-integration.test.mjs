@@ -46,5 +46,6 @@ test('Neon computes 06:00 open in America/Campo_Grande and passes it to both acc
  const policy=readFileSync(new URL('./kwai-pacing-policy.mjs',import.meta.url),'utf8');
  assert.match(policy,/if\(time<open\)\{result\.status='WAIT_OPEN'/);
  // Both lease routes require DUE, so WAIT_OPEN authorizes no job.
- assert.equal(times(source,"if(pacing.status!=='DUE')return{ok:true,job:null,pacing};"),2);
+ const kwaiGate=/const pacing=await kwaiDeadlinePacing\(String\(b\.target_key\|\|''\),100\);\s*if\(pacing\.status!=='DUE'\)return\{ok:true,job:null,pacing\};/g;
+ assert.equal([...source.matchAll(kwaiGate)].length,2);
 });
