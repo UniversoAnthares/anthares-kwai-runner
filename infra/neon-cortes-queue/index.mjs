@@ -1407,6 +1407,7 @@ async function kwaiDeadlinePacing(targetKey,dailyLimit=100){
  if(!['kwai:lucasrosalem','kwai:universoanthares'].includes(targetKey))
    throw Error('KWAI_PACING_UNAUTHORIZED_ACCOUNT');
  const day="(date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') AT TIME ZONE 'America/Campo_Grande')";
+ const open="((date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') + interval '6 hours') AT TIME ZONE 'America/Campo_Grande')";
  const end="((date_trunc('day',now() AT TIME ZONE 'America/Campo_Grande') + interval '23 hours') AT TIME ZONE 'America/Campo_Grande')";
  const actual="(CASE WHEN t.status='confirmed' AND (t.confirmation_evidence->>'public_post_timestamp_ms') ~ '^[0-9]{13}$' THEN to_timestamp((t.confirmation_evidence->>'public_post_timestamp_ms')::double precision/1000) WHEN t.status='confirmed' THEN t.publication_started_at ELSE NULL END)";
  const eligible="SELECT count(*)::int AS n FROM cortes_publications p WHERE p.target_key=$1 "+
@@ -1417,18 +1418,18 @@ async function kwaiDeadlinePacing(targetKey,dailyLimit=100){
    "OR d.media_sha256=p.media_sha256) AND "+
    "(d.status IN ('leased','started','confirmed','uncertain') OR "+
    "(d.status='queued' AND (d.created_at,d.id)<(p.created_at,p.id))))";
- const sql="WITH time_bounds AS (SELECT now() AS clock, "+day+" AS start_at, "+end+" AS end_at),"+
+ const sql="WITH time_bounds AS (SELECT now() AS clock, "+day+" AS start_at, "+open+" AS open_at, "+end+" AS end_at),"+
    " eligible AS ("+eligible+"),"+
    " post_history AS (SELECT t.status,t.publication_started_at,"+actual+" AS actual_at "+
    "FROM cortes_publications t WHERE t.target_key=$1) "+
-   "SELECT e.n AS pending, b.clock AS server_now,b.end_at AS deadline_at,"+
+   "SELECT e.n AS pending, b.clock AS server_now,b.open_at AS window_open_at,b.end_at AS deadline_at,"+
    " count(*) FILTER (WHERE h.status='confirmed' AND h.actual_at>=b.start_at AND h.actual_at<b.end_at)::int AS confirmed_today,"+
    " count(*) FILTER (WHERE (h.status='confirmed' AND h.actual_at>=b.start_at AND h.actual_at<b.end_at) OR "+
    "(h.status IN ('started','uncertain') AND h.publication_started_at>=b.start_at AND h.publication_started_at<b.end_at))::int AS used,"+
    " min(h.actual_at) FILTER (WHERE h.status='confirmed' AND h.actual_at>=b.start_at AND h.actual_at<b.end_at) AS first_confirmed,"+
    " max(h.actual_at) FILTER (WHERE h.status='confirmed' AND h.actual_at>=b.start_at AND h.actual_at<b.end_at) AS last_confirmed "+
    "FROM time_bounds b CROSS JOIN eligible e LEFT JOIN post_history h ON TRUE "+
-   "GROUP BY e.n,b.clock,b.end_at";
+   "GROUP BY e.n,b.clock,b.open_at,b.end_at";
  const result=await query(sql,[targetKey]);
  const row=result[0];
  if(!row)throw Error('KWAI_PACING_EMPTY_SNAPSHOT');
@@ -1437,7 +1438,7 @@ async function kwaiDeadlinePacing(targetKey,dailyLimit=100){
    confirmed_today:Number(row.confirmed_today),
    first_confirmed_at:row.first_confirmed,
    last_confirmed_at:row.last_confirmed,
-   now:row.server_now,deadline:row.deadline_at});
+   now:row.server_now,window_open_at:row.window_open_at,deadline:row.deadline_at});
 }
 
 async function cortesDeadlinePacing(targetKey,dailyLimit){
