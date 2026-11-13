@@ -7,6 +7,8 @@ on:
       - 'infra/neon-cortes-queue/index.mjs'
       - 'infra/neon-cortes-queue/kwai-persistent-cloud-identity.mjs'
       - 'infra/neon-cortes-queue/kwai-persistent-cloud-identity.test.mjs'
+      - 'infra/neon-cortes-queue/kwai-oneoff-public-reconcile.mjs'
+      - 'infra/neon-cortes-queue/kwai-oneoff-public-reconcile.test.mjs'
       - 'tools/kwai_persistent_cloud_queue.py'
       - 'tests/test_kwai_persistent_cloud_queue.py'
       - 'kwai_queue_publish_runtime.sh'
@@ -27,11 +29,12 @@ jobs:
           set -euo pipefail
           node --check infra/neon-cortes-queue/index.mjs
           node --check infra/neon-cortes-queue/kwai-persistent-cloud-identity.mjs
+          node --check infra/neon-cortes-queue/kwai-oneoff-public-reconcile.mjs
           bash -n kwai_queue_publish_runtime.sh
       - name: Prove both account credential isolation and local stop
         run: |
           set -euo pipefail
-          node --test infra/neon-cortes-queue/kwai-persistent-cloud-identity.test.mjs
+          node --test infra/neon-cortes-queue/kwai-persistent-cloud-identity.test.mjs infra/neon-cortes-queue/kwai-oneoff-public-reconcile.test.mjs
           python3 -m unittest discover -s tests -p 'test_kwai_persistent_cloud_queue.py' -v
       - name: Assert cloud production is unconfigured by default
         run: |

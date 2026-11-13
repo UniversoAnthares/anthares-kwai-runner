@@ -1,0 +1,99 @@
+{
+  "kind": "kwai_three_readonly_independent_media_proof_v1",
+  "generated_at_utc": "2026-11-13T21:31:06Z",
+  "scope": "public_profile_and_public_cdn_only",
+  "queue_mutations": 0,
+  "posts_submitted": 0,
+  "results": [
+    {
+      "id": "kwai-cortes-cOhqEaY3-08-g1-cOhqEaY3-08-1983-2023",
+      "account": "lucasrosalem",
+      "photo_id": "5200963257196327565",
+      "started_ms": 1794599393942,
+      "posted_ms": 1794599403839,
+      "source_sha256": "518658676f83aa49165b6f327004acc62eea94c2d9d5a984d48991069f2bc664",
+      "public_url": "https://www.kwai.com/@lucasrosalem/video/5200963257196327565",
+      "ledger_media_hash_kind": "dispatch_identity",
+      "status": "VERIFIED_PUBLIC_SOURCE_MEDIA_READONLY",
+      "observed_source_file_sha256": "feed9441ce09d0999cfd481a4cf266760999ac095bb02586427e4d65ede4d344",
+      "observed_source_file_bytes": 5165205,
+      "proof": {
+        "source_duration_seconds": 34.4,
+        "public_duration_seconds": 34.4,
+        "best_source_frame_inliers": [
+          511,
+          530,
+          532,
+          486,
+          501,
+          548
+        ],
+        "qualifying_distinct_frames": 6,
+        "media_matched": true,
+        "matcher": "sift_source_to_public_cdn_v1"
+      },
+      "public_media_sha256": "2194e054b9a384d253f17f7ef1c0b5a55d94910e274ac63786e9346a7c824824",
+      "public_media_bytes": 1828094
+    },
+    {
+      "id": "kwai-cortes-A7BsgCe3-oo-g1-A7BsgCe3-oo-7595-7635",
+      "account": "lucasrosalem",
+      "photo_id": "5236429103303004807",
+      "started_ms": 1794529424700,
+      "posted_ms": 1794529434243,
+      "source_sha256": "75f2c75e96d5a9696203281192198eb1d91d51ca55df4fe4d3f1a456987adf7d",
+      "public_url": "https://www.kwai.com/@lucasrosalem/video/5236429103303004807",
+      "ledger_media_hash_kind": "dispatch_identity",
+      "status": "VERIFIED_PUBLIC_SOURCE_MEDIA_READONLY",
+      "observed_source_file_sha256": "2e8b34222b40ba3d1f70d2c9e4eff5d8837d8b6d693d90f66ba4136d8fef27aa",
+      "observed_source_file_bytes": 5964639,
+      "proof": {
+        "source_duration_seconds": 37.067,
+        "public_duration_seconds": 37.067,
+        "best_source_frame_inliers": [
+          557,
+          559,
+          519,
+          539,
+          515,
+          539
+        ],
+        "qualifying_distinct_frames": 6,
+        "media_matched": true,
+        "matcher": "sift_source_to_public_cdn_v1"
+      },
+      "public_media_sha256": "4e9074f6f210ff5f2669ca9316f35dbf6a2664c3bd34d053c79439badf945b83",
+      "public_media_bytes": 2173887
+    },
+    {
+      "id": "kwai-cortes-ua-217fddfeae7c0a86be66d8e8511e2916",
+      "account": "universoanthares",
+      "photo_id": "5244028928629526188",
+      "started_ms": 1794534747829,
+      "posted_ms": 1794534757025,
+      "source_sha256": "75f2c75e96d5a9696203281192198eb1d91d51ca55df4fe4d3f1a456987adf7d",
+      "public_url": "https://www.kwai.com/@universoanthares/video/5244028928629526188",
+      "ledger_media_hash_kind": "dispatch_identity",
+      "status": "VERIFIED_PUBLIC_SOURCE_MEDIA_READONLY",
+      "observed_source_file_sha256": "2e8b34222b40ba3d1f70d2c9e4eff5d8837d8b6d693d90f66ba4136d8fef27aa",
+      "observed_source_file_bytes": 5964639,
+      "proof": {
+        "source_duration_seconds": 37.067,
+        "public_duration_seconds": 37.067,
+        "best_source_frame_inliers": [
+          557,
+          559,
+          519,
+          539,
+          515,
+          539
+        ],
+        "qualifying_distinct_frames": 6,
+        "media_matched": true,
+        "matcher": "sift_source_to_public_cdn_v1"
+      },
+      "public_media_sha256": "4e9074f6f210ff5f2669ca9316f35dbf6a2664c3bd34d053c79439badf945b83",
+      "public_media_bytes": 2173887
+    }
+  ]
+}

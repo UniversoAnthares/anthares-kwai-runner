@@ -7,6 +7,7 @@ on:
       - 'infra/neon-cortes-queue/index.mjs'
       - 'infra/neon-cortes-queue/kwai-pacing-policy.mjs'
       - 'infra/neon-cortes-queue/kwai-persistent-cloud-identity.mjs'
+      - 'infra/neon-cortes-queue/kwai-oneoff-public-reconcile.mjs'
   workflow_dispatch:
 permissions:
   contents: read
@@ -26,8 +27,9 @@ jobs:
           node --check infra/neon-cortes-queue/index.mjs
           node --check infra/neon-cortes-queue/kwai-persistent-cloud-identity.mjs
           node --check infra/neon-cortes-queue/kwai-pacing-policy.mjs
+          node --check infra/neon-cortes-queue/kwai-oneoff-public-reconcile.mjs
           node --test infra/neon-cortes-queue/kwai-persistent-cloud-identity.test.mjs
-          node --test infra/neon-cortes-queue/kwai-pacing-policy.test.mjs
+          node --test infra/neon-cortes-queue/kwai-pacing-policy.test.mjs infra/neon-cortes-queue/kwai-oneoff-public-reconcile.test.mjs
       - name: Package full import graph without credentials
         shell: bash
         run: |
@@ -37,7 +39,7 @@ jobs:
           from zipfile import ZipFile, ZIP_DEFLATED, ZipInfo
           import hashlib
           source=Path('infra/neon-cortes-queue')
-          names=['index.mjs','kwai-pacing-policy.mjs','kwai-persistent-cloud-identity.mjs']
+          names=['index.mjs','kwai-pacing-policy.mjs','kwai-persistent-cloud-identity.mjs','kwai-oneoff-public-reconcile.mjs']
           out=Path('kwai-neon-function-bundle.zip')
           with ZipFile(out,'w',compression=ZIP_DEFLATED) as z:
             for name in names:
