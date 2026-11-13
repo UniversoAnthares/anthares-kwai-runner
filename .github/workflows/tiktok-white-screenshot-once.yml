@@ -1,4 +1,4 @@
-name: One-time TikTok remote screenshot integrity diagnostic
+name: One-time TikTok remote screenshot integrity diagnostic # post-navigation health check
 on:
   push:
     branches: [main]
