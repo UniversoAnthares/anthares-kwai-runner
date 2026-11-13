@@ -1,0 +1,48 @@
+name: Kwai three pending public video source proof - read only
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/kwai-three-public-media-readback.yml'
+      - 'tools/kwai_three_public_media_readback.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: kwai-public-media-proof-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  readback:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install read-only image/video comparison dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check playwright opencv-python-headless
+          command -v google-chrome
+      - name: Independent three-job public feed/media proof; NEVER mutate Neon or publish
+        run: |
+          set -euo pipefail
+          python tools/kwai_three_public_media_readback.py
+          python - <<'PY'
+          import json
+          r=json.load(open('kwai-three-public-readback.json',encoding='utf8'))
+          assert r['queue_mutations']==0 and r['posts_submitted']==0
+          assert len(r['results'])==3
+          print("KWAI_PUBLIC_READBACK_JOB_COUNT=3")
+          print("KWAI_PUBLIC_READBACK_VERIFIED="+str(sum(x['status']=='VERIFIED_PUBLIC_SOURCE_MEDIA_READONLY' for x in r['results'])))
+          print("KWAI_QUEUE_MUTATION=0")
+          PY
+      - name: Upload evidence JSON only; all videos removed in process
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kwai-readonly-three-public-evidence
+          path: kwai-three-public-readback.json
+          if-no-files-found: warn
+          retention-days: 3
