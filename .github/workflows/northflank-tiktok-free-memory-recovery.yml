@@ -39,6 +39,16 @@ jobs:
                       raw=res.read(120000)
                       return res.status,json.loads(raw) if raw else {}
               except urllib.error.HTTPError as e:
+                  if method=='PATCH':
+                      import re
+                      try:
+                          raw=json.loads(e.read(3500).decode('utf-8','replace'))
+                          err=raw.get('error') or raw.get('message') or raw.get('detail') or raw.get('code') or ''
+                          if isinstance(err,dict):err=err.get('message') or err.get('code') or ''
+                          reason=re.sub(r'[^a-zA-Z0-9_ .:()-]','',str(err))[:260]
+                          print('NF_PLAN_CHANGE_ERROR_CLASS='+reason,flush=True)
+                      except Exception:
+                          print('NF_PLAN_CHANGE_ERROR_CLASS=unparsed',flush=True)
                   return e.code,{}
               except Exception as e:
                   print('NF_RESOURCE_NETWORK='+type(e).__name__,flush=True)
