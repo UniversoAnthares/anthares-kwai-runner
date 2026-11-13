@@ -1,73 +1,19 @@
-name: Anthares OCI A1 Always Free capacity watch
-
+# RETIRED 2026-11-13 at owner's explicit request: stop all Oracle capacity checks.
+# Archived implementation stays in tools/oci_a1_capacity_watch.py for history.
+# No cron, no push trigger, no Oracle SDK or secret reads, no API request,
+# and no instance launch. Manual dispatch is an inert acknowledgment only.
+name: Retired Oracle A1 monitor — disabled
 on:
-  schedule:
-    - cron: '17 */4 * * *'
   workflow_dispatch:
-  # On changes to this workflow, rerun the guarded capacity and inventory check.
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/oci-a1-android-cloud-watch.yml
-      - tools/oci_a1_capacity_watch.py
-      - tests/test_oci_a1_capacity_watch.py
-      - infra/oci-android/redroid-firstboot.cloud-config.yml
-
 permissions:
   contents: read
-
-concurrency:
-  group: anthares-oci-a1-free-single-allocation
-  cancel-in-progress: false
-
 jobs:
-  capacity-watch:
-    # Owner requested progression to the existing Always Free cloud Android
-    # plan on 2026-11-13. VM allocation is strictly limited in Python:
-    # home region, one A1 1 OCPU/6GiB (4GiB if 6GiB unavailable), 50GiB boot,
-    # pinned administrator SSH key, 200GiB total storage and no other A1.
-    runs-on: ubuntu-24.04
-    timeout-minutes: 8
-    env:
-      OCI_A1_WATCH_AUTH_JSON: ${{ secrets.OCI_A1_WATCH_AUTH_JSON }}
-      # Permit ONLY the single guarded A1 Always Free instance when capacity
-      # becomes AVAILABLE (6GiB preferred, 4GiB minimum); no paid shapes, no disk over 200GiB, no public ADB.
-      OCI_A1_AUTO_PROVISION: '1'
-      OCI_A1_LAUNCH_GUARD: 'ALWAYS_FREE_SINGLE_A1'
-      OCI_A1_OBSERVE_EXISTING: '1'
-      PYTHONUNBUFFERED: '1'
+  retired:
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
     steps:
-      - uses: actions/checkout@v4
-      - name: Assert canonical hosted runtime and cost guards
-        shell: bash
+      - name: Confirm Oracle monitoring disabled
         run: |
-          set -euo pipefail
-          test "$GITHUB_REPOSITORY" = 'UniversoAnthares/anthares-kwai-runner'
-          test "$GITHUB_REF" = 'refs/heads/main'
-          test "$OCI_A1_AUTO_PROVISION" = '1'
-          test "$OCI_A1_LAUNCH_GUARD" = 'ALWAYS_FREE_SINGLE_A1'
-          test -f tools/oci_a1_capacity_watch.py
-          test -f infra/oci-android/approved-admin-ssh.pub
-          test -f infra/oci-android/redroid-firstboot.cloud-config.yml
-      - name: Install pinned Oracle SDK and cloud-init YAML parser
-        run: python -m pip install --disable-pip-version-check 'oci==2.187.1' 'PyYAML==6.0.2'
-      - name: Run fail-closed regression tests
-        run: python -m unittest discover -s tests -p 'test_oci_a1_capacity_watch.py' -v
-      - name: Read capacity and provision ONE A1 only if all Always Free guards pass
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -f infra/oci-android/approved-admin-ssh.pub
-          python tools/oci_a1_capacity_watch.py
-      - name: Document execution scope
-        if: always()
-        run: |
-          {
-            echo 'The watcher uses GitHub hosted runners only; no Windows PC or physical Android executor.'
-            echo 'Owner approved guarded Always Free A1 provisioning when OCI reports AVAILABLE; no repository variable gate is used.'
-            echo 'At AVAILABLE only: allow one 1-OCPU/6GiB A1 or 1-OCPU/4GiB fallback with 50GiB boot, if all audited free-tier guards pass.'
-            echo 'Each capacity poll validates the audited subnet, SSH key fingerprint and locked ingress before enabling future allocation.'
-            echo 'Each poll also reports existing A1 Linux instance lifecycle read-only, without assuming Android/Kwai readiness.'
-            echo 'It never posts to Kwai or modifies physical Android/MEmu routing.'
-            echo 'On first boot, Android readiness requires a successful local-only ADB boot_completed probe; Kwai and MacroDroid require separate authentication.'
-          } >> "$GITHUB_STEP_SUMMARY"
+          echo 'OCI_A1_MONITOR=DISABLED_BY_OWNER'
+          echo 'OCI_A1_API_CALLS=0'
+          echo 'OCI_A1_INSTANCE_LAUNCH=DISABLED'
