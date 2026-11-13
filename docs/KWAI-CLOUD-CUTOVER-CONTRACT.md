@@ -22,7 +22,7 @@ Para autorizar uma futura mudança explícita no repositório de `cloud_cutover.
 7. `host_independent_of_pc`: execução efetivamente remota; o PC e Android físico desligados não impedem o serviço.
 8. `cost_zero_confirmed`: plano e recursos autorizados sem cartão adicional, cobrança ou Pay As You Go.
 
-O estado remoto fornecido ao seletor deve declarar `online`, `healthy`, `ready`, `authenticated` estritamente verdadeiros, `verified_accounts` contendo exatamente ambas as contas e `proofs` com todos os oito itens verdadeiros. Esse estado não substitui a validação humana/técnica necessária para alterar o guard versionado.
+O estado remoto fornecido ao seletor deve declarar `online`, `healthy`, `ready`, `authenticated` estritamente verdadeiros, `verified_accounts` contendo exatamente ambas as contas e `proofs` com todos os oito itens verdadeiros. Também exige `observed_at_epoch` como timestamp Unix numérico recente (idade de 0 a 120 segundos), evitando promoção com status cacheado ou de execução anterior. Esse estado não substitui a validação humana/técnica necessária para alterar o guard versionado.
 
 Depois do corte autorizado, `disable_local_executors=true` proíbe fallback silencioso para o Android físico ou MEmu4: se o Android remoto cair, o seletor informa `NONE` e a fila deve permanecer íntegra até haver capacidade remota. Não repetir tarefa com publicação iniciada.
 
