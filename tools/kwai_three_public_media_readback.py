@@ -192,12 +192,15 @@ def main():
                 feeds[handle]=public_feed(page,handle,ids)
         finally:
             browser.close()
+    # Neon payload.media_hash_kind=dispatch_identity; media_sha256 is a
+    # stable task/deduplication fingerprint, not SHA256 of the MP4 bytes.
     source_paths={}
     with tempfile.TemporaryDirectory(prefix="anthares-kwai-readonly-") as home:
         base=Path(home)
         for pos,job in enumerate(JOBS):
             result={k:job[k] for k in ("id","account","photo_id","started_ms","posted_ms","source_sha256")}
             result["public_url"]=f"https://www.kwai.com/@{job['account']}/video/{job['photo_id']}"
+            result["ledger_media_hash_kind"]="dispatch_identity"
             result["status"]="INCONCLUSIVE_KEEP_QUARANTINED"
             try:
                 post=feeds.get(job["account"],{}).get(job["photo_id"])
@@ -206,13 +209,16 @@ def main():
                 if job["source_url"] not in source_paths:
                     path=base / ("source"+str(len(source_paths))+".mp4")
                     sha,size=fetch_media(job["source_url"],path)
-                    if sha != job["source_sha256"]:
-                        raise RuntimeError("SOURCE_SHA256_MISMATCH")
-                    source_paths[job["source_url"]]=path
+                    # Preserve observed file hash separately from the ledger
+                    # identity. A byte-level check here produced false failures.
+                    source_paths[job["source_url"]]=(path,sha,size)
                 url=post["media_url"]
                 path=base / ("post"+str(pos)+".mp4")
                 remote_sha,remote_size=fetch_media(url,path)
-                proof=media_proof(source_paths[job["source_url"]],path)
+                source_file,source_digest,source_bytes=source_paths[job["source_url"]]
+                result["observed_source_file_sha256"]=source_digest
+                result["observed_source_file_bytes"]=source_bytes
+                proof=media_proof(source_file,path)
                 result["proof"]=proof
                 result["public_media_sha256"]=remote_sha
                 result["public_media_bytes"]=remote_size
