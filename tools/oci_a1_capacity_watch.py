@@ -85,6 +85,66 @@ def private_network_egress_ready(network, subnet):
             nat.block_traffic is False)
 
 
+def safe_instance_network_mode(network, subnet):
+    """Choose only an audited, internet-reachable OCI network topology.
+
+    PRIVATE_NAT: no public IPv4, private subnet with healthy NAT.
+    LOCKED_PUBLIC: ephemeral public IPv4, with a single ingress rule: SSH
+    from exactly one IPv4 /32. No exposed ADB/Kwai/Android services.
+    Additional lists, protocols, ingress, stale gateway or ambiguous routes
+    reject the launch. This does not modify live network resources.
+    """
+    import ipaddress
+
+    routes = network.get_route_table(subnet.route_table_id).data.route_rules or []
+    defaults = [r for r in routes if r.destination == "0.0.0.0/0"
+                and r.destination_type == "CIDR_BLOCK"]
+    if len(defaults) != 1:
+        return None
+    gateway_id = defaults[0].network_entity_id or ""
+
+    if subnet.prohibit_public_ip_on_vnic is True:
+        if not gateway_id.startswith("ocid1.natgateway."):
+            return None
+        nat = network.get_nat_gateway(gateway_id).data
+        if (nat.lifecycle_state == "AVAILABLE" and
+                nat.vcn_id == subnet.vcn_id and nat.block_traffic is False):
+            return "PRIVATE_NAT"
+        return None
+
+    if subnet.prohibit_public_ip_on_vnic is not False:
+        return None
+    if not gateway_id.startswith("ocid1.internetgateway."):
+        return None
+    igw = network.get_internet_gateway(gateway_id).data
+    if (igw.lifecycle_state != "AVAILABLE" or igw.vcn_id != subnet.vcn_id
+            or igw.is_enabled is not True):
+        return None
+    if not subnet.security_list_ids or len(subnet.security_list_ids) != 1:
+        return None
+    firewall = network.get_security_list(subnet.security_list_ids[0]).data
+    ingress = firewall.ingress_security_rules or []
+    egress = firewall.egress_security_rules or []
+    if len(ingress) != 1:
+        return None
+    rule = ingress[0]
+    try:
+        cidr = ipaddress.ip_network(rule.source, strict=True)
+    except (ValueError, TypeError):
+        return None
+    tcp = rule.tcp_options
+    port_range = tcp.destination_port_range if tcp else None
+    if (cidr.version != 4 or cidr.prefixlen != 32 or
+            rule.protocol != "6" or rule.is_stateless is not False or
+            rule.source_type not in ("CIDR_BLOCK", None) or
+            not port_range or port_range.min != 22 or port_range.max != 22):
+        return None
+    if not any(r.destination == "0.0.0.0/0" and r.protocol == "all"
+               and r.destination_type in ("CIDR_BLOCK", None) for r in egress):
+        return None
+    return "LOCKED_PUBLIC"
+
+
 def main():
     session = auth()
     if session is None:
@@ -131,9 +191,11 @@ def main():
     subnet = network.get_subnet(subnet_id).data
     if subnet.compartment_id != tenancy or subnet.lifecycle_state != "AVAILABLE":
         raise ValueError("SUBNET_NOT_ELIGIBLE")
-    if not private_network_egress_ready(network, subnet):
-        report("STATE", "PRIVATE_NAT_EGRESS_UNAVAILABLE")
+    mode = safe_instance_network_mode(network, subnet)
+    if mode is None:
+        report("STATE", "NETWORK_EGRESS_OR_INGRESS_GUARD")
         return 0
+    report("NETWORK_MODE", mode)
 
     # Fail closed on any uncertain inventory; never allocate over free limits.
     compartments = [tenancy]
@@ -174,7 +236,8 @@ def main():
         source_details=oci.core.models.InstanceSourceViaImageDetails(
             image_id=images[0].id, boot_volume_size_in_gbs=BOOT_GB),
         create_vnic_details=oci.core.models.CreateVnicDetails(
-            subnet_id=subnet_id, assign_public_ip=False),
+            subnet_id=subnet_id, assign_public_ip=(mode == "LOCKED_PUBLIC"),
+            nsg_ids=[]),
         metadata={"ssh_authorized_keys": sshkey},
         freeform_tags={"anthares-purpose": "android-redroid-standby",
                        "cost-policy": "always-free-single-a1"},
