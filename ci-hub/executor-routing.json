@@ -29,12 +29,28 @@
     "primary_device": "physical_android",
     "fallback_device": "memu_android",
     "priority": [
+      "cloud_android_verified",
       "physical_android",
       "memu_android",
       "github_android_experimental"
     ],
     "github_actions": "experimental_only",
-    "selection_rule": "recover current device transport before failover; physical Android remains primary; MEmu4 is automatic standby after proven physical failure; GitHub Android is experimental and never selected for normal Kwai publication",
+    "cloud_cutover": {
+      "enabled": false,
+      "required_accounts": ["lucasrosalem", "universoanthares"],
+      "required_proofs": [
+        "android_ready",
+        "official_apps_authenticated",
+        "sessions_survive_reboot",
+        "independent_public_readback",
+        "neon_fencing_verified",
+        "schedule_06_to_23_verified",
+        "host_independent_of_pc",
+        "cost_zero_confirmed"
+      ],
+      "approval_rule": "Only enable through reviewed repository change after authentic host proof, both real account publications, independent public readback, and successful Neon fencing. Never enable from untrusted runtime status alone."
+    },
+    "selection_rule": "cloud Android takes priority only after explicit cutover enable and all fresh production proofs; until then keep physical Android as primary and MEmu4 as its standby. GitHub Android is experimental and never selected for normal Kwai publication",
     "transport_policy": "ADB is encapsulated by Anthares Android Runtime and transport failure is distinct from device failure",
     "publication_safety": {
       "central_queue_authoritative": true,
@@ -311,6 +327,13 @@
     ]
   },
   "providers": {
+    "cloud_android_verified": {
+      "active": true,
+      "android_eligible": true,
+      "interactive_manual_auth": true,
+      "role": "future_kwai_cloud_primary_pending_real_proof",
+      "status": "BLOCKED_CUTOVER_FLAG_OFF_UNTIL_HOST_DUAL_ACCOUNT_PROOF"
+    },
     "physical_android": {
       "active": true,
       "android_eligible": true,
