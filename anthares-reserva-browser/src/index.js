@@ -123,7 +123,7 @@ async function issueOwnerSession(env) {
   const payload = b64url(te.encode(JSON.stringify({exp:Math.floor(Date.now()/1000)+3600, nonce:crypto.randomUUID()})));
   return `${payload}.${await hmac(env, payload)}`;
 }
-async function ownerAuthorized(request, env) {
+export async function ownerAuthorized(request, env) {
   const token = cookieValue(request, OWNER_COOKIE);
   const [payload, sig, extra] = String(token).split(".");
   if (!payload || !sig || extra !== undefined || !sameSecret(sig, await hmac(env, payload))) return false;
@@ -211,7 +211,7 @@ function ownerLoginPage(message="") {
 }
 async function ownerDashboard(env, notice="", live="") {
   const st = await ownerStatus(env);
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Anthares Reserva</title></head><body style="font-family:system-ui;max-width:820px;margin:40px auto;padding:0 20px"><h1>Anthares Reserva Browser</h1>${notice?`<p><strong>${esc(notice)}</strong></p>`:""}<p>Sessão Browser Run: <b>${st.active?"ativa":"inativa"}</b>. Estado criptografado persistido: <b>${st.persisted?"sim":"não"}</b>${st.saved_at?` (${esc(st.saved_at)})`:""}.</p>${live?`<p><a href="${esc(live)}" rel="noopener noreferrer" target="_blank">Abrir navegador remoto</a></p>`:""}<form method="post" action="/owner/start"><button type="submit">Iniciar/recuperar sessão</button></form><form method="post" action="/owner/live"><button type="submit">Gerar novo link Live View</button></form><form method="post" action="/owner/save"><button type="submit">Salvar autenticação e encerrar</button></form><form method="post" action="/owner/logout"><button type="submit">Sair</button></form><p>O Live View roda integralmente na Cloudflare. Ao concluir o login, volte aqui e use “Salvar autenticação e encerrar” para liberar a cota gratuita.</p></body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Anthares Reserva</title></head><body style="font-family:system-ui;max-width:820px;margin:40px auto;padding:0 20px"><h1>Anthares Reserva Browser</h1>${notice?`<p><strong>${esc(notice)}</strong></p>`:""}<p>Sessão Browser Run: <b>${st.active?"ativa":"inativa"}</b>. Estado criptografado persistido: <b>${st.persisted?"sim":"não"}</b>${st.saved_at?` (${esc(st.saved_at)})`:""}.</p>${live?`<p><a href="${esc(live)}" rel="noopener noreferrer" target="_blank">Abrir navegador remoto</a></p>`:""}<p><a href="/owner/tiktok">Abrir navegador TikTok (Northflank Chromium)</a></p><form method="post" action="/owner/start"><button type="submit">Iniciar/recuperar sessão</button></form><form method="post" action="/owner/live"><button type="submit">Gerar novo link Live View</button></form><form method="post" action="/owner/save"><button type="submit">Salvar autenticação e encerrar</button></form><form method="post" action="/owner/logout"><button type="submit">Sair</button></form><p>O Live View roda integralmente na Cloudflare. Ao concluir o login, volte aqui e use “Salvar autenticação e encerrar” para liberar a cota gratuita.</p></body></html>`;
 }
 
 export default {

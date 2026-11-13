@@ -1,4 +1,5 @@
 import baseApp, { BrowserState } from "./tiktok-owner-entry.js";
+import { ownerAuthorized as canonicalOwnerAuthorized } from "./index.js";
 
 export { BrowserState };
 
@@ -16,7 +17,15 @@ const fromB64url=value=>{let s=String(value||"").replace(/-/g,"+").replace(/_/g,
 async function hmac(env,value){if(!env.ANTHARES_RESERVA_TOKEN)return "";const key=await crypto.subtle.importKey("raw",te.encode(env.ANTHARES_RESERVA_TOKEN),{name:"HMAC",hash:"SHA-256"},false,["sign"]);return b64url(new Uint8Array(await crypto.subtle.sign("HMAC",key,te.encode(value))));}
 async function ownerAuthorized(request,env){const token=cookieValue(request,OWNER_COOKIE);const [payload,sig,extra]=String(token).split(".");if(!payload||!sig||extra!==undefined)return false;if(!sameSecret(sig,await hmac(env,payload)))return false;try{const p=JSON.parse(td.decode(fromB64url(payload)));return Number(p.exp)>Math.floor(Date.now()/1000);}catch{return false;}}
 
-const html = (body,status=200)=>new Response(body,{status,headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store","x-content-type-options":"nosniff","referrer-policy":"no-referrer","content-security-policy":"default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"}});
+const html = (body,status=200)=>{
+  const nonce=b64url(crypto.getRandomValues(new Uint8Array(16)));
+  const page=String(body).replaceAll("<script>","<script nonce=\""+nonce+"\">");
+  return new Response(page,{status,headers:{
+    "content-type":"text/html; charset=utf-8","cache-control":"no-store",
+    "x-content-type-options":"nosniff","referrer-policy":"no-referrer",
+    "content-security-policy":"default-src 'none'; script-src 'nonce-"+nonce+"'; connect-src 'self'; style-src 'unsafe-inline'; img-src data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
+  }});
+};
 const json = (body,status=200)=>new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store","x-content-type-options":"nosniff"}});
 
 async function stateKey(env){if(!env.ANTHARES_RESERVA_TOKEN)throw new Error("reserve_token_unavailable");const raw=new Uint8Array(await crypto.subtle.digest("SHA-256",te.encode("anthares-tiktok-browser-state-v1:"+env.ANTHARES_RESERVA_TOKEN)));return crypto.subtle.importKey("raw",raw,"AES-GCM",false,["encrypt","decrypt"]);}
@@ -54,7 +63,7 @@ function browserPage(message="",screen=null,verify=null,drag=null){
     el.addEventListener("dragstart",e=>e.preventDefault());
     el.addEventListener("pointerdown",e=>{if(busy||e.button!==0)return;e.preventDefault();start=pos(e);active=true;el.setPointerCapture(e.pointerId);status.textContent="Movimente o ponteiro e solte no destino.";});
     el.addEventListener("pointercancel",()=>{start=null;active=false;status.textContent="Movimento cancelado.";});
-    el.addEventListener("pointerup",async e=>{if(!active||!start||busy)return;e.preventDefault();active=false;const end=pos(e),origin=start;start=null;busy=true;status.textContent="Enviando movimento ao navegador remoto...";const moved=Math.hypot(end.x-origin.x,end.y-origin.y)>8;const path=moved?"/owner/tiktok/drag":"/owner/tiktok/click";const form=new FormData();if(moved){form.set("x1",String(origin.x));form.set("y1",String(origin.y));form.set("x2",String(end.x));form.set("y2",String(end.y));}else{form.set("x",String(end.x));form.set("y",String(end.y));}try{const response=await fetch(path,{method:"POST",body:form,credentials:"same-origin"});if(!response.ok)throw Error("HTTP "+response.status);const page=await response.text();document.open();document.write(page);document.close();}catch(err){status.textContent="Falha ao enviar: "+err.message+"; tente atualizar a imagem.";busy=false;}});
+    el.addEventListener("pointerup",async e=>{if(!active||!start||busy)return;e.preventDefault();active=false;const end=pos(e),origin=start;start=null;busy=true;status.textContent="Enviando movimento ao navegador remoto...";const moved=Math.hypot(end.x-origin.x,end.y-origin.y)>8;const path=moved?"/owner/tiktok/drag":"/owner/tiktok/click";const form=new FormData();if(moved){form.set("x1",String(origin.x));form.set("y1",String(origin.y));form.set("x2",String(end.x));form.set("y2",String(end.y));}else{form.set("x",String(end.x));form.set("y",String(end.y));}try{const response=await fetch(path,{method:"POST",body:form,credentials:"same-origin"});if(!response.ok)throw Error("HTTP "+response.status);if(response.redirected||new URL(response.url).pathname==="/owner")throw Error("Sessão administrativa expirada");location.replace("/owner/tiktok");}catch(err){status.textContent="Falha ao enviar: "+err.message+"; tente atualizar a imagem.";busy=false;}});
   })();
   </script>`:"";
   const proof=verify?`<pre>${esc(JSON.stringify(verify,null,2))}</pre>`:"";
@@ -76,7 +85,7 @@ export default {
   async fetch(request,env,ctx){
     const url=new URL(request.url);
     const ownerPath=url.pathname.startsWith("/owner/tiktok");
-    if(ownerPath&&!(await ownerAuthorized(request,env)))return new Response(null,{status:303,headers:{location:"/owner","cache-control":"no-store"}});
+    if(ownerPath&&!(await canonicalOwnerAuthorized(request,env)))return new Response(null,{status:303,headers:{location:"/owner","cache-control":"no-store"}});
 
     if(url.pathname==="/owner/tiktok"&&request.method==="GET"){
       const status=await nf(env,"/interactive-browser/status");const screen=status.active?await shot(env):null;return html(browserPage(status.active?"Sessão Northflank ativa.":"Sessão pronta para iniciar.",screen));
