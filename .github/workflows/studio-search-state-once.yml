@@ -1,0 +1,53 @@
+name: One-time Studio search state and memory check
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/studio-search-state-once.yml']
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      NF_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+    steps:
+      - name: Install Northflank client
+        run: npm install --no-save --no-package-lock --ignore-scripts @northflank/js-client@0.12.0
+      - name: Read existing Studio search result and memory without interaction
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {ApiClient,ApiClientInMemoryContextProvider} from '@northflank/js-client';
+          const token=process.env.NF_TOKEN;if(!token||token.length<20)throw Error('NF_TOKEN_MISSING');
+          const req=async path=>{let r=await fetch('https://api.northflank.com/v1'+path,{headers:{Authorization:'Bearer '+token}});if(!r.ok)throw Error('NF_API_'+r.status);return r.json();};
+          const found=[];for(const p of (await req('/projects')).data?.projects||[])for(const s of (await req('/projects/'+encodeURIComponent(p.id)+'/services')).data?.services||[])if(s.name==='anthares-tiktok-northflank')found.push([p.id,s.id||s.name]);
+          if(found.length!==1)throw Error('SERVICE_TARGET_AMBIGUOUS');
+          const [projectId,serviceId]=found[0],cp=new ApiClientInMemoryContextProvider();await cp.addContext({name:'inspect',token});const cli=new ApiClient(cp);
+          const script=String.raw`
+          import sys,json,os,requests
+          sys.path.insert(0,'/app/render-tiktok-worker')
+          import browser_executor as b
+          try:
+           current=int(open('/sys/fs/cgroup/memory.current').read().strip())
+           cap=int(open('/sys/fs/cgroup/memory.max').read().strip())
+           print('MEMORY_USED_MB='+str(round(current/1048576,1)))
+           print('MEMORY_CAP_MB='+str(round(cap/1048576,1)))
+          except Exception:pass
+          try:
+           health=requests.get('http://127.0.0.1:9223/json/version',timeout=3)
+           print('CDP_HTTP='+str(health.status_code))
+          except Exception as e:print('CDP_HTTP_ERROR='+type(e).__name__)
+          expr="""(()=>{const body=(document.body?.innerText||'');const i=document.querySelector('input[placeholder*="Search for post description"]');return {path:location.pathname,ready:document.readyState,bodySize:body.length,bodyStart:body.slice(0,300),search:i?.value||'',posts:document.querySelectorAll('a[href*="/video/"]').length,firstTitles:[...document.querySelectorAll('a[href*="/video/"]')].slice(0,7).map(a=>(a.innerText||'').trim().slice(0,100)),noResults:/no results|no posts|not found|no matching|nenhum resultado/i.test(body),aristotleInBody:body.toLowerCase().includes('aristóteles')}})()"""
+          try:
+           r=b._cdp('Runtime.evaluate',{'expression':expr,'returnByValue':True},timeout=8)
+           d=(r.get('result') or {}).get('value') or {}
+           print('STUDIO_CURRENT='+json.dumps(d,ensure_ascii=False)[:2400])
+          except Exception as e:print('CDP_EVAL_ERROR='+type(e).__name__)
+          `;
+          const result=await cli.exec.execServiceCommand({projectId,serviceId},{command:['python3','-c',script]});
+          console.log('READ_EXIT='+String(result.commandResult?.exitCode));
+          console.log('READ_RESULTS='+String(result.stdOut||'').replace(/[\r\n]+/g,' | ').slice(0,3800));
+          if(result.commandResult?.exitCode!==0)throw Error('READ_FAILED');
+          NODE
