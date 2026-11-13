@@ -1,0 +1,37 @@
+name: Kwai cloud cutover gate safety
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/kwai-cloud-cutover-gate-tests.yml'
+      - 'ci-hub/executor-routing.json'
+      - 'tools/android_executor_router.py'
+      - 'tests/test_android_executor_router.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: kwai-cloud-cutover-gate-tests-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  route-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify cloud cutover fail-closed and current physical routing
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_android_executor_router.py' -v
+          python3 - <<'PY'
+          import json
+          with open('ci-hub/executor-routing.json', encoding='utf-8') as f:
+              config=json.load(f)['android_execution']
+          assert config['cloud_cutover']['disable_local_executors'] is True
+          assert config['priority'][0]=='cloud_android_verified'
+          assert config['cloud_cutover']['enabled'] is False, 'PRODUCTION_CUTOVER_NOT_APPROVED'
+          print('KWAI_CLOUD_CUTOVER=BLOCKED_UNTIL_REAL_PROOF')
+          print('KWAI_PHYSICAL_PUBLICATION_ROUTING=UNTOUCHED')
+          print('KWAI_GITHUB_ANDROID_PUBLICATION=EXPERIMENTAL_ONLY')
+          PY

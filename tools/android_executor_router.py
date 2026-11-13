@@ -48,6 +48,37 @@ def _provider_usable(provider, meta, state, workload, limit):
     return _queue_ok(state, limit)
 
 
+
+def _verified_cloud_cutover(cfg, state):
+    """Require an explicit repository cutover plus the dual-account proofs.
+
+    Runtime-supplied JSON can report readiness; it cannot authorize cutover.
+    The repository configuration is the separate, default-off authority.
+    """
+    guard = cfg.get("cloud_cutover", {})
+    if not isinstance(guard, dict) or guard.get("enabled") is not True:
+        return False
+    if not isinstance(state, dict):
+        return False
+    if (state.get("online") is not True or
+            state.get("authenticated") is not True or
+            state.get("healthy") is not True or
+            state.get("ready") is not True):
+        return False
+    required = guard.get("required_proofs", [])
+    accounts = guard.get("required_accounts", [])
+    proof = state.get("proofs")
+    checked = state.get("verified_accounts")
+    if (not isinstance(required, list) or not required or
+            not isinstance(accounts, list) or len(accounts) != 2 or
+            not isinstance(proof, dict) or not isinstance(checked, list) or
+            not all(isinstance(a, str) for a in checked) or
+            len(set(checked)) != len(checked) or
+            set(checked) != set(accounts)):
+        return False
+    return all(isinstance(key, str) and proof.get(key) is True for key in required)
+
+
 def _primary_allows_memufailover(manifest, state):
     cfg = manifest["android_execution"]
     primary_name = cfg.get("primary_device", "physical_android")
@@ -87,6 +118,15 @@ def choose(manifest, state, workload="manual_auth"):
     for provider in cfg["priority"]:
         meta = providers.get(provider, {})
         s = state.get(provider)
+        # Runtime status alone must never authorize the new cloud publisher.
+        if provider == "cloud_android_verified" and not _verified_cloud_cutover(cfg, s):
+            continue
+        # After the cutover, never silently fall back to PC/physical Android.
+        cutover = cfg.get("cloud_cutover", {})
+        if (cutover.get("enabled") is True and
+                cutover.get("disable_local_executors") is True and
+                provider in {"physical_android", "memu_android"}):
+            continue
         # A connected Android can still be unusable for publication when its UI
         # is asleep or uiautomator fails. Avoid reselecting it after a verified
         # string of pre-publication device failures.
@@ -110,6 +150,8 @@ def choose(manifest, state, workload="manual_auth"):
 
 def selection_reason(manifest, state, selected):
     cfg = manifest["android_execution"]
+    if selected == "cloud_android_verified":
+        return "verified_cloud_cutover"
     if selected == cfg.get("primary_device"):
         return "primary_physical_device"
     if selected == cfg.get("fallback_device"):
