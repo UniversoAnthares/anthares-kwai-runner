@@ -75,7 +75,7 @@ def rid(root,r):
  # Exact whitelisted UI variants; package installation name differs from view ids.
  known={
   RID_PROFILE:('kwai.lite.video.basis:id/id_home_bottom_tab_me',),
-  RID_NEXT:('kwai.lite.video.product:id/edit_post_next_step_button','kwai.lite.video.ca_product:id/next_button_normal','com.kwai.video.ca_product:id/next_button_normal'),
+  RID_NEXT:('kwai.lite.video.product:id/edit_post_next_step_button','kwai.lite.video.ca_product:id/next_button_normal','com.kwai.video.ca_product:id/edit_next_button','com.kwai.video.ca_product:id/next_button_normal'),
   RID_EDITOR:('com.kwai.video.basis:id/editor',),
   RID_POST:('com.kwai.video.basis:id/post','com.kwai.video.basis:id/right_btn'),
   RID_PUBLIC:('com.kwai.video.ca_product:id/tv_select_permission',),
@@ -99,6 +99,17 @@ def wait(s,r,name,seconds=30):
  end=time.monotonic()+seconds
  while time.monotonic()<end:
   root,path=dump(s,name); xs=rid(root,r)
+  if r==RID_NEXT and ACCOUNT=='universoanthares':
+   # Next is the enabled clickable parent; its visible text child is not clickable.
+   # The adjacent Publicar control must never be selected at this stage.
+   xs=[n for n in xs
+      if n.attrib.get('resource-id')=='com.kwai.video.ca_product:id/edit_next_button'
+      and n.attrib.get('clickable')=='true'
+      and n.attrib.get('enabled')=='true'
+      and center(n.attrib.get('bounds',''))
+      and any(c.attrib.get('resource-id')=='com.kwai.video.ca_product:id/next_button_normal'
+          and (c.attrib.get('text') or '').strip().casefold() in {'próximo','proximo','next'}
+          for c in n.iter('node'))]
   if xs and r==RID_PROFILE:
    xs=[n for n in xs if n.attrib.get("clickable")=="true" and n.attrib.get("enabled")=="true" and center(n.attrib.get("bounds",""))]
    xs.sort(key=lambda n:center(n.attrib["bounds"])[0],reverse=True)
