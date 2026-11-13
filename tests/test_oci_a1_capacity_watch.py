@@ -58,6 +58,39 @@ class SafeDefaults(unittest.TestCase):
             self.assertEqual(len(mod.auth()), 5)
         self.assertEqual(len(configs), 4)
 
+    def test_public_subnet_without_nat_cannot_provision(self):
+        subnet = SimpleNamespace(
+            prohibit_public_ip_on_vnic=False, route_table_id="route",
+            vcn_id="vcn")
+        network = SimpleNamespace(get_route_table=lambda _: None)
+        self.assertFalse(mod.private_network_egress_ready(network, subnet))
+
+    def test_igw_route_rejects_private_ip_vm(self):
+        subnet = SimpleNamespace(
+            prohibit_public_ip_on_vnic=True, route_table_id="route",
+            vcn_id="vcn")
+        rule = SimpleNamespace(destination="0.0.0.0/0",
+                               destination_type="CIDR_BLOCK",
+                               network_entity_id="ocid1.internetgateway.demo")
+        network = SimpleNamespace(get_route_table=lambda _: SimpleNamespace(
+            data=SimpleNamespace(route_rules=[rule])))
+        self.assertFalse(mod.private_network_egress_ready(network, subnet))
+
+    def test_healthy_nat_in_private_subnet_is_eligible(self):
+        subnet = SimpleNamespace(
+            prohibit_public_ip_on_vnic=True, route_table_id="route",
+            vcn_id="vcn")
+        rule = SimpleNamespace(destination="0.0.0.0/0",
+                               destination_type="CIDR_BLOCK",
+                               network_entity_id="ocid1.natgateway.demo")
+        network = SimpleNamespace(
+            get_route_table=lambda _: SimpleNamespace(
+                data=SimpleNamespace(route_rules=[rule])),
+            get_nat_gateway=lambda _: SimpleNamespace(
+                data=SimpleNamespace(lifecycle_state="AVAILABLE",
+                                     vcn_id="vcn", block_traffic=False)))
+        self.assertTrue(mod.private_network_egress_ready(network, subnet))
+
     def test_region_constant_is_home_approved(self):
         self.assertEqual(mod.REGION, "sa-saopaulo-1")
         self.assertEqual((mod.CPU, mod.MEMORY_GB, mod.BOOT_GB), (1, 6, 50))
