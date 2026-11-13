@@ -1,0 +1,80 @@
+name: Northflank read-only free credit and compute capacity
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/northflank-safe-free-credit-check.yml']
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    env:
+      NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+    steps:
+      - name: Read only credit balance, monthly usage and existing service allocations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,json,urllib.request,urllib.error
+          T=os.getenv('NORTHFLANK_API_TOKEN','')
+          assert len(T)>20,'NORTHFLANK_ADMIN_SECRET_MISSING'
+          BASE='https://api.northflank.com/v1'
+          def get(path):
+              req=urllib.request.Request(BASE+path,headers={
+                  'Authorization':'Bearer '+T,'Accept':'application/json',
+                  'User-Agent':'Anthares-Northflank-ReadOnlyCreditAudit/1.0'})
+              try:
+                  with urllib.request.urlopen(req,timeout=16) as res:
+                      return res.status,json.load(res)
+              except urllib.error.HTTPError as e:
+                  return e.code,{}
+              except Exception as e:
+                  print('READONLY_NETWORK='+type(e).__name__,flush=True)
+                  return 0,{}
+          code,credits=get('/billing/credit-balance')
+          d=credits.get('data') or {}
+          if code==200:
+              print('NF_CREDIT_HTTP=200',flush=True)
+              print('NF_CREDIT_CURRENCY='+str(d.get('currency') or 'unknown'),flush=True)
+              print('NF_CREDIT_AVAILABLE='+str((d.get('total') or {}).get('available') or 0),flush=True)
+              print('NF_CREDIT_PENDING='+str((d.get('total') or {}).get('pending') or 0),flush=True)
+              print('NF_CREDIT_GRANTS_AVAILABLE='+str((d.get('grants') or {}).get('available') or 0),flush=True)
+              print('NF_CREDIT_CUSTOMER_BALANCE='+str((d.get('customerBalance') or {}).get('amount') or 0),flush=True)
+          else:print('NF_CREDIT_HTTP='+str(code),flush=True)
+          code,usage=get('/billing/usage?granularity=month&perPage=2')
+          print('NF_MONTH_USAGE_HTTP='+str(code),flush=True)
+          if code==200:
+              for row in (usage.get('data') or {}).get('usage') or []:
+                  if not isinstance(row,dict):continue
+                  print('NF_MONTH_USAGE='+json.dumps({
+                      'period':str(row.get('timestamp') or '')[:36],
+                      'amount':row.get('total'),
+                      'currency':row.get('currency')
+                  },sort_keys=True),flush=True)
+          code,ps=get('/projects')
+          if code!=200:raise SystemExit('NF_PROJECTS_UNAVAILABLE')
+          projs=(ps.get('data') or {}).get('projects') or []
+          if isinstance(projs,dict):projs=list(projs.values())
+          allocations=[]
+          for p in projs:
+              pid=p.get('id')
+              if not pid:continue
+              c,ss=get('/projects/'+pid+'/services')
+              if c!=200:continue
+              services=(ss.get('data') or {}).get('services') or []
+              if isinstance(services,dict):services=list(services.values())
+              for svc in services:
+                  sid=svc.get('id')
+                  if not sid:continue
+                  c,detail=get('/projects/'+pid+'/services/'+sid)
+                  if c==200:
+                      obj=detail.get('data') or {}
+                      allocations.append({'name':str(svc.get('name') or '')[:80],
+                         'plan':str((obj.get('billing') or {}).get('deploymentPlan') or ''),
+                         'instances':(obj.get('deployment') or {}).get('instances')})
+          print('NF_EXISTING_SERVICES='+json.dumps(allocations,sort_keys=True),flush=True)
+          print('NORTHFLANK_CREDIT_AUDIT_COMPLETE=1',flush=True)
+          PY
