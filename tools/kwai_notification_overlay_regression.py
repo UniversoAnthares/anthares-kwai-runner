@@ -93,6 +93,32 @@ try:
   else:raise AssertionError('Untrusted popup accepted')
   assert not taps
  print('KWAI_SECONDARY_PROMO_INVALID_NO_TAP_PASS')
+ # The secondary editor displays a clickable Next parent, and a nonclickable
+ # Próximo child. Another button directly publishes: never select that one.
+ n.ACCOUNT='universoanthares'
+ next_parent=ET.fromstring('<hierarchy>'
+  '<node resource-id="com.kwai.video.ca_product:id/next_step_button_container">'
+  '<node resource-id="com.kwai.video.ca_product:id/edit_post_button" clickable="true" enabled="true" bounds="[50,2052][524,2134]"><node resource-id="com.kwai.video.ca_product:id/post_button_normal" text="Publicar" /></node>'
+  '<node resource-id="com.kwai.video.ca_product:id/edit_next_button" clickable="true" enabled="true" bounds="[555,2052][1029,2134]"><node resource-id="com.kwai.video.ca_product:id/next_button_normal" text="Próximo" clickable="false" enabled="true" bounds="[703,2052][880,2134]"/></node>'
+  '</node></hierarchy>')
+ n.dump=lambda serial,name:(next_parent,None)
+ _,selected,_=n.wait('simulated',n.RID_NEXT,'next-parent',seconds=2)
+ assert selected.attrib.get('resource-id')=='com.kwai.video.ca_product:id/edit_next_button'
+ assert n.center(selected.attrib['bounds'])==(792,2093)
+ print('KWAI_SECONDARY_EDITOR_CLICKABLE_NEXT_PARENT_PASS')
+ for mod in ('clickable="false" enabled="true" bounds="[555,2052][1029,2134]','clickable="true" enabled="false" bounds="[555,2052][1029,2134]'):
+  bad=ET.fromstring(ET.tostring(next_parent,encoding='unicode').replace('clickable="true" enabled="true" bounds="[555,2052][1029,2134]',mod))
+  # Force the first read to be invalid; subsequent reads raise so the test is bounded.
+  calls=[]
+  def reject_next(serial,name):
+   calls.append(name)
+   if len(calls)==1:return bad,None
+   raise n.E('BAD_NEXT_REJECTED')
+  n.dump=reject_next
+  try:n.wait('simulated',n.RID_NEXT,'next-invalid',seconds=2)
+  except n.E as exc:assert 'BAD_NEXT_REJECTED' in str(exc)
+  else:raise AssertionError('disabled next was accepted')
+ print('KWAI_SECONDARY_EDITOR_DISABLED_NEXT_FAIL_CLOSED_PASS')
  # A guessed/wrong notification title may never authorize an arbitrary close.
  n.ACCOUNT='universoanthares';wrong=ET.fromstring(
   '<hierarchy><node resource-id="com.kwai.video.basis:id/tv_dialog_title" text="Security approval required"/>'
