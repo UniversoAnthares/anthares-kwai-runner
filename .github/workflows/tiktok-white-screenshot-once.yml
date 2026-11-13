@@ -53,5 +53,26 @@ jobs:
           print('RGB_STDDEV='+','.join(str(round(v,2)) for v in stat.stddev))
           print('NEAR_WHITE_FRACTION='+str(round(sum(all(c>=245 for c in px) for px in thumbnail.getdata())/(thumbnail.width*thumbnail.height),3)))
           print('URL_TIKTOK_PROFILE='+str(str(shot.get('url') or '').startswith('https://www.tiktok.com/@universo.anthares')))
+          near_white=sum(all(c>=245 for c in px) for px in thumbnail.getdata())/(thumbnail.width*thumbnail.height)
+          is_profile=str(shot.get('url') or '').startswith('https://www.tiktok.com/@universo.anthares')
+          if near_white>=0.999 and max(stat.stddev)<0.1 and is_profile:
+              print('WHITE_SCREEN_CONFIRMED_SOFT_NAVIGATION=1')
+              req=urllib.request.Request(base+'/interactive-browser/navigate',data=json.dumps({'url':'https://www.tiktok.com/@universo.anthares'}).encode(),headers={'Authorization':'Bearer '+token,'Content-Type':'application/json','Accept':'application/json'},method='POST')
+              with urllib.request.urlopen(req,timeout=28) as response:
+                  navigated=json.loads(response.read(5000))
+              print('PROFILE_NAVIGATION_OK='+str(bool(navigated.get('ok'))))
+              import time
+              time.sleep(4)
+              after=get('/interactive-browser/screenshot')
+              if not after.get('ok'):
+                  raise SystemExit('POST_NAV_SCREENSHOT_FAILED')
+              pix=Image.open(io.BytesIO(base64.b64decode(after.get('image_b64') or '',validate=True))).convert('RGB').resize((120,70))
+              post=ImageStat.Stat(pix)
+              after_white=sum(all(c>=245 for c in px) for px in pix.getdata())/(pix.width*pix.height)
+              print('AFTER_RGB_STDDEV='+','.join(str(round(v,2)) for v in post.stddev))
+              print('AFTER_NEAR_WHITE_FRACTION='+str(round(after_white,3)))
+              print('SOFT_NAV_RECOVERED_IMAGE='+str(after_white<0.999))
+          else:
+              print('SOFT_NAV_SKIPPED=IMAGE_NOT_PURE_WHITE_OR_PAGE_CHANGED')
           print('DIAGNOSTIC_DONE=1')
           PY
