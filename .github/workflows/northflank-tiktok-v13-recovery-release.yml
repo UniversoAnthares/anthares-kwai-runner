@@ -1,4 +1,4 @@
-name: TikTok Northflank existing service bounded v15 recovery
+name: TikTok Northflank existing service bounded v16 recovery
 on:
   workflow_dispatch: {}
   push:
@@ -7,7 +7,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: northflank-tiktok-v15-production-existing-service
+  group: northflank-tiktok-v16-production-existing-service
   cancel-in-progress: false
 jobs:
   repair:
@@ -28,7 +28,7 @@ jobs:
           assert len(T)>20 and len(SHARED)>20,'NORTHFLANK_AUTH_NOT_CONFIGURED'
           ROOT='https://api.northflank.com/v1'
           LIVE='https://http--anthares-tiktok-northflank--6f6pbqmvhpv6.code.run'
-          EXPECTED='2026-11-12-browser-ffmpeg-session-v15'
+          EXPECTED='2026-11-12-browser-ffmpeg-session-v16'
           def call(url,token,method='GET',body=None,timeout=25):
               headers={'Authorization':'Bearer '+token,'Accept':'application/json','User-Agent':'Anthares-Northflank-TikTok-V14-Bounded-Recovery/1.0'}
               if body is not None:headers['Content-Type']='application/json'
@@ -45,7 +45,7 @@ jobs:
           c,rev=call(LIVE+'/interactive-browser/revision',SHARED,timeout=13)
           print('NF_CURRENT_REVISION_HTTP='+str(c),flush=True)
           if c==200 and rev.get('revision')==EXPECTED:
-              print('NF_V15_RELEASE_ALREADY_ACTIVE=1',flush=True)
+              print('NF_V16_RELEASE_ALREADY_ACTIVE=1',flush=True)
           else:
               c,p=call(ROOT+'/projects',T)
               if c!=200:raise SystemExit('NF_ADMIN_INVALID_HTTP_'+str(c))
@@ -83,10 +83,10 @@ jobs:
                   time.sleep(10)
                   c,rev=call(LIVE+'/interactive-browser/revision',SHARED,timeout=13)
                   if c==200 and rev.get('revision')==EXPECTED:
-                      print('NF_V15_DEPLOYMENT_CONFIRMED=1',flush=True)
+                      print('NF_V16_DEPLOYMENT_CONFIRMED=1',flush=True)
                       break
                   if attempt%5==0:print('NF_DEPLOY_WAITING_10SEC_STEP='+str(attempt+1)+' http='+str(c),flush=True)
-              else:raise SystemExit('NF_V15_DEPLOYMENT_TIMEOUT')
+              else:raise SystemExit('NF_V16_DEPLOYMENT_TIMEOUT')
           for i in range(18):
               c,h=call(LIVE+'/health',SHARED,timeout=12)
               if c==200 and h.get('ok') is True and h.get('ffmpeg_ready') is True:
@@ -106,5 +106,5 @@ jobs:
           print('NF_TIKTOK_SESSION_BOOTSTRAPPED='+str(bool(ss.get('bootstrapped'))),flush=True)
           if c!=200 or ss.get('ok') is not True:
               raise SystemExit('NF_TIKTOK_SESSION_STATUS_UNVERIFIED')
-          print('NF_V15_EXISTING_SERVICE_RECOVERY_COMPLETE=1',flush=True)
+          print('NF_V16_EXISTING_SERVICE_RECOVERY_COMPLETE=1',flush=True)
           PY
