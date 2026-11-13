@@ -73,7 +73,12 @@ jobs:
               print('NF_TARGET_EXISTING_GIT_SOURCE_VERIFIED=1',flush=True)
               c,_=call(endpoint+'/build',T,method='POST',body={},timeout=45)
               print('NF_EXISTING_SERVICE_BUILD_HTTP='+str(c),flush=True)
-              if c not in (200,201,202):raise SystemExit('NF_EXPLICIT_BUILD_REJECTED_'+str(c))
+              if c==409:
+                  # Northflank already has the Git-sourced build/deploy in flight.
+                  # Do not send a second build; wait for the requested revision.
+                  print('NF_EXISTING_BUILD_IN_PROGRESS=1',flush=True)
+              elif c not in (200,201,202):
+                  raise SystemExit('NF_EXPLICIT_BUILD_REJECTED_'+str(c))
               for attempt in range(50):
                   time.sleep(10)
                   c,rev=call(LIVE+'/interactive-browser/revision',SHARED,timeout=13)
