@@ -16,7 +16,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/"tools"))
 sys.path.insert(0,str(ROOT/"direct-tiktok-publisher"))
-from cortes_tiktok_queue_consumer import marker
+from cortes_tiktok_queue_consumer import marker, oidc, qcall
 from cortes_tiktok_hosted_publish import preflight_vault
 from playwright.sync_api import sync_playwright
 
@@ -195,6 +195,15 @@ def history_controls(page):
 
 
 def main():
+    # Evidence for the October 27 incidents remains in the immutable Neon audit.
+    # Skip an expensive authenticated 20-query Studio scan after all historical
+    # uncertain rows have been administratively closed without retransmission.
+    current=qcall("status",oidc())
+    if current.get("ok") is not True:
+        raise RuntimeError("TIKTOK_HISTORIC_LEDGER_STATUS_UNAVAILABLE")
+    if int((current.get("count") or {}).get("uncertain",0))==0:
+        print("CORTES_TIKTOK_HISTORIC_UNCERTAIN_TERMINALLY_CLOSED_NO_REUPLOAD=1",flush=True)
+        return 0
     state=preflight_vault()  # exact logged-in @universo.anthares identity
     hits={s:set() for s in SEGMENTS}
     candidates={s:set() for s in SEGMENTS}
