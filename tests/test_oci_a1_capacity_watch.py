@@ -142,11 +142,20 @@ class SafeDefaults(unittest.TestCase):
     def test_cloud_init_is_encoded_and_local_only(self):
         from unittest.mock import patch
         import base64
-        data = b"#cloud-config\n" + b"--privileged\n127.0.0.1:5555:5555\n"
+        data = (b"#cloud-config\n--privileged\n127.0.0.1:5555:5555\n"\n                + mod.REDROID_ARM64_IMAGE.encode("ascii"))
         with patch.object(mod, "Path") as path:
             self._stub_cloud_init(path, data)
             self.assertEqual(base64.b64decode(
                 mod.redroid_cloud_init_data()), data)
+
+    def test_cloud_init_rejects_mutable_redroid_tag(self):
+        from unittest.mock import patch
+        data = (b"#cloud-config\n--privileged\n127.0.0.1:5555:5555\n"
+                + b"redroid/redroid:12.0.0_64only-240527")
+        with patch.object(mod, "Path") as path:
+            self._stub_cloud_init(path, data)
+            with self.assertRaises(ValueError):
+                mod.redroid_cloud_init_data()
 
     def test_cloud_init_rejects_public_adb_binding(self):
         from unittest.mock import patch
