@@ -1,0 +1,116 @@
+name: Northflank TikTok sandbox capped-memory recovery
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/northflank-tiktok-free-memory-recovery.yml']
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: northflank-tiktok-sandbox-capped-compute
+  cancel-in-progress: false
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    env:
+      NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+    steps:
+      - name: Confirm two-service free capacity and resize only existing TikTok instance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,json,urllib.request,urllib.error,urllib.parse,time
+          T=os.getenv('NORTHFLANK_API_TOKEN','')
+          SHARED=os.getenv('ARA_SHARED','')
+          if len(T)<20 or len(SHARED)<20:raise SystemExit('NORTHFLANK_AUTH_MISSING')
+          BASE='https://api.northflank.com/v1'
+          def api(path,method='GET',body=None,timeout=18):
+              headers={'Authorization':'Bearer '+T,'Accept':'application/json','User-Agent':'AntharesNorthflankFreeMemoryRecovery/1.0'}
+              data=None
+              if body is not None:
+                  data=json.dumps(body,separators=(',',':')).encode()
+                  headers['Content-Type']='application/json'
+              req=urllib.request.Request(BASE+path,headers=headers,data=data,method=method)
+              try:
+                  with urllib.request.urlopen(req,timeout=timeout) as res:
+                      raw=res.read(120000)
+                      return res.status,json.loads(raw) if raw else {}
+              except urllib.error.HTTPError as e:
+                  return e.code,{}
+              except Exception as e:
+                  print('NF_RESOURCE_NETWORK='+type(e).__name__,flush=True)
+                  return 0,{}
+          # Never alter resources if the account's available/current capacity
+          # differs from the known two-service zero-invoice Sandbox baseline.
+          c,credits=api('/billing/credit-balance')
+          if c!=200:raise SystemExit('NF_BILLING_VISIBILITY_REQUIRED_SAFE_STOP')
+          d=credits.get('data') or {}
+          free_credit=float((d.get('total') or {}).get('available') or 0)
+          c,usage=api('/billing/usage?granularity=month&perPage=2')
+          if c!=200:raise SystemExit('NF_USAGE_VISIBILITY_REQUIRED_SAFE_STOP')
+          vals=(usage.get('data') or {}).get('usage') or []
+          if not vals:raise SystemExit('NF_USAGE_INCOMPLETE_SAFE_STOP')
+          latest=vals[0]
+          latest_cost=float(latest.get('total') or 0)
+          print('NF_CURRENT_MONTH_REPORTED_USAGE='+str(latest_cost),flush=True)
+          if latest_cost!=0:raise SystemExit('NF_NONZERO_USAGE_SAFE_STOP')
+          c,p=api('/projects')
+          if c!=200:raise SystemExit('NF_PROJECT_LIST_UNAVAILABLE')
+          projs=(p.get('data') or {}).get('projects') or []
+          if isinstance(projs,dict):projs=list(projs.values())
+          all_services=[]
+          for proj in projs:
+              pid=proj.get('id')
+              if not pid:continue
+              code,d=api('/projects/'+pid+'/services')
+              if code!=200:raise SystemExit('NF_SERVICE_LIST_UNAVAILABLE')
+              ss=(d.get('data') or {}).get('services') or []
+              if isinstance(ss,dict):ss=list(ss.values())
+              for service in ss:
+                  sid=service.get('id')
+                  if not sid:continue
+                  code,details=api('/projects/'+pid+'/services/'+sid)
+                  if code!=200:raise SystemExit('NF_SERVICE_DETAIL_UNAVAILABLE')
+                  all_services.append((pid,sid,details.get('data') or {}))
+          if len(all_services)!=2:
+              raise SystemExit('NF_NON_SANDBOX_SIZE_SERVICE_COUNT_SAFE_STOP_'+str(len(all_services)))
+          names=sorted([x[2].get('name') for x in all_services])
+          if names!=['anthares-ara-northflank','anthares-tiktok-northflank']:
+              raise SystemExit('NF_UNEXPECTED_RESOURCE_SET_SAFE_STOP')
+          target=[x for x in all_services if x[2].get('name')=='anthares-tiktok-northflank'][0]
+          other=[x for x in all_services if x[2].get('name')=='anthares-ara-northflank'][0]
+          if (other[2].get('billing') or {}).get('deploymentPlan')!='nf-compute-10':
+              raise SystemExit('NF_SECOND_SERVICE_NOT_MINIMUM_SAFE_STOP')
+          if (target[2].get('buildSource')!='git' or
+              'UniversoAnthares/anthares-clipper' not in str((target[2].get('vcsData') or {}).get('projectUrl') or '') or
+              target[2].get('serviceType')!='combined' or
+              (target[2].get('deployment') or {}).get('instances')!=1):
+              raise SystemExit('NF_TIKTOK_TARGET_NOT_CANONICAL_SAFE_STOP')
+          current=(target[2].get('billing') or {}).get('deploymentPlan')
+          if current not in ('nf-compute-10','nf-compute-50'):
+              raise SystemExit('NF_UNKNOWN_INITIAL_PLAN_SAFE_STOP')
+          projected=12.0+2.70
+          if projected>20 or free_credit>0:
+              raise SystemExit('NF_ACCOUNT_BASELINE_INCONSISTENT_SAFE_STOP')
+          print('NF_SANDBOX_PROJECTED_MONTHLY_RESOURCE_DOLLARS='+str(projected),flush=True)
+          print('NF_SANDBOX_MAX_RESOURCE_ALLOWANCE_DOLLARS=20',flush=True)
+          target_path='/projects/'+target[0]+'/services/combined/'+target[1]
+          if current=='nf-compute-10':
+              c,result=api(target_path,method='PATCH',body={'billing':{'deploymentPlan':'nf-compute-50'}},timeout=28)
+              print('NF_TIKTOK_COMPUTE_RESIZE_HTTP='+str(c),flush=True)
+              if c not in (200,201,202):
+                  raise SystemExit('NF_COMPUTE_PLAN_UPGRADE_REJECTED')
+          else:
+              print('NF_TIKTOK_COMPUTE_ALREADY_1GB=1',flush=True)
+          for attempt in range(28):
+              code,details=api('/projects/'+target[0]+'/services/'+target[1])
+              if code==200 and ((details.get('data') or {}).get('billing') or {}).get('deploymentPlan')=='nf-compute-50':
+                  print('NF_TIKTOK_COMPUTE_PLAN_1GB_VERIFIED=1',flush=True)
+                  break
+              time.sleep(5)
+          else:raise SystemExit('NF_COMPUTE_RESIZE_UNVERIFIED')
+          print('NF_EXISTING_SERVICE_ONLY_MEMORY_RECOVERY=1',flush=True)
+          PY
