@@ -35,7 +35,7 @@ class CatalogWatchTests(unittest.TestCase):
                           return_value={"provider":"test","status":"FETCH_UNAVAILABLE"}):
             data=mod.report()
         self.assertFalse(data["secrets_used"])
-        self.assertFalse(data["any_vm_allocated"])
+        self.assertFalse(data["vm_allocation_checked"])
         self.assertFalse(data["any_provider_approved"])
         self.assertEqual(len(data["results"]),4)
 
