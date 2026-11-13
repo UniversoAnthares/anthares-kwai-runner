@@ -37,6 +37,8 @@ jobs:
           const script=String.raw`
           import sys,time,json,os,urllib.parse
           sys.path.insert(0,'/app')
+          os.environ.pop('TIKTOK_STORAGE_STATE',None)
+          os.environ['TIKTOK_STORAGE_STATE_FILE']=os.getenv('TIKTOK_STATE_PATH','/tmp/tiktok-storage-state.json')
           import tiktok_worker as tw
           from playwright.sync_api import sync_playwright
           def log(k,v):print(str(k)+'='+str(v),flush=True)
