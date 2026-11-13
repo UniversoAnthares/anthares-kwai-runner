@@ -1,0 +1,86 @@
+name: One-time TikTok authenticated Chromium post inventory diagnostic
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/tiktok-profile-cdp-inventory-once.yml']
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      NF_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+    steps:
+      - name: Install Northflank client
+        run: npm install --no-save --no-package-lock --ignore-scripts @northflank/js-client@0.12.0
+      - name: Reuse encrypted owner browser and inspect visible post inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {ApiClient,ApiClientInMemoryContextProvider} from '@northflank/js-client';
+          const token=process.env.NF_TOKEN,shared=process.env.ARA_SHARED;if(!token||token.length<20||!shared||shared.length<20)throw Error('AUTH_REQUIRED');
+          const call=async(path)=>{const r=await fetch('https://api.northflank.com/v1'+path,{headers:{Authorization:'Bearer '+token}});if(!r.ok)throw Error('NF_API_'+r.status);return r.json();};
+          const found=[];for(const p of (await call('/projects')).data?.projects||[])for(const s of (await call('/projects/'+encodeURIComponent(p.id)+'/services')).data?.services||[])if(s.name==='anthares-tiktok-northflank')found.push([p.id,s.id||s.name]);
+          if(found.length!==1)throw Error('SERVICE_NOT_UNIQUE');
+          const [projectId,serviceId]=found[0],cp=new ApiClientInMemoryContextProvider();await cp.addContext({name:'cdp',token});const cli=new ApiClient(cp);
+          const root='https://http--anthares-tiktok-northflank--6f6pbqmvhpv6.code.run';
+          const api=async(method,path,body)=>{const headers={Authorization:'Bearer '+shared,Accept:'application/json'};if(body!==undefined)headers['Content-Type']='application/json';const r=await fetch(root+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(35000)});return {code:r.status,data:await r.json().catch(()=>({}))};};
+          let state=await api('GET','/interactive-browser/status');
+          console.log('INITIAL_BROWSER_ACTIVE='+Boolean(state.data.active));
+          if(!state.data.active){
+           const start=await api('POST','/interactive-browser/start-async',{});
+           console.log('BROWSER_START_HTTP='+start.code);
+           if(start.code>=400||!start.data.ok)throw Error('BROWSER_START_FAILED');
+          }
+          for(let i=0;i<17;i++){
+           state=await api('GET','/interactive-browser/status');
+           if(state.data.active&&state.data.responsive)break;
+           await new Promise(resolve=>setTimeout(resolve,5000));
+          }
+          if(!(state.data.active&&state.data.responsive))throw Error('BROWSER_NOT_READY');
+          const nav=await api('POST','/interactive-browser/navigate',{url:'https://www.tiktok.com/@universo.anthares'});
+          console.log('PROFILE_NAVIGATE_HTTP='+nav.code);
+          if(nav.code!==200||!nav.data.ok)throw Error('PROFILE_NAV_FAILED');
+          await new Promise(resolve=>setTimeout(resolve,7500));
+          const script=String.raw`
+          import json,sys
+          sys.path.insert(0,"/app/render-tiktok-worker")
+          from browser_executor import _cdp
+          expr = r"""(()=>{
+           const cards=[...document.querySelectorAll('[data-e2e*=user-post-item],[data-e2e*=user-post],[class*=DivItemContainer],[data-e2e*=video-card]')];
+           const anchors=[...document.querySelectorAll('a[href*="/video/"]')];
+           const links=anchors.map(a=>({url:a.href,caption:(a.getAttribute('title')||a.getAttribute('aria-label')||a.innerText||'').trim().slice(0,130)}));
+           const labels=cards.slice(0,12).map(e=>(e.getAttribute('aria-label')||e.getAttribute('title')||e.innerText||'').trim().slice(0,90));
+           const body=(document.body?.innerText||'');
+           const rehydration=document.querySelector('#__UNIVERSAL_DATA_FOR_REHYDRATION__');
+           let ucount=0,vids=0;
+           try{const data=JSON.parse(rehydration?.textContent||'{}');const stack=[data];let seen=0;
+            while(stack.length&&seen++<100000){const v=stack.pop();if(!v)continue;
+             if(Array.isArray(v)){for(const x of v)if(x&&typeof x==='object')stack.push(x);}
+             else if(typeof v==='object'){if(v.uniqueId==='universo.anthares')ucount++;
+              if(typeof v.id==='string'&&/^\d{16,}$/.test(v.id)&&('desc' in v||'video' in v))vids++;
+              for(const x of Object.values(v))if(x&&typeof x==='object')stack.push(x);}
+            }
+           }catch{}
+           return {pathname:location.pathname,owner_marker:body.includes('Edit profile')||body.includes('Editar perfil'),cards:cards.length,links:anchors.length,
+             labels:labels.slice(0,8),examples:links.slice(0,8),hydration_video_ids:vids,hydration_owner_matches:ucount,
+             description_in_body:body.toLowerCase().includes('conceito de comédia para aristóteles'),
+             page_text_length:body.length};
+          })()"""
+          r=_cdp("Runtime.evaluate",{"expression":expr,"returnByValue":True},timeout=20)
+          data=(r.get("result") or {}).get("value") or {}
+          if not isinstance(data,dict) or not data:raise SystemExit("CDP_EMPTY_RESULT")
+          for k,v in data.items():
+           if isinstance(v,list):print("PROFILE_"+k.upper()+"="+json.dumps(v,ensure_ascii=False)[:1250])
+           else:print("PROFILE_"+k.upper()+"="+str(v)[:150])
+          `;
+          const result=await cli.exec.execServiceCommand({projectId,serviceId},{command:['python3','-c',script]});
+          console.log('CDP_READ_EXIT='+String(result.commandResult?.exitCode));
+          console.log('CDP_READ_OUTPUT='+String(result.stdOut||'').slice(0,4500).replace(/[\r\n]+/g,' | '));
+          if(result.commandResult?.exitCode!==0)throw Error('CDP_READ_FAILED');
+          console.log('BROWSER_LEFT_OPEN=1');
+          
+          NODE
