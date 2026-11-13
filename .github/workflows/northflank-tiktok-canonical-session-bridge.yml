@@ -1,0 +1,81 @@
+name: TikTok Northflank authenticated canonical-owner recovery (no publish)
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths: ['.github/workflows/northflank-tiktok-canonical-session-bridge.yml']
+permissions:
+  contents: read
+concurrency:
+  group: northflank-tiktok-canonical-session-recovery
+  cancel-in-progress: false
+jobs:
+  recover:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 11
+    env:
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install isolated read-only TikTok canonical owner browser
+        run: |
+          set -euo pipefail
+          python3 -m pip install -q playwright requests cryptography
+          PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=120000 python3 -m playwright install chromium
+      - name: Verify @universo.anthares first, transfer state using TLS+owner token and validate on Northflank
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,sys,json,urllib.request,urllib.error,urllib.parse
+          sys.path.insert(0,'tools')
+          sys.path.insert(0,'direct-tiktok-publisher')
+          from cortes_tiktok_hosted_publish import preflight_vault
+          SHARED=os.getenv('ARA_SHARED','')
+          if len(SHARED)<20:raise SystemExit('NORTHFLANK_SHARED_AUTH_MISSING')
+          B='https://http--anthares-tiktok-northflank--6f6pbqmvhpv6.code.run'
+          def call(path,method='GET',data=None,timeout=25):
+              h={'Accept':'application/json','Authorization':'Bearer '+SHARED,'User-Agent':'Anthares-Northflank-Canonical-Owner-Sync/1.0'}
+              raw=None
+              if data is not None:
+                  raw=json.dumps(data,separators=(',',':')).encode()
+                  h['Content-Type']='application/json'
+              request=urllib.request.Request(B+path,headers=h,data=raw,method=method)
+              try:
+                  with urllib.request.urlopen(request,timeout=timeout) as res:
+                      payload=res.read(600000)
+                      return res.status,json.loads(payload) if payload else {}
+              except urllib.error.HTTPError as ex:
+                  return ex.code,{}
+              except Exception as ex:
+                  print('NF_SESSION_BRIDGE_NETWORK='+type(ex).__name__+' path='+path,flush=True)
+                  return 0,{}
+          c,health=call('/health',timeout=18)
+          if c!=200 or health.get('ok') is not True or health.get('ffmpeg_ready') is not True:
+              raise SystemExit('NF_V13_CODEC_PREFLIGHT_UNAVAILABLE')
+          state=preflight_vault()
+          cookies=state.get('cookies') or []
+          if not cookies or len(cookies)>256:raise SystemExit('NF_CANONICAL_OWNER_STATE_INVALID')
+          encoded=json.dumps(state,separators=(',',':')).encode()
+          if len(encoded)>240000:raise SystemExit('NF_CANONICAL_OWNER_STATE_TOO_LARGE')
+          print('NF_CANONICAL_OWNER_PROVEN_BEFORE_TRANSFER=1',flush=True)
+          c,boot=call('/bootstrap-session',method='POST',data=state,timeout=35)
+          print('NF_CANONICAL_OWNER_BOOTSTRAP_HTTP='+str(c),flush=True)
+          if c!=200 or boot.get('ok') is not True:
+              raise SystemExit('NF_OWNER_SESSION_BOOTSTRAP_FAILED')
+          c,result=call('/session-test',method='POST',data={},timeout=150)
+          print('NF_OWNER_SESSION_TEST_HTTP='+str(c),flush=True)
+          print('NF_OWNER_SESSION_TEST_SUCCESS='+str(bool(result.get('ok'))),flush=True)
+          print('NF_OWNER_IDENTITY_VERIFIED='+str(bool(result.get('identity_verified'))),flush=True)
+          print('NF_OWNER_CENTRAL_PERSISTED='+str(bool(result.get('central_persisted'))),flush=True)
+          # Never print session-test stdout/stderr, state, token or cookie values.
+          c2,h2=call('/health',timeout=18)
+          print('NF_OWNER_FINAL_READY='+str(bool(h2.get('ready_for_tiktok'))),flush=True)
+          if c!=200 or result.get('ok') is not True or result.get('identity_verified') is not True or c2!=200 or h2.get('ready_for_tiktok') is not True:
+              raise SystemExit('NF_OWNER_REMOTE_IDENTITY_STILL_UNVERIFIED')
+          print('NF_CANONICAL_OWNER_SESSION_RECOVERED=1',flush=True)
+          PY
