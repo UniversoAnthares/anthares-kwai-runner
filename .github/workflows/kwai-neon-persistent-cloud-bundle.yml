@@ -1,0 +1,69 @@
+name: Kwai Neon persistent Android deployment bundle (nonpublishing)
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/kwai-neon-persistent-cloud-bundle.yml'
+      - 'infra/neon-cortes-queue/index.mjs'
+      - 'infra/neon-cortes-queue/kwai-pacing-policy.mjs'
+      - 'infra/neon-cortes-queue/kwai-persistent-cloud-identity.mjs'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: kwai-neon-cloud-bundle-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  bundle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Static tests (never call publisher, queue or Neon API)
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check infra/neon-cortes-queue/index.mjs
+          node --check infra/neon-cortes-queue/kwai-persistent-cloud-identity.mjs
+          node --check infra/neon-cortes-queue/kwai-pacing-policy.mjs
+          node --test infra/neon-cortes-queue/kwai-persistent-cloud-identity.test.mjs
+          node --test infra/neon-cortes-queue/kwai-pacing-policy.test.mjs
+      - name: Package full import graph without credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile, ZIP_DEFLATED, ZipInfo
+          import hashlib
+          source=Path('infra/neon-cortes-queue')
+          names=['index.mjs','kwai-pacing-policy.mjs','kwai-persistent-cloud-identity.mjs']
+          out=Path('kwai-neon-function-bundle.zip')
+          with ZipFile(out,'w',compression=ZIP_DEFLATED) as z:
+            for name in names:
+              data=(source/name).read_bytes()
+              assert b'KWAI_PERSISTENT_CLOUD_TOKEN=' not in data
+              entry=ZipInfo(name,date_time=(2026,11,13,0,0,0))
+              entry.compress_type=ZIP_DEFLATED
+              z.writestr(entry,data)
+          with ZipFile(out) as z:
+            assert z.namelist()==names
+            assert len(z.read('index.mjs'))>100_000
+            assert b"import {kwaiPersistentCloudIdentity" in z.read('index.mjs')
+            assert b"KWAI_PERSISTENT_CLOUD_PUBLISH_ENABLED === '1'" in z.read('kwai-persistent-cloud-identity.mjs')
+          digest=hashlib.sha256(out.read_bytes()).hexdigest()
+          Path('kwai-neon-function-bundle.sha256').write_text(
+            digest+'  kwai-neon-function-bundle.zip\n')
+          print('NEON_CLOUD_PACKAGE_FILES='+','.join(names))
+          print('NEON_CLOUD_PACKAGE_SHA256='+digest)
+          print('NEON_CLOUD_PACKAGE_DEPLOYED=NO')
+          print('KWAI_PUBLISH_ATTEMPTS=0')
+          PY
+      - name: Publish private build artifact only (no Neon deploy)
+        uses: actions/upload-artifact@v4
+        with:
+          name: kwai-neon-function-bundle-${{ github.sha }}
+          path: |
+            kwai-neon-function-bundle.zip
+            kwai-neon-function-bundle.sha256
+          retention-days: 7
