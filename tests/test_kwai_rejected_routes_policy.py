@@ -55,7 +55,7 @@ class KwaiRoutePolicyTests(unittest.TestCase):
         self.assertIn("Kuaishou", plan)
         self.assertIn("GitHub Actions", plan)
         self.assertIn("BLOQUEADO_POR_RECURSO_REAL", plan)
-        self.assertIn("Patrocin", plan.title())
+        self.assertIn("patrocínio", plan)
 
     def test_other_exclusions_remain_without_new_oracle_monitor(self):
         preflight = ROOT / "docs" / "REDROID-FREE-VPS-QUALIFICATION.md"
