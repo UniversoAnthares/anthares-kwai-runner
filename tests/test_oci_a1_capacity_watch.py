@@ -142,12 +142,36 @@ class SafeDefaults(unittest.TestCase):
     def test_cloud_init_is_encoded_and_local_only(self):
         from unittest.mock import patch
         import base64
-        data = (b"#cloud-config\n--privileged\n127.0.0.1:5555:5555\n"
-                + mod.REDROID_ARM64_IMAGE.encode("ascii"))
+        data = (b'#cloud-config\\n--privileged\\n127.0.0.1:5555:5555\\n'
+                + b'--platform "$PLATFORM"\\n'
+                + mod.REDROID_ARM64_IMAGE.encode('ascii')
+                + b'\\n'
+                + mod.REDROID_AMD64_IMAGE.encode('ascii'))
         with patch.object(mod, "Path") as path:
             self._stub_cloud_init(path, data)
             self.assertEqual(base64.b64decode(
                 mod.redroid_cloud_init_data()), data)
+
+    def test_cloud_init_rejects_missing_amd64_digest(self):
+        from unittest.mock import patch
+        data = (b'#cloud-config\\n--privileged\\n127.0.0.1:5555:5555\\n'
+                + b'--platform "$PLATFORM"\\n'
+                + mod.REDROID_ARM64_IMAGE.encode('ascii'))
+        with patch.object(mod, "Path") as path:
+            self._stub_cloud_init(path, data)
+            with self.assertRaises(ValueError):
+                mod.redroid_cloud_init_data()
+
+    def test_cloud_init_rejects_hardcoded_platform(self):
+        from unittest.mock import patch
+        data = (b'#cloud-config\\n--privileged\\n127.0.0.1:5555:5555\\n'
+                + b'--platform linux/arm64\\n'
+                + mod.REDROID_ARM64_IMAGE.encode('ascii')
+                + b'\\n' + mod.REDROID_AMD64_IMAGE.encode('ascii'))
+        with patch.object(mod, "Path") as path:
+            self._stub_cloud_init(path, data)
+            with self.assertRaises(ValueError):
+                mod.redroid_cloud_init_data()
 
     def test_cloud_init_rejects_mutable_redroid_tag(self):
         from unittest.mock import patch
