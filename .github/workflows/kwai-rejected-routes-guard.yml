@@ -1,0 +1,30 @@
+name: Kwai retired publication routes guard
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/kwai-rejected-routes-guard.yml'
+      - '.github/workflows/oci-a1-android-cloud-watch.yml'
+      - '.github/workflows/oci-a1-readonly-smoke-once.yml'
+      - 'ci-hub/executor-routing.json'
+      - 'docs/KWAI-PLANO-SEM-ORACLE-20261113.md'
+      - 'docs/KWAI-CLOUD-CUTOVER-CONTRACT.md'
+      - 'docs/REDROID-FREE-VPS-QUALIFICATION.md'
+      - 'tests/test_kwai_rejected_routes_policy.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test only documented owner bans; no login, publish or OCI check
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_kwai_rejected_routes_policy.py' -v
+          echo 'ORACLE_CHECKS_PERFORMED=0'
+          echo 'KWAI_PUBLISH_ATTEMPTS=0'
+          echo 'CUTMOTIONS_SIGNIN_ATTEMPTS=0'

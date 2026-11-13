@@ -34,7 +34,7 @@ Testes automatizados: `tests/test_redroid_free_vps_preflight.py`: 7 PASS (ARA `c
 
 ## Próxima condição operacional
 
-Disponibilizar **uma VM Linux realmente utilizável** com contrato gratuito e persistente, acesso root, isolamento e pelo menos 2 vCPU / 4 GB / 20 GB livres. Só então executar o preflight no host. Se aprovado, instalar ReDroid por digest ARM64 ou AMD64 verificado, ADB apenas `127.0.0.1:5555`, criar armazenamento persistente, homologar com conta de teste e preservar a exclusão mútua do publicador existente. A opção Oracle A1 permanece preparada e pode voltar a ser considerada quando houver capacidade gratuita.
+Disponibilizar **uma VM Linux realmente utilizável** com contrato gratuito e persistente, acesso root, isolamento e pelo menos 2 vCPU / 4 GB / 20 GB livres. Só então executar o preflight no host. Se aprovado, instalar ReDroid por digest ARM64 ou AMD64 verificado, ADB apenas `127.0.0.1:5555`, criar armazenamento persistente, homologar com conta de teste e preservar a exclusão mútua do publicador existente. A rota Oracle foi expressamente encerrada pelo titular em 13/11/2026, PR #2575: é proibido voltar a consultar ou provisionar a Oracle sem nova ordem. Ver `docs/KWAI-PLANO-SEM-ORACLE-20261113.md`.
 
 ## Evidências públicas
 
