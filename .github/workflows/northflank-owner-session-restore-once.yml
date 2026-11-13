@@ -1,0 +1,123 @@
+name: Restore TikTok encrypted vault after Northflank automatic rollout once
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/northflank-owner-session-restore-once.yml']
+permissions:
+  contents: read
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      NF_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+    steps:
+      - name: Install Northflank client
+        run: npm install --no-save --no-package-lock --ignore-scripts @northflank/js-client@0.12.0
+      - name: Restore existing encrypted cookie vault and independently verify TikTok identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import {ApiClient,ApiClientInMemoryContextProvider} from '@northflank/js-client';
+          const nf=process.env.NF_TOKEN,auth=process.env.ARA_SHARED;
+          if(!nf||nf.length<20||!auth||auth.length<20)throw Error('AUTH_MISSING');
+          const get=async path=>{const r=await fetch('https://api.northflank.com/v1'+path,{headers:{Authorization:'Bearer '+nf}});if(!r.ok)throw Error('NORTHFLANK_API_HTTP_'+r.status);return r.json();};
+          const found=[];for(const p of (await get('/projects')).data?.projects||[])for(const s of (await get('/projects/'+encodeURIComponent(p.id)+'/services')).data?.services||[])if(s.name==='anthares-tiktok-northflank')found.push([p.id,s.id||s.name]);
+          if(found.length!==1)throw Error('SERVICE_NOT_UNIQUE');
+          const [projectId,serviceId]=found[0],ctx=new ApiClientInMemoryContextProvider();
+          await ctx.addContext({name:'recover',token:nf});const client=new ApiClient(ctx);
+          const source=String.raw`
+          import os,time,json,sys
+          from pathlib import Path
+          sys.path.insert(0,'/app/render-tiktok-worker')
+          from browser_state_vault import load_runtime_state
+          owner=os.getenv('EXPECTED_TIKTOK_USERNAME','').strip().lstrip('@').lower()
+          print('EXPECTED_ACCOUNT_MATCH='+str(owner=='universo.anthares'),flush=True)
+          if owner!='universo.anthares':raise SystemExit('EXPECTED_OWNER_MISMATCH')
+          state=Path(os.getenv('TIKTOK_STATE_PATH','/tmp/tiktok-storage-state.json'))
+          verified=Path(os.getenv('TIKTOK_VERIFIED_PATH','/tmp/tiktok-identity-verified.json'))
+          saved=None
+          for attempt in range(3):
+           saved=load_runtime_state(timeout=16)
+           if isinstance(saved,dict) and len(saved.get('cookies') or [])>=20:break
+           time.sleep(2)
+          if not isinstance(saved,dict):raise SystemExit('ENCRYPTED_VAULT_UNAVAILABLE')
+          cookies=saved.get('cookies') or []
+          auth={'sessionid','sessionid_ss','sid_tt','sid_guard','uid_tt','uid_tt_ss'}
+          def keys(xs):return {(str(c.get('name') or ''),str(c.get('domain') or ''),str(c.get('value') or '')) for c in xs if str(c.get('name') or '').lower() in auth}
+          stored_auth=keys(cookies)
+          print('ENCRYPTED_VAULT_COOKIE_COUNT='+str(len(cookies)),flush=True)
+          print('ENCRYPTED_VAULT_HAS_AUTH='+str(bool(stored_auth)),flush=True)
+          if len(cookies)<20 or not stored_auth:raise SystemExit('VAULT_MISSING_AUTH_SAFE_STOP')
+          if state.is_file():
+           try:existing=json.loads(state.read_text(encoding='utf-8'))
+           except Exception:raise SystemExit('LOCAL_STATE_UNREADABLE_SAFE_STOP')
+           local_cookies=(existing.get('cookies') or []) if isinstance(existing,dict) else []
+           print('LOCAL_STATE_ALREADY_EXISTS='+str(len(local_cookies)),flush=True)
+           if len(local_cookies)<20 or not stored_auth.issubset(keys(local_cookies)):raise SystemExit('LOCAL_AUTH_STATE_CONFLICT')
+          else:
+           raw=json.dumps(saved,separators=(',',':'),ensure_ascii=True).encode('utf-8')
+           if len(raw)>750000:raise SystemExit('VAULT_PLAINTEXT_EXCESSIVE')
+           state.parent.mkdir(parents=True,exist_ok=True)
+           tmp=state.with_suffix('.restore_tmp')
+           if tmp.exists():raise SystemExit('PENDING_RESTORE_CONFLICT')
+           with open(tmp,'xb') as fh:fh.write(raw)
+           os.chmod(tmp,0o600)
+           os.replace(tmp,state)
+           print('LOCAL_STATE_RESTORED=1',flush=True)
+          print('LOCAL_STATE_FILE_BYTES='+str(state.stat().st_size),flush=True)
+          print('IDENTITY_ALREADY_VERIFIED='+str(verified.is_file()),flush=True)
+          `;
+          const r=await client.exec.execServiceCommand({projectId,serviceId},{command:['python3','-c',source]});
+          console.log('RECOVERY_EXIT='+String(r.commandResult?.exitCode));
+          console.log('RECOVERY_RESULT='+String(r.stdOut||'').replace(/[\r\n]+/g,' | ').slice(0,1700));
+          if(r.commandResult?.exitCode!==0)throw Error('ENCRYPTED_RESTORE_SAFE_STOP');
+          const root='https://http--anthares-tiktok-northflank--6f6pbqmvhpv6.code.run';
+          async function call(method,path,body){
+           const headers={Authorization:'Bearer '+auth,Accept:'application/json'};
+           if(body!==undefined)headers['Content-Type']='application/json';
+           const response=await fetch(root+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(30000)});
+           const data=await response.json().catch(()=>({}));
+           return {status:response.status,data};
+          }
+          let h=await call('GET','/health');
+          console.log('HEALTH_AFTER_RESTORE_HTTP='+h.status);
+          console.log('HEALTH_BOOTSTRAPPED='+Boolean(h.data.session_bootstrapped));
+          console.log('HEALTH_IDENTITY_VERIFIED='+Boolean(h.data.identity_verified));
+          if(h.status!==200||!h.data.session_bootstrapped)throw Error('LOCAL_STATE_NOT_VISIBLE_TO_SERVICE');
+          if(!h.data.identity_verified){
+           const browser=await call('GET','/interactive-browser/status');
+           console.log('INTERACTIVE_BROWSER_ACTIVE='+Boolean(browser.data.active));
+           if(browser.status===200&&browser.data.active)throw Error('ACTIVE_INTERACTIVE_CHROMIUM_MEMORY_GUARD');
+           const running=await call('GET','/session-test/async-status');
+           let hasWork=running.data.status==='running'||running.data.status==='starting';
+           if(!hasWork){
+            const started=await call('POST','/session-test/async-start',{});
+            console.log('VERIFIER_START_HTTP='+started.status);
+            console.log('VERIFIER_STARTED='+Boolean(started.data.started));
+            if(started.status!==202||!started.data.ok)throw Error('VERIFY_START_REJECTED');
+           }
+           let status='unknown',reason='';
+           for(let n=0;n<29;n++){
+            await new Promise(resolve=>setTimeout(resolve,8000));
+            const p=await call('GET','/session-test/async-status');
+            if(p.status!==200)continue;
+            status=String(p.data.status||'unknown');
+            reason=String(p.data.reason||'').slice(0,120);
+            if(n%4===0)console.log('VERIFY_POLL_STATUS='+status+' PHASE='+String(p.data.phase||'unknown').slice(0,75));
+            if(['verified','failed','error'].includes(status))break;
+           }
+           console.log('VERIFIER_FINAL_STATUS='+status);
+           console.log('VERIFIER_FINAL_REASON='+reason);
+          }
+          h=await call('GET','/health');
+          console.log('FINAL_IDENTITY_VERIFIED='+Boolean(h.data.identity_verified));
+          console.log('FINAL_READY_FOR_TIKTOK='+Boolean(h.data.ready_for_tiktok));
+          if(h.status!==200||!h.data.ready_for_tiktok||!h.data.identity_verified)throw Error('FINAL_OWNER_IDENTITY_UNVERIFIED');
+          const d=await call('POST','/publish-dry-run',{test:'08'});
+          console.log('PUBLISH_IDENTITY_DRYRUN_HTTP='+d.status);
+          if(d.status!==200||!d.data.identity_verified)throw Error('DRYRUN_VERIFICATION_FAILED');
+          console.log('ENCRYPTED_STATE_AND_OWNER_SESSION_RESTORED=1');
+          NODE
