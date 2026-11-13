@@ -1,6 +1,6 @@
 # Item 8 — Android físico sem dependência permanente do PC e standby Oracle A1
 
-**Escopo:** código criado em 12/11/2026 e mantido em branch isolada até PR aprovado e integração. A configuração de autenticação e a implantação do Android exigem provas independentes. Governança: `D:\AntharsWork\governance\REGRAS-OBRIGATORIAS.md`; `ci-hub/executor-routing.json` é a autoridade dos publicadores.
+**Escopo:** código criado em 12/11/2026 e incorporado à `main` por PR #2487; reparos subsequentes nos PRs #2489 e #2490. A configuração de autenticação e a implantação do Android exigem provas independentes. Governança: `D:\AntharsWork\governance\REGRAS-OBRIGATORIAS.md`; `ci-hub/executor-routing.json` é a autoridade dos publicadores.
 
 ## 1. Oracle A1 — workflow hospedado
 
@@ -16,7 +16,7 @@
 
 ### Variáveis e segredo (configuração ainda pendente)
 
-O trabalho foi registrado em branch/PR por política de proteção da `main`. Para habilitar de forma operacional, após o merge:
+O trabalho foi integrado via pull requests conforme a proteção da `main`. Para habilitar a execução hospedada:
 
 **Repository Actions Secret**: `OCI_A1_WATCH_AUTH_JSON` com JSON válido contendo `user`, `tenancy`, `fingerprint`, `private_key` (PEM com quebras de linha codificadas dentro do JSON), `region` (sempre `sa-saopaulo-1`), `subnet_id` da rede Android existente e `ssh_public_key`. O segredo deve ser preenchido diretamente no GitHub com conta autorizada, por canal seguro: **nunca publicar no PR, arquivos versionados, chat, logs ou issues**. Recomenda-se identidade OCI com permissões mínimas para Compute, identidade, rede e volume no compartimento necessário e chave restrita; preferir GitHub OIDC/Oracle workload identity federation quando o tenant estiver configurado para ela.
 
@@ -28,6 +28,16 @@ O trabalho foi registrado em branch/PR por política de proteção da `main`. Pa
 A ativação do monitor e do provisionamento deve passar por controle de cota gratuita GitHub Actions e revisão da política de recursos em sua conta OCI. Sem secret/vars, o workflow permanece seguro e inativo. As permissões da GitHub App conectada não incluem editar secrets/variables de Actions; por isso a configuração está pendente de administração do repositório. Nenhuma chave privada foi copiada.
 
 **Alternativa sem chave OCI:** A Oracle lançou troca JWT→RPST em agosto/2026, compatível com GitHub OIDC. Requer configurar no IAM Identity Domain aplicativo, confiança de identidade e políticas restritas antes de mudar o modo de autenticação. Fonte: https://docs.oracle.com/en-us/iaas/Content/Identity/api-getstarted/token_exchange_grant_type_workload_id-federation.htm .
+
+
+### Homologação e proteção de rede (13/11/2026)
+
+- PR [#2489](https://github.com/UniversoAnthares/anthares-kwai-runner/pull/2489), merge `b059d30ffea0070b7675049dcd6d73432765d00e`: corrige `oci.exceptions.InvalidConfig` do SDK 2.187.1 quando usado com o signer existente em memória. Teste real em modo somente leitura: `ANTHARES_A1_CAPACITY=OUT_OF_HOST_CAPACITY` e `REAL_WATCH_READ_ONLY_RESULT 0`. Nenhuma VM lançada.
+- PR [#2490](https://github.com/UniversoAnthares/anthares-kwai-runner/pull/2490), merge `33603a0512d4622cfc19b0f5f738860821781e31`: bloqueia tentativa de VM sem IP público em sub-rede pública/sem NAT. O relatório de capacidade continua executável independentemente da rede da VM.
+- **Teste em OCI real:** a sub-rede atual `anthares-android-subnet` permite IP público, possui apenas rota padrão para Internet Gateway e **não possui NAT Gateway**. O watcher solicita `assign_public_ip=False`. O guard `private_network_egress_ready` devolveu `False`; portanto, se houver capacidade e o modo de provisionamento estiver armado, o código emitirá `ANTHARES_A1_STATE=PRIVATE_NAT_EGRESS_UNAVAILABLE`, preservando a quota.
+- A configuração final recomendada é outra sub-rede **privada**, com rota padrão para NAT Gateway ativo da mesma VCN e acesso administrativo protegido por Bastion. O custo e a cota de qualquer novo recurso precisam de verificação antes da criação: a presente implementação **não cria NAT, subnet, IP público ou Bastion automaticamente**.
+- Oito testes unitários aprovaram sintaxe/configuração, paginação, rejeição de região, configuração SDK com signer, e validação da rede privada/NAT. Ainda é necessária execução real do workflow GitHub com identidade OCI configurada (Actions Secret/Variables ou federação JWT→RPST com trust IAM e política revisados).
+- **Android local:** MacroDroidService em foreground, serviço de acessibilidade habilitado e app whitelist `deviceidle` confirmados; o aparelho alcançou o endpoint Neon por HTTPS (HEAD retornou 404, método sem autenticação). Isso demonstra prontidão do runtime e conectividade, **sem comprovar macro principal ativa, token, leasing ou publicação**. Não executar ações de postagem ou mudar a prioridade Android físico > MEmu até homologação independente.
 
 ## 2. MacroDroid Android físico — consultas independentes
 
