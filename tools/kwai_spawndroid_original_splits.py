@@ -142,7 +142,15 @@ def verify_component(path: Path, *, package: str, version: int) -> str:
         badges = guard._run([guard._tool("ANDROID_AAPT", "aapt"),
                              "dump", "badging", str(path)])
     except guard.ValidationError:
-        raise SplitError("split_aapt_execution_failed_" + path.name) from None
+        # Play-delivered dynamic-feature APKs may not satisfy legacy aapt
+        # badging. AAPT2 is Android's supported split-aware resource reader.
+        try:
+            badges = guard._run([
+                guard._tool("ANDROID_AAPT2", "aapt2"),
+                "dump", "badging", str(path)
+            ])
+        except guard.ValidationError:
+            raise SplitError("split_aapt_and_aapt2_failed_" + path.name) from None
     try:
         p, v, _, _ = guard.parse_aapt(badges)
     except guard.ValidationError:
