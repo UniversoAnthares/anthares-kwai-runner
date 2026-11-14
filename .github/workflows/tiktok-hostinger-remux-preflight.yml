@@ -1,0 +1,75 @@
+name: TikTok Restream — Hostinger Remux Preflight (No LIVE)
+on:
+  push:
+    branches:
+      - 'feature/tiktok-live-authorized-cloud-*'
+    paths:
+      - '.github/workflows/tiktok-hostinger-remux-preflight.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: tiktok-hostinger-remote-remux-preflight
+  cancel-in-progress: false
+jobs:
+  verify-original-video-copy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Retrieve existing Hostinger SSH bridge into temporary runner files
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GITLAB_TOKEN" || { echo "HOSTINGER_BRIDGE_MISSING=1";exit 2; }
+          python3 - <<'PY'
+          import json,os,pathlib,urllib.request
+          req=urllib.request.Request(
+              'https://gitlab.com/api/v4/projects/87361776/variables?per_page=100',
+              headers={'PRIVATE-TOKEN':os.environ['GITLAB_TOKEN'],
+                       'User-Agent':'anthares-tiktok-readonly-local-vod-probe'})
+          with urllib.request.urlopen(req,timeout=25) as response:
+              rows=json.load(response)
+          values={str(v.get('key')):str(v.get('value') or '') for v in rows}
+          wanted=['ANTHARES_QA_SSH_KEY','ANTHARES_QA_SSH_HOST','ANTHARES_QA_SSH_USER']
+          if any(not values.get(k) for k in wanted):
+              raise SystemExit('HOSTINGER_SSH_BRIDGE_INCOMPLETE')
+          root=pathlib.Path(os.environ['RUNNER_TEMP'])/'tiktok-ssh'
+          root.mkdir(mode=0o700)
+          pem=root/'id_hostinger';pem.write_text(values[wanted[0]]);pem.chmod(0o600)
+          with open(os.environ['GITHUB_ENV'],'a') as out:
+              out.write('TIKTOK_SSH_HOST='+values[wanted[1]]+'\n')
+              out.write('TIKTOK_SSH_USER='+values[wanted[2]]+'\n')
+              out.write('TIKTOK_SSH_PORT='+(values.get('ANTHARES_QA_SSH_PORT') or '65002')+'\n')
+              out.write('TIKTOK_SSH_KEY_FILE='+str(pem)+'\n')
+          for k in wanted:
+              print('::add-mask::'+values[k].replace('\n','%0A'))
+          print('HOSTINGER_SSH_BRIDGE_READY=1')
+          PY
+      - name: Validate copy-only video path with six-second local encode to null
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "$TIKTOK_SSH_PORT" -i "$TIKTOK_SSH_KEY_FILE" \
+            -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=12 \
+            -o StrictHostKeyChecking=accept-new \
+            "$TIKTOK_SSH_USER@$TIKTOK_SSH_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          ROOT=/home/u566597497
+          FF="$ROOT/bin/ffmpeg-static/ffmpeg"
+          VOD="$ROOT/domains/anthares.us/public_html/wp-content/uploads/anthares-live-static/vod/index.m3u8"
+          KWAI="$ROOT/.anthares-kw12/active-room.env"
+          test -x "$FF" && test -s "$VOD" && test -s "$KWAI"
+          echo HOSTINGER_LOCAL_HLS_READY=1
+          timeout 20 nice -n 15 "$FF" -nostdin -hide_banner -loglevel error \
+            -fflags +genpts -re -i "$VOD" -t 6 \
+            -c:v copy -c:a aac -af aresample=async=1:first_pts=0 \
+            -b:a 128k -ar 44100 -avoid_negative_ts make_zero \
+            -f flv - </dev/null >/dev/null
+          echo HOSTINGER_REMUX_COPY_TEST=PASS
+          REMOTE
+      - name: Remove SSH key from temporary runner
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/tiktok-ssh"

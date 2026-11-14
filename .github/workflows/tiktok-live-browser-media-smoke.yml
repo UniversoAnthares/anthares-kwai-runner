@@ -1,0 +1,31 @@
+name: TikTok LIVE Cloud Browser Media Smoke (No Publish)
+on:
+  push:
+    branches:
+      - 'feature/tiktok-live-authorized-cloud-*'
+    paths:
+      - '.github/workflows/tiktok-live-browser-media-smoke.yml'
+      - 'tools/tiktok_live_browser_media_smoke.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: tiktok-live-cloud-browser-media-smoke
+  cancel-in-progress: false
+jobs:
+  verify-media:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install local media and browser tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ffmpeg
+          python3 -m pip install -q playwright
+          python3 -m playwright install --with-deps chromium >/dev/null
+          echo CLOUD_BROWSER_MEDIA_TOOLS_READY=1
+      - name: Validate virtual camera plus microphone with Anthares source
+        run: python3 tools/tiktok_live_browser_media_smoke.py

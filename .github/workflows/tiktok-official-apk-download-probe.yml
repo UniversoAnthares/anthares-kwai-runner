@@ -1,0 +1,28 @@
+name: TikTok Official APK First-Party Download Probe
+on:
+  push:
+    branches: ['feature/tiktok-live-authorized-cloud-*']
+    paths:
+      - '.github/workflows/tiktok-official-apk-download-probe.yml'
+      - 'tools/tiktok_official_apk_download_probe.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: tiktok-official-apk-download-readonly
+  cancel-in-progress: false
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare isolated mobile Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install -q playwright
+          python3 -m playwright install --with-deps chromium >/dev/null
+          echo TIKTOK_OFFICIAL_APK_CLOUD_CHROMIUM_READY=1
+      - name: Inspect original tiktok.com/download and verify any official package
+        run: python3 tools/tiktok_official_apk_download_probe.py

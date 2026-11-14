@@ -1,0 +1,30 @@
+name: TikTok LIVE Read-Only Access Probe
+on:
+  push:
+    branches: ['feature/tiktok-live-authorized-cloud-*']
+    paths:
+      - 'tools/tiktok_live_account_access_probe.py'
+      - '.github/workflows/tiktok-live-account-access-probe.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: tiktok-live-account-access-readonly
+  cancel-in-progress: false
+jobs:
+  inspect-owned-account:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      TIKTOK_LUCASROSALEM4_STORAGE_STATE: ${{ secrets.TIKTOK_LUCASROSALEM4_STORAGE_STATE }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Provision ephemeral Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install -q playwright
+          python3 -m playwright install --with-deps chromium >/dev/null
+          echo "TIKTOK_READONLY_BROWSER_READY=1"
+      - name: Inspect official TikTok Studio and LIVE Center without account changes
+        run: python3 tools/tiktok_live_account_access_probe.py

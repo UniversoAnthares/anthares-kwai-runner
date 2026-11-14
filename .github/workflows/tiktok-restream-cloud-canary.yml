@@ -1,0 +1,61 @@
+name: TikTok via Restream — cloud ingest canary
+on:
+  push:
+    branches:
+      - 'feature/tiktok-live-authorized-cloud-*'
+    paths:
+      - '.github/workflows/tiktok-restream-cloud-canary.yml'
+      - 'tools/tiktok_live_authorized_cloud.py'
+  workflow_dispatch:
+    inputs:
+      transmit:
+        description: 'Send prerecorded Anthares program to approved Restream RTMP ingest'
+        type: boolean
+        required: true
+        default: false
+      seconds:
+        description: 'Canary duration in seconds: 15 to 600'
+        type: string
+        required: true
+        default: '600'
+permissions:
+  contents: read
+concurrency:
+  group: anthares-tiktok-restream-cloud-canary
+  cancel-in-progress: false
+jobs:
+  verify-source-and-optional-restream-ingest:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      ANTHARES_LIVE_HLS_URL: https://anthares.us/wp-content/uploads/anthares-live-static/live.m3u8
+      # Both flags must follow actual channel acceptance and content authorization.
+      TIKTOK_LIVE_ACCOUNT_AUTHORIZED: ${{ vars.RESTREAM_TIKTOK_CHANNEL_AUTHORIZED }}
+      TIKTOK_LIVE_PRERECORDED_APPROVED: ${{ vars.RESTREAM_PRERECORDED_APPROVED }}
+      # Restream encoder ingest URL+key, not a TikTok-generated key.
+      TIKTOK_LIVE_RTMP_DESTINATION: ${{ secrets.RESTREAM_ENCODER_RTMP_DESTINATION }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install FFmpeg
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v ffmpeg >/dev/null; then
+            sudo apt-get update -qq
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ffmpeg
+          fi
+          ffmpeg -hide_banner -version | head -1
+      - name: Verify real Anthares HLS manifest
+        run: python3 tools/tiktok_live_authorized_cloud.py --preflight
+      - name: Encode eight seconds locally without publishing
+        run: python3 tools/tiktok_live_authorized_cloud.py --dry-encode --seconds 8
+      - name: Send canary to Restream ONLY after verified OAuth and approvals
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.transmit == true }}
+        shell: bash
+        env:
+          STREAM_SECONDS: ${{ inputs.seconds }}
+        run: |
+          set -euo pipefail
+          [[ "$STREAM_SECONDS" =~ ^[0-9]+$ ]] || { echo 'duration_invalid'; exit 2; }
+          [ "$STREAM_SECONDS" -ge 15 ] && [ "$STREAM_SECONDS" -le 600 ] || { echo 'duration_out_of_range'; exit 2; }
+          python3 tools/tiktok_live_authorized_cloud.py --seconds "$STREAM_SECONDS"

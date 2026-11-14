@@ -1,0 +1,111 @@
+name: TikTok LIVE Native App Cloud Eligibility (Read-Only)
+on:
+  push:
+    branches: ['feature/tiktok-live-authorized-cloud-*']
+    paths:
+      - '.github/workflows/tiktok-live-cloud-native-eligibility.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: tiktok-live-native-cloud-readonly
+  cancel-in-progress: false
+jobs:
+  official-native-ui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Android cloud accelerator and SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -c /dev/kvm || { echo TIKTOK_CLOUD_ANDROID=KVM_UNAVAILABLE; exit 3; }
+          sudo chmod 666 /dev/kvm
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          test -x "$SDK/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDK/platform-tools/adb"
+          echo TIKTOK_CLOUD_ANDROID_KVM=READY
+      - name: Install Google Play emulator image
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          export ANDROID_SDK_ROOT="$SDK" ANDROID_SDK_HOME="$HOME" ANDROID_AVD_HOME="$HOME/.android/avd"
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" 'emulator' 'platform-tools' 'system-images;android-35;google_apis_playstore;x86_64' >/dev/null
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo no | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd -f -n tiktok-probe -k 'system-images;android-35;google_apis_playstore;x86_64' -d pixel_6 >/dev/null
+          echo TIKTOK_CLOUD_ANDROID_IMAGE=READY
+      - name: Boot ephemeral Android and inspect official app without login bypass
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          export ANDROID_SDK_ROOT="$SDK" ANDROID_SDK_HOME="$HOME" ANDROID_AVD_HOME="$HOME/.android/avd"
+          ADB="$SDK/platform-tools/adb"
+          cleanup() {
+            "$ADB" -s emulator-5554 emu kill >/dev/null 2>&1 || true
+            if [ -n "${EMU_PID:-}" ]; then kill "$EMU_PID" >/dev/null 2>&1 || true; fi
+            rm -f /tmp/tiktok-native.apk /tmp/tiktok-native-screen.xml /tmp/tiktok-native-download.html /tmp/tiktok-market.xml /tmp/tiktok-market-tap
+          }
+          trap cleanup EXIT
+          "$ADB" start-server >/dev/null
+          "$SDK/emulator/emulator" -avd tiktok-probe -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 -no-snapshot-load -wipe-data -port 5554 >/tmp/tiktok-native-emulator.log 2>&1 &
+          EMU_PID=$!
+          ready=0
+          for i in $(seq 1 100); do
+            if "$ADB" devices | grep -q '^emulator-5554[[:space:]]*device'; then ready=1; break; fi
+            kill -0 "$EMU_PID" 2>/dev/null || { echo TIKTOK_CLOUD_ANDROID=BOOT_PROCESS_EXITED; exit 31; }
+            sleep 2
+          done
+          test "$ready" = 1 || { echo TIKTOK_CLOUD_ANDROID=ADB_DEVICE_TIMEOUT; exit 32; }
+          timeout 180 bash -c 'until [ "$("$1" -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 2; done' _ "$ADB"
+          echo TIKTOK_CLOUD_ANDROID_BOOT=READY
+          "$ADB" -s emulator-5554 shell input keyevent KEYCODE_WAKEUP >/dev/null || true
+          "$ADB" -s emulator-5554 shell wm dismiss-keyguard >/dev/null || true
+
+          # Official TikTok-owned distribution URL. A normal web/Play redirect
+          # is not proof of an installable APK. Never fetch from an APK mirror.
+          SOURCE="https://www.tiktok.com/download-link/af/com.zhiliaoapp.musically"
+          code="$(curl --proto '=https' --proto-redir '=https' --max-redirs 6 -sSL --connect-timeout 12 --max-time 120 -A 'Mozilla/5.0 (Linux; Android 14; Pixel 6) AppleWebKit/537.36 Chrome/126 Mobile Safari/537.36' -o /tmp/tiktok-native.apk -w '%{http_code}' "$SOURCE" || true)"
+          echo "TIKTOK_OFFICIAL_DOWNLOAD_HTTP=$code"
+          package='com.zhiliaoapp.musically'
+          if [ "$code" = 200 ] && unzip -t /tmp/tiktok-native.apk >/dev/null 2>&1; then
+            aapt="$(find "$SDK/build-tools" -maxdepth 2 -name aapt -type f | sort -V | tail -1)"
+            test -x "$aapt" || { echo TIKTOK_ANDROID_AAPT_MISSING=1; exit 43; }
+            found="$("$aapt" dump badging /tmp/tiktok-native.apk 2>/dev/null | sed -n "s/^package: name='\\([^']*\\)'.*/\\1/p" | head -1)"
+            [ "$found" = "$package" ] || { echo TIKTOK_NATIVE_PACKAGE_MISMATCH=1; exit 44; }
+            echo TIKTOK_OFFICIAL_NATIVE_APK=VALID_PACKAGE
+            "$ADB" -s emulator-5554 install -r /tmp/tiktok-native.apk >/dev/null || { echo TIKTOK_OFFICIAL_NATIVE_APP=INSTALL_FAILED; exit 45; }
+          else
+            echo TIKTOK_OFFICIAL_NATIVE_APK=UNAVAILABLE_USE_GOOGLE_PLAY
+            "$ADB" -s emulator-5554 shell am start -a android.intent.action.VIEW -d 'market://details?id=com.zhiliaoapp.musically' com.android.vending >/dev/null || { echo TIKTOK_GOOGLE_PLAY=NOT_AVAILABLE; exit 46; }
+            export ANDROID_ADB="$ADB"
+            python3 tools/tiktok_google_play_ui_wait.py
+            if ! "$ADB" -s emulator-5554 shell pm path "$package" | grep -q '^package:'; then
+              echo TIKTOK_GOOGLE_PLAY=APP_NOT_INSTALLED_AFTER_UI_DIAGNOSIS
+              exit 47
+            fi
+          fi
+          echo TIKTOK_OFFICIAL_NATIVE_APP=INSTALLED
+          "$ADB" -s emulator-5554 shell monkey -p "$package" -c android.intent.category.LAUNCHER 1 >/dev/null
+          sleep 10
+          "$ADB" -s emulator-5554 shell uiautomator dump /sdcard/tiktok-native.xml >/dev/null 2>&1 || true
+          "$ADB" -s emulator-5554 exec-out cat /sdcard/tiktok-native.xml > /tmp/tiktok-native-screen.xml || true
+          python3 - <<'PY'
+          from pathlib import Path
+          import re,xml.etree.ElementTree as ET
+          p=Path('/tmp/tiktok-native-screen.xml')
+          if not p.exists() or p.stat().st_size<200: raise SystemExit('TIKTOK_NATIVE_UI_XML_UNAVAILABLE')
+          try: root=ET.fromstring(p.read_bytes())
+          except ET.ParseError: raise SystemExit('TIKTOK_NATIVE_UI_XML_INVALID')
+          labels=[(x.attrib.get('text','')+' '+x.attrib.get('content-desc','')).lower() for x in root.iter('node')]
+          whole=' '.join(labels)
+          for label,expr in [('LOGIN',r'log in|login|entrar|fazer login|continue with'),
+                             ('LIVE',r'\blive\b|ao vivo|transmitir ao vivo'),
+                             ('PROFILE',r'profile|perfil'),
+                             ('GO_LIVE',r'go live|iniciar live|fazer live')]:
+              print('TIKTOK_NATIVE_UI_'+label+'='+str(bool(re.search(expr,whole))).lower())
+          print('TIKTOK_NATIVE_UI_INSPECTED=1')
+          PY

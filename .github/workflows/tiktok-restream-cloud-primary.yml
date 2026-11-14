@@ -1,0 +1,93 @@
+name: TikTok Restream cloud primary (exclusive failover)
+on:
+  push:
+    branches: ['feature/tiktok-live-authorized-cloud-*']
+    paths: ['.github/workflows/tiktok-restream-cloud-primary.yml']
+  workflow_dispatch:
+    inputs:
+      activate:
+        description: 'Activate exclusive cloud Restream relay'
+        type: boolean
+        required: true
+        default: false
+      seconds:
+        description: 'Cloud integration test: 90 to 240 seconds'
+        type: string
+        required: true
+        default: '120'
+permissions:
+  contents: read
+concurrency:
+  group: anthares-tiktok-cloud-primary-exclusive
+  cancel-in-progress: false
+jobs:
+  cloud-primary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+      RESTREAM_ENCODER_RTMP_DESTINATION: ${{ secrets.RESTREAM_ENCODER_RTMP_DESTINATION }}
+      RESTREAM_TIKTOK_CHANNEL_AUTHORIZED: ${{ vars.RESTREAM_TIKTOK_CHANNEL_AUTHORIZED }}
+      RESTREAM_PRERECORDED_APPROVED: ${{ vars.RESTREAM_PRERECORDED_APPROVED }}
+      STREAM_SECONDS: ${{ github.event_name == 'workflow_dispatch' && inputs.seconds || '120' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install standard cloud FFmpeg
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v ffmpeg >/dev/null; then
+            sudo apt-get update -qq
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ffmpeg
+          fi
+          echo CLOUD_PRIMARY_RUNNER_READY=1
+      - name: Verify 6h HLS continuity without transmitting
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/tiktok_restream_cloud_encoder.py --preflight
+      - name: Prepare the existing Hostinger SSH bridge
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.activate == true }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$RESTREAM_TIKTOK_CHANNEL_AUTHORIZED" = true
+          test "$RESTREAM_PRERECORDED_APPROVED" = true
+          test -n "${RESTREAM_ENCODER_RTMP_DESTINATION:-}"
+          test -n "${GITLAB_TOKEN:-}" || { echo CLOUD_PRIMARY_SSH_BRIDGE_MISSING=1; exit 3; }
+          python3 - <<'PY'
+          import json,os,pathlib,urllib.request
+          req=urllib.request.Request(
+              'https://gitlab.com/api/v4/projects/87361776/variables?per_page=100',
+              headers={'PRIVATE-TOKEN':os.environ['GITLAB_TOKEN'],
+                       'User-Agent':'anthares-tiktok-cloud-primary'})
+          with urllib.request.urlopen(req,timeout=30) as response:
+              records=json.load(response)
+          values={str(v.get('key')):str(v.get('value') or '') for v in records}
+          names=('ANTHARES_QA_SSH_KEY','ANTHARES_QA_SSH_HOST','ANTHARES_QA_SSH_USER')
+          if any(not values.get(name) for name in names):
+              raise SystemExit('CLOUD_PRIMARY_SSH_BRIDGE_INCOMPLETE')
+          root=pathlib.Path(os.environ['RUNNER_TEMP'])/'anthares-tiktok-ssh'
+          root.mkdir(mode=0o700)
+          key=root/'key'
+          key.write_text(values['ANTHARES_QA_SSH_KEY'])
+          key.chmod(0o600)
+          for name in names:
+              print('::add-mask::'+values[name].replace('\n','%0A'))
+          with open(os.environ['GITHUB_ENV'],'a') as file:
+              file.write('TIKTOK_SSH_HOST='+values['ANTHARES_QA_SSH_HOST']+'\n')
+              file.write('TIKTOK_SSH_USER='+values['ANTHARES_QA_SSH_USER']+'\n')
+              file.write('TIKTOK_SSH_PORT='+(values.get('ANTHARES_QA_SSH_PORT') or '65002')+'\n')
+              file.write('TIKTOK_SSH_KEY_FILE='+str(key)+'\n')
+          print('CLOUD_PRIMARY_SSH_BRIDGE_READY=1')
+          PY
+      - name: Exclusive cloud RTMP relay with automatic Hostinger fallback
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.activate == true }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/tiktok_restream_cloud_primary.py
+      - name: Destroy ephemeral SSH bridge
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/anthares-tiktok-ssh"

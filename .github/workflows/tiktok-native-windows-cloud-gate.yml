@@ -1,0 +1,62 @@
+name: TikTok Native LIVE Studio Windows Cloud Compatibility Gate
+on:
+  push:
+    branches:
+      - 'feature/tiktok-live-authorized-cloud-*'
+    paths:
+      - '.github/workflows/tiktok-native-windows-cloud-gate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: tiktok-native-windows-cloud-gate
+  cancel-in-progress: false
+jobs:
+  verify-cloud-windows-graphics:
+    runs-on: windows-2025
+    timeout-minutes: 8
+    steps:
+      - name: Inspect isolated hosted Windows GPU and interactive desktop
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $process = [System.Diagnostics.Process]::GetCurrentProcess()
+          $currentSession = $process.SessionId
+          Write-Output "TIKTOK_CLOUD_WIN_SESSION_INTERACTIVE=$([int]($currentSession -gt 0))"
+          Write-Output "TIKTOK_CLOUD_WIN_SESSION_ID=$currentSession"
+          $os = Get-CimInstance Win32_OperatingSystem
+          Write-Output "TIKTOK_CLOUD_WIN_OS=$($os.Caption)"
+          $memGB = [math]::Round($os.TotalVisibleMemorySize / 1048576,1)
+          Write-Output "TIKTOK_CLOUD_WIN_RAM_GB=$memGB"
+          $gpus = @(Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue)
+          $accepted = @()
+          foreach($g in $gpus) {
+            $name=[string]$g.Name
+            $vendor=[string]$g.AdapterCompatibility
+            $hw=($name -match 'NVIDIA|AMD Radeon|Intel Arc|GeForce|Radeon RX' -or $vendor -match 'NVIDIA|Advanced Micro Devices')
+            $basic=($name -match 'Microsoft Basic|Hyper-V|Remote Display|Virtual' -or $vendor -match 'Microsoft')
+            Write-Output "TIKTOK_CLOUD_GPU_DRIVER_CLASS=$(if($hw -and !$basic){'VENDOR_ACCELERATED'}elseif($basic){'VIRTUAL_OR_BASIC'}else{'UNKNOWN'})"
+            if ($hw -and !$basic) { $accepted += $name }
+          }
+          Write-Output "TIKTOK_CLOUD_WIN_GPU_COUNT=$($gpus.Count)"
+          Write-Output "TIKTOK_CLOUD_WIN_VENDOR_GPU_PRESENT=$([int]($accepted.Count -gt 0))"
+          $cs = Get-CimInstance Win32_ComputerSystem
+          Write-Output "TIKTOK_CLOUD_WIN_MODEL_VIRTUAL=$([int]($cs.Model -match 'Virtual|Azure|Hyper-V|VMware'))"
+          $explorer = @(Get-Process explorer -ErrorAction SilentlyContinue | Where-Object {$_.SessionId -eq $currentSession})
+          Write-Output "TIKTOK_CLOUD_GUI_EXPLORER_PRESENT=$([int]($explorer.Count -gt 0))"
+          $screenWidth=0;$screenHeight=0
+          try {
+            Add-Type -AssemblyName System.Windows.Forms
+            $screenWidth=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width
+            $screenHeight=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Height
+          }catch{}
+          Write-Output "TIKTOK_CLOUD_DISPLAY_RESOLUTION=${screenWidth}x${screenHeight}"
+          $meetsGPU=($accepted.Count -gt 0)
+          $meetsDesktop=($currentSession -gt 0 -and $screenWidth -ge 640 -and $screenHeight -ge 480)
+          if ($meetsGPU -and $meetsDesktop) {
+            Write-Output 'TIKTOK_NATIVE_STUDIO_CLOUD_HOST_GATE=READY_FOR_INSTALL_TEST'
+          } else {
+            Write-Output 'TIKTOK_NATIVE_STUDIO_CLOUD_HOST_GATE=UNSUITABLE'
+            Write-Output 'TIKTOK_NATIVE_STUDIO_NOT_INSTALLED=1'
+            Write-Output 'TIKTOK_EXISTING_RESTREAM_AND_KWAI_UNTOUCHED=1'
+          }

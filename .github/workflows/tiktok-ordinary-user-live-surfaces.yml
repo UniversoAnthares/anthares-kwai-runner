@@ -1,0 +1,30 @@
+name: 'TikTok ordinary user LIVE entrypoints (read-only)'
+on:
+  push:
+    branches: ['feature/tiktok-live-authorized-cloud-*']
+    paths: ['.github/workflows/tiktok-ordinary-user-live-surfaces.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: anthares-tiktok-ordinary-user-live-surface
+  cancel-in-progress: false
+jobs:
+  ordinary-user-ui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    env:
+      TIKTOK_LUCASROSALEM4_STORAGE_STATE: ${{ secrets.TIKTOK_LUCASROSALEM4_STORAGE_STATE }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare isolated headless user browser
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install -q playwright requests cryptography
+          command -v google-chrome
+      - name: Inspect desktop and mobile LIVE user controls without publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/tiktok_ordinary_user_live_surfaces.py

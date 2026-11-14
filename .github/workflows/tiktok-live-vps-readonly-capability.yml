@@ -1,0 +1,50 @@
+name: TikTok LIVE VPS capability gate (read-only)
+on:
+  push:
+    branches: ['feature/tiktok-live-authorized-cloud-*']
+    paths: ['.github/workflows/tiktok-live-vps-readonly-capability.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: tiktok-live-vps-capability
+  cancel-in-progress: false
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Diagnose existing VPS (no changes)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${VPS_HOST:-}" ] || [ -z "${VPS_USER:-}" ] || [ -z "${VPS_PASSWORD:-}" ]; then
+            echo 'TIKTOK_VPS_CONFIG=MISSING'; exit 2
+          fi
+          echo "::add-mask::$VPS_PASSWORD"
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq sshpass
+          export SSHPASS="$VPS_PASSWORD"
+          host_port=''
+          for port in 65002 22 2222 2121 2200 2022 443; do
+            if timeout 3 bash -c "exec 3<>/dev/tcp/$VPS_HOST/$port" 2>/dev/null; then host_port="$port";break;fi
+          done
+          if [ -z "$host_port" ]; then echo 'TIKTOK_VPS_SSH=UNREACHABLE';exit 3;fi
+          echo 'TIKTOK_VPS_SSH_PORT_AVAILABLE=1'
+          sshpass -e ssh -p "$host_port" -o BatchMode=no -o ConnectTimeout=10 -o ConnectionAttempts=1 -o StrictHostKeyChecking=accept-new -o ServerAliveCountMax=2 "$VPS_USER@$VPS_HOST" 'sh -s' <<'REMOTE'
+          set -eu
+          echo "TIKTOK_VPS_ARCH=$(uname -m)"
+          echo "TIKTOK_VPS_OS=$(uname -s)"
+          if [ -e /dev/kvm ];then echo TIKTOK_VPS_KVM_PRESENT=1;else echo TIKTOK_VPS_KVM_PRESENT=0;fi
+          if [ -r /dev/kvm ] && [ -w /dev/kvm ];then echo TIKTOK_VPS_KVM_ACCESSIBLE=1;else echo TIKTOK_VPS_KVM_ACCESSIBLE=0;fi
+          if command -v id >/dev/null;then if [ "$(id -u)" -eq 0 ];then echo TIKTOK_VPS_ROOT=1;else echo TIKTOK_VPS_ROOT=0;fi;fi
+          if command -v free >/dev/null;then free -m | grep '^Mem:' | sed -E 's/^Mem:[[:space:]]+([0-9]+).*/TIKTOK_VPS_RAM_MB=\1/';fi
+          if command -v df >/dev/null;then df -Pm "$HOME" | tail -1 | sed -E 's/.*[[:space:]]([0-9]+)[[:space:]]+[0-9]+%[[:space:]].*/TIKTOK_VPS_FREE_DISK_MB=\1/';fi
+          if command -v systemd-detect-virt >/dev/null;then systemd-detect-virt || true;fi
+          echo TIKTOK_VPS_READONLY_PROBE_COMPLETE=1
+          REMOTE

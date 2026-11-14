@@ -1,0 +1,100 @@
+name: TikTok Android Sealed Persistence — Separate Runner Smoke
+on:
+  push:
+    branches: ['feature/tiktok-live-authorized-cloud-*']
+    paths:
+      - 'tools/tiktok_avd_sealed_state.py'
+      - 'tools/tiktok_avd_checkpoint.sh'
+      - '.github/workflows/tiktok-avd-sealed-persistence-smoke.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: tiktok-avd-sealed-persistence-smoke
+  cancel-in-progress: false
+jobs:
+  prepare-encrypted-state:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      ANTHARES_BROWSER_STATE_KEY: ${{ secrets.ANTHARES_BROWSER_STATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install bounded streaming encryption dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq zstd
+          python3 -m pip install -q cryptography
+          echo TIKTOK_AVD_TEST_DEPENDENCIES_READY=1
+      - name: Validate real-AVD checkpoint shell contract without touching any device
+        run: |
+          bash -n tools/tiktok_avd_checkpoint.sh
+          grep -q 'TIKTOK_CHECKPOINT_SNAPSHOT_ACTUAL_LOAD=1' tools/tiktok_avd_checkpoint.sh
+          grep -q 'TIKTOK_CHECKPOINT_ENCRYPTED_READY=1' tools/tiktok_avd_checkpoint.sh
+          echo TIKTOK_AVD_REAL_CHECKPOINT_CONTRACT_READY=1
+      - name: Generate harmless synthetic AVD fixture and seal it
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/tiktok-avd-fixture/avd/tiktok-persist.avd
+          printf 'avd.ini.encoding=UTF-8\n' >/tmp/tiktok-avd-fixture/avd/tiktok-persist.ini
+          printf 'tiktok-portable-persistence-fixture-%s\n' "$GITHUB_RUN_ID" >/tmp/tiktok-avd-fixture/avd/tiktok-persist.avd/marker.txt
+          python3 tools/tiktok_avd_sealed_state.py seal --root /tmp/tiktok-avd-fixture --archive /tmp/tiktok-avd-sealed.fixture
+          test -s /tmp/tiktok-avd-sealed.fixture
+          if grep -aq 'tiktok-portable-persistence-fixture' /tmp/tiktok-avd-sealed.fixture; then
+            echo TIKTOK_AVD_CLEARTEXT_LEAK=1;exit 12
+          fi
+          echo TIKTOK_AVD_ENCRYPTED_FIXTURE_READY=1
+      - name: Upload encrypted fixture only
+        uses: actions/upload-artifact@v4
+        with:
+          name: tiktok-avd-sealed-fixture-${{ github.run_id }}
+          path: /tmp/tiktok-avd-sealed.fixture
+          retention-days: 1
+          if-no-files-found: error
+  restore-encrypted-state:
+    needs: prepare-encrypted-state
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      ANTHARES_BROWSER_STATE_KEY: ${{ secrets.ANTHARES_BROWSER_STATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install isolated validation dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq zstd
+          python3 -m pip install -q cryptography
+      - uses: actions/download-artifact@v4
+        with:
+          name: tiktok-avd-sealed-fixture-${{ github.run_id }}
+          path: /tmp/restored-tiktok-encrypted
+      - name: Verify second-runner decrypt, tamper rejection and fixture identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARCHIVE=/tmp/restored-tiktok-encrypted/tiktok-avd-sealed.fixture
+          test -s "$ARCHIVE"
+          python3 tools/tiktok_avd_sealed_state.py restore --root /tmp/tiktok-avd-restored --archive "$ARCHIVE"
+          expected="tiktok-portable-persistence-fixture-$GITHUB_RUN_ID"
+          observed="$(cat /tmp/tiktok-avd-restored/avd/tiktok-persist.avd/marker.txt)"
+          test "$expected" = "$observed"
+          echo TIKTOK_AVD_SEPARATE_RUNNER_STATE_MATCH=1
+          cp "$ARCHIVE" /tmp/tiktok-avd-corrupted
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('/tmp/tiktok-avd-corrupted')
+          with p.open('r+b') as h:
+              h.seek(60)
+              bit=h.read(1)
+              if not bit:raise SystemExit('fixture_too_small')
+              h.seek(60)
+              h.write(bytes([bit[0]^0x01]))
+          PY
+          if python3 tools/tiktok_avd_sealed_state.py restore --root /tmp/tiktok-avd-should-not-exist --archive /tmp/tiktok-avd-corrupted; then
+            echo TIKTOK_AVD_TAMPER_CHECK_FAILED=1;exit 15
+          fi
+          test ! -e /tmp/tiktok-avd-should-not-exist/avd/tiktok-persist.avd/marker.txt
+          echo TIKTOK_AVD_TAMPER_PROTECTION_OK=1
+          echo TIKTOK_AVD_SEALED_PERSISTENCE_SMOKE=PROVEN

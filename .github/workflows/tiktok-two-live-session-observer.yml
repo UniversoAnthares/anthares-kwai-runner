@@ -1,0 +1,34 @@
+name: 'TikTok two LIVE sessions - authenticated observer (read-only)'
+on:
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: 'Observation window; 90-525 seconds'
+        required: true
+        type: string
+        default: '470'
+permissions:
+  contents: read
+concurrency:
+  group: anthares-tiktok-two-live-session-observer
+  cancel-in-progress: false
+jobs:
+  observe-room-transitions:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 11
+    env:
+      TIKTOK_LUCASROSALEM4_STORAGE_STATE: ${{ secrets.TIKTOK_LUCASROSALEM4_STORAGE_STATE }}
+      LIVE_OBSERVER_SECONDS: ${{ inputs.seconds }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare isolated authorized headless Chrome
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install -q playwright requests cryptography
+          command -v google-chrome
+      - name: Read-only observation of room identifiers and public player
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/tiktok_two_live_session_observer.py

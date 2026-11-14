@@ -1,0 +1,272 @@
+name: TikTok Google Play Cloud Login and Encrypted AVD Checkpoint v7
+on:
+  push:
+    branches: ['feature/tiktok-live-authorized-cloud-*']
+    paths:
+      - '.github/workflows/tiktok-android-google-remote-login-v7.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: tiktok-google-play-remote-login-v7
+  cancel-in-progress: false
+jobs:
+  interactive-google-login:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    env:
+      ANTHARES_BROWSER_STATE_KEY: ${{ secrets.ANTHARES_BROWSER_STATE_KEY }}
+      REMOTE_USER: anthares
+      TIKTOK_PACKAGE: com.zhiliaoapp.musically
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install private remote display and current scrcpy
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            libpulse0 libnss3 libxcomposite1 libxcursor1 libxi6 libxtst6 \
+            libxrandr2 libasound2t64 libpangocairo-1.0-0 libatk1.0-0 \
+            libcups2 libdrm2 libgbm1 libsdl2-2.0-0 \
+            xvfb x11vnc x11-utils xdotool scrot zstd novnc websockify nginx apache2-utils
+          curl -fsSL --retry 3 -o /tmp/scrcpy-v3.3.4.tar.gz \
+            https://github.com/Genymobile/scrcpy/releases/download/v3.3.4/scrcpy-linux-x86_64-v3.3.4.tar.gz
+          echo '0305d98c06178c67e12427bbf340c436d0d58c9e2a39bf9ffbbf8f54d7ef95a5  /tmp/scrcpy-v3.3.4.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/scrcpy-v3.3.4.tar.gz -C /tmp
+          /tmp/scrcpy-linux-x86_64-v3.3.4/scrcpy --version | head -2
+          curl -fsSL --retry 3 -o /tmp/cloudflared \
+            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          chmod 755 /tmp/cloudflared
+          python3 -m pip install -q cryptography pillow
+          echo ANDROID_REMOTE_GUI_TOOLING_READY=1
+      - name: Prepare fresh Google Play Android
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          export ANDROID_SDK_ROOT="$SDK" ANDROID_SDK_HOME="$HOME" ANDROID_AVD_HOME="$HOME/.android/avd"
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" 'emulator' 'platform-tools' 'system-images;android-35;google_apis_playstore;x86_64'
+          rm -rf "$ANDROID_AVD_HOME/tiktok-persist.avd" "$ANDROID_AVD_HOME/tiktok-persist.ini"
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo no | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd -f -n tiktok-persist -k 'system-images;android-35;google_apis_playstore;x86_64' -d pixel_6
+          "$SDK/emulator/emulator" -version | head -3
+
+      - name: Boot Android and prove framebuffer
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"; ADB="$SDK/platform-tools/adb"
+          export ANDROID_SDK_HOME="$HOME" ANDROID_AVD_HOME="$HOME/.android/avd"
+          sudo chmod 666 /dev/kvm
+          "$ADB" kill-server || true
+          "$ADB" start-server
+          nohup "$SDK/emulator/emulator" -avd tiktok-persist -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -memory 2048 -cores 2 -no-snapshot-load -port 5554 >/tmp/tiktok-emulator.log 2>&1 &
+          EMU_PID=$!
+          ready=0
+          for i in $(seq 1 120); do
+            if "$ADB" devices | grep -q '^emulator-5554[[:space:]]*device'; then ready=1; break; fi
+            kill -0 "$EMU_PID" 2>/dev/null || { tail -100 /tmp/tiktok-emulator.log; exit 31; }
+            sleep 2
+          done
+          [ "$ready" = 1 ] || { echo ADB_DEVICE_TIMEOUT; tail -100 /tmp/tiktok-emulator.log; exit 32; }
+          timeout 180 bash -c 'until [ "$("$1" -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do sleep 2; done' _ "$ADB"
+          "$ADB" -s emulator-5554 shell settings put global stay_on_while_plugged_in 3 || true
+          "$ADB" -s emulator-5554 shell svc power stayon true || true
+          "$ADB" -s emulator-5554 shell input keyevent KEYCODE_WAKEUP || true
+          "$ADB" -s emulator-5554 shell wm dismiss-keyguard || true
+          "$ADB" -s emulator-5554 exec-out screencap -p >/tmp/android-screen.png
+          test "$(stat -c%s /tmp/android-screen.png)" -gt 10000
+          "$ADB" -s emulator-5554 shell am start -a android.intent.action.VIEW -d "market://details?id=$TIKTOK_PACKAGE" com.android.vending >/dev/null || true
+
+      - name: Start protected remote Android, deliver owner-only credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"; ADB="$SDK/platform-tools/adb"
+          export ANDROID_SDK_HOME="$HOME" ANDROID_AVD_HOME="$HOME/.android/avd"
+          # The emulator remains running during the encrypted-artifact handoff.
+          # Cleanup occurs only after the owner login window ends.
+          password="$(openssl rand -hex 22)"
+          echo 'ANDROID_REMOTE_GUI_PASSWORD_CREATED=1'
+          export DISPLAY=:99
+          Xvfb :99 -screen 0 1280x940x24 -nolisten tcp >/tmp/tiktok-xvfb.log 2>&1 &
+          sleep 2
+          xdpyinfo -display :99 >/dev/null
+          /tmp/scrcpy-linux-x86_64-v3.3.4/scrcpy -s emulator-5554 --no-audio \
+            --stay-awake --max-size=1000 --window-title='Android virtual Google Play' >/tmp/tiktok-scrcpy.log 2>&1 &
+          SCRCPY_PID="$!"
+          sleep 7
+          if ! kill -0 "$SCRCPY_PID" 2>/dev/null; then
+            echo ANDROID_REMOTE_SCRCPY_FAILED=1
+            sed -n '1,40p' /tmp/tiktok-scrcpy.log
+            exit 41
+          fi
+          echo ANDROID_REMOTE_SCRCPY_READY=1
+          x11vnc -display :99 -forever -shared -nopw -localhost -rfbport 5900 -xkb \
+            >/tmp/tiktok-x11vnc.log 2>&1 &
+          websockify --web=/usr/share/novnc 6081 127.0.0.1:5900 \
+            >/tmp/tiktok-websockify.log 2>&1 &
+          printf '%s\n' "$password" | sudo htpasswd -i -B -c /etc/nginx/.tiktok-login-htpasswd "$REMOTE_USER" >/dev/null
+          sudo tee /etc/nginx/sites-available/default >/dev/null <<'NGINX'
+          server {
+            listen 6080;
+            server_name _;
+            auth_basic "Private Anthares Android login";
+            auth_basic_user_file /etc/nginx/.tiktok-login-htpasswd;
+            location / {
+              proxy_pass http://127.0.0.1:6081;
+              proxy_http_version 1.1;
+              proxy_set_header Upgrade $http_upgrade;
+              proxy_set_header Connection "upgrade";
+              proxy_read_timeout 3600;
+            }
+          }
+          NGINX
+          sudo nginx -t >/dev/null
+          sudo systemctl restart nginx
+          /tmp/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:6080 \
+            >/tmp/tiktok-cloudflared.log 2>&1 &
+          URL=''
+          for i in $(seq 1 75); do
+            URL="$(grep -Eo 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/tiktok-cloudflared.log | tail -1 || true)"
+            [ -n "$URL" ] && break
+            sleep 2
+          done
+          [ -n "$URL" ] || { echo ANDROID_REMOTE_TUNNEL_NOT_READY=1; exit 42; }
+          unauth=0; auth=0
+          for i in $(seq 1 25); do
+            unauth="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$URL/vnc.html" || true)"
+            auth="$(curl -s -u "$REMOTE_USER:$password" -o /dev/null -w '%{http_code}' --max-time 10 "$URL/vnc.html" || true)"
+            [ "$unauth" = 401 ] && [ "$auth" = 200 ] && break
+            sleep 2
+          done
+          [ "$unauth" = 401 ] && [ "$auth" = 200 ] || { echo ANDROID_REMOTE_TUNNEL_AUTH_FAILED=1; exit 43; }
+          echo ANDROID_REMOTE_TUNNEL_PRIVATE_CHECK_PASSED=1
+
+          cat >/tmp/android-google-public.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAv6vpZhW/xxk8R0rowzf6
+          W3nyaOjhAJ9XFboJfu63fxXDnh9NJBBmQ8RaMO4A5gFLU2sicn7ONjLh9Sz2dUMx
+          D4y/SnjOQQm9Z7v+S+ayG6MtJBdeRW/BKJ5ucaTw9xKtUj1jOPcIIYlPnez7Q31C
+          emUtPzGmCa2mJVLu9Bf4AgARDKmmEVjI3/FubIhoi5mqQRzj9au5iwDdNvGGUmeX
+          9tJh5J/X7dDXnxJzPjEtmI0YGmh8X22KSQHB5tdSlY5VR63BjSAyFQ2Zm1yoiOAX
+          9nGKikwltBjOrDOLzx045r+sbKKkhMn87qEQLyIRUrnArQAN3MIJ+JExg5ctKFCw
+          vpp/jcVT7mZZXlo++hSVAPEIzZ/iCNkg+wNo+1tTIbeej5AzEPYGbG7K6+iDh6w8
+          YON0Nz1cTDpXaB6vctULvPOjqiQdFSSWetdDzZLFAOO7VZBc7MpF5n71gDuf3vaO
+          DMpNkChipRGaslX9jQhMyCawhEKmszWqIJvwVdsmxBjJAgMBAAE=
+          -----END PUBLIC KEY-----
+          PEM
+          link="$URL/vnc.html?autoconnect=1&resize=scale"
+          payload="$(jq -cn --arg url "$link" --arg user "$REMOTE_USER" \
+            --arg pass "$password" --arg run "$GITHUB_RUN_ID" \
+            '{url:$url,username:$user,password:$pass,run_id:$run}')"
+          encrypted="$(printf '%s' "$payload" | openssl pkeyutl -encrypt \
+            -pubin -inkey /tmp/android-google-public.pem \
+            -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 | base64 -w0)"
+          echo "ANDROID_REMOTE_RSA_OAEP_SHA256=$encrypted"
+          printf '%s\n' "$encrypted" >/tmp/android-google-ciphertext.b64
+          echo ANDROID_REMOTE_ENCRYPTED_ACCESS_ARTIFACT_STAGED=1
+          echo 'Android virtual protegido ativo, com credenciais criptografadas.' >>"$GITHUB_STEP_SUMMARY"
+          echo ANDROID_REMOTE_HANDOFF_STAGE_COMPLETE=1
+      - name: Upload RSA-encrypted one-time access credentials
+        uses: actions/upload-artifact@v4
+        with:
+          name: tiktok-google-login-ciphertext-${{ github.run_id }}
+          path: /tmp/android-google-ciphertext.b64
+          retention-days: 1
+          if-no-files-found: error
+      - name: Owner login window with pixel watchdog and read-only login checks
+        shell: bash
+        env:
+          ANDROID_WATCHDOG_SECONDS: '1510'
+          ANTHARES_LOGIN_WINDOW_SECONDS: '1320'
+        run: |
+          set -euo pipefail
+          echo TIKTOK_ANDROID_OWNER_LOGIN_WINDOW_OPEN=1
+          python3 tools/tiktok_android_remote_display_watchdog.py >/tmp/tiktok-display-watchdog.log 2>&1 &
+          WATCHDOG_PID=$!
+          python3 tools/tiktok_android_login_readiness.py
+          kill "$WATCHDOG_PID" 2>/dev/null || true
+          if grep -q 'ANDROID_REMOTE_V6_DISPLAY_VISIBLE=1' /tmp/tiktok-display-watchdog.log; then
+            echo TIKTOK_ANDROID_DISPLAY_OBSERVED=1
+          else
+            echo TIKTOK_ANDROID_DISPLAY_NOT_CONFIRMED=1
+          fi
+          echo TIKTOK_ANDROID_OWNER_WINDOW_CLOSED_FOR_CHECKPOINT=1
+      - name: Save full AVD snapshot and encrypt before runner teardown
+        shell: bash
+        env:
+          ANTHARES_BROWSER_STATE_KEY: ${{ secrets.ANTHARES_BROWSER_STATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "${ANTHARES_BROWSER_STATE_KEY:-}"
+          bash tools/tiktok_avd_checkpoint.sh capture /tmp/tiktok-avd-encrypted-state.bin
+          test -s /tmp/tiktok-avd-encrypted-state.bin
+          echo TIKTOK_ANDROID_ENCRYPTED_STATE_READY=1
+      - name: Upload encrypted user Android state only
+        uses: actions/upload-artifact@v4
+        with:
+          name: tiktok-avd-encrypted-state-${{ github.run_id }}
+          path: /tmp/tiktok-avd-encrypted-state.bin
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
+      - name: Close ephemeral Android session
+        if: always()
+        shell: bash
+        run: |
+          ADB="${ANDROID_HOME:-/usr/local/lib/android/sdk}/platform-tools/adb"
+          "$ADB" -s emulator-5554 emu kill >/dev/null 2>&1 || true
+          rm -f /tmp/android-google-public.pem /tmp/android-google-ciphertext.b64 /tmp/tiktok-avd-encrypted-state.bin
+          echo ANDROID_REMOTE_EPHEMERAL_SESSION_ENDED=1
+  verify-restored-android:
+    needs: interactive-google-login
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      ANTHARES_BROWSER_STATE_KEY: ${{ secrets.ANTHARES_BROWSER_STATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare isolated Google Play Android and sealed-state dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq zstd
+          python3 -m pip install -q cryptography
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" 'emulator' 'platform-tools' 'system-images;android-35;google_apis_playstore;x86_64' >/dev/null
+          echo TIKTOK_RESTORE_SDK_READY=1
+      - uses: actions/download-artifact@v4
+        with:
+          name: tiktok-avd-encrypted-state-${{ github.run_id }}
+          path: /tmp/tiktok-encrypted-restore
+      - name: Restore real AVD snapshot and inspect login booleans
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s /tmp/tiktok-encrypted-restore/tiktok-avd-encrypted-state.bin
+          bash tools/tiktok_avd_checkpoint.sh restore /tmp/tiktok-encrypted-restore/tiktok-avd-encrypted-state.bin
+          python3 - <<'PY'
+          import os,subprocess
+          adb=os.path.join(os.environ.get("ANDROID_HOME","/usr/local/lib/android/sdk"),"platform-tools","adb")
+          def read(*parts):
+              p=subprocess.run([adb,"-s","emulator-5554",*parts],capture_output=True,text=True,timeout=30,check=False)
+              return p.stdout if p.returncode==0 else ""
+          low=read("shell","dumpsys","account").lower()
+          present="type=com.google" in low or "type: com.google" in low
+          package="package:" in read("shell","pm","path","com.zhiliaoapp.musically")
+          print("TIKTOK_RESTORED_GOOGLE_ACCOUNT_PRESENT="+str(int(present)))
+          print("TIKTOK_RESTORED_TIKTOK_PACKAGE_PRESENT="+str(int(package)))
+          print("TIKTOK_RESTORED_AVD_BOOT=PROVEN")
+          PY
+      - name: Secure cleanup
+        if: always()
+        run: |
+          ADB="${ANDROID_HOME:-/usr/local/lib/android/sdk}/platform-tools/adb"
+          "$ADB" -s emulator-5554 emu kill >/dev/null 2>&1 || true
+          rm -f /tmp/tiktok-encrypted-restore/tiktok-avd-encrypted-state.bin
