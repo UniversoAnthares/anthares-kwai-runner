@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+from contextlib import contextmanager
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,6 +33,32 @@ def example(package="com.kwai.video"):
             for name in names
         ],
     }
+
+
+@contextmanager
+def verified_fixture(package="com.kwai.video", receipt_override=None):
+    """Synthetic receipt: deliberately NOT a real APK signing proof."""
+    source = example(package)
+    doc = splits.validate_manifest(source, SOURCE)
+    receipt = {
+        "signed_splits_verified": True,
+        "package": package,
+        "versionCode": doc["versionCode"],
+        "count": len(doc["files"]),
+        "bytes": doc["bytes"],
+        "cert": splits.guard.EXPECTED_CERT_SHA256,
+    }
+    if receipt_override:
+        receipt.update(receipt_override)
+    with tempfile.TemporaryDirectory() as temp:
+        directory = Path(temp) / "verified"
+        directory.mkdir()
+        with patch.dict(os.environ, {
+            "SPAWNDROID_SPLIT_INSTALL_CANARY_ENABLED": "1",
+            "GITHUB_ACTIONS": "true",
+            "RUNNER_TEMP": temp,
+        }), patch.object(splits, "audit_downloaded_set", return_value=receipt) as audit:
+            yield source, doc, directory, audit
 
 
 class SplitManifestTests(unittest.TestCase):
@@ -164,34 +191,127 @@ class SplitManifestTests(unittest.TestCase):
             if script == "mobile: listApps":
                 return {"com.kwai.video": {"versionCode": 647103}}
             return None
-        urls = [x["url"] for x in splits.validate_manifest(example(), SOURCE)["files"]]
-        with patch.dict(os.environ, {"SPAWNDROID_SPLIT_INSTALL_CANARY_ENABLED": "1"}):
-            receipt = splits.webdriver_script(execute, "com.kwai.video", 647103, urls)
+        with verified_fixture() as (source, doc, directory, audit):
+            urls = [x["url"] for x in doc["files"]]
+            receipt = splits.webdriver_script(
+                execute, "com.kwai.video", 647103, urls,
+                manifest=source, verified_directory=directory, approved_hosts=SOURCE,
+            )
+            audit.assert_called_once()
         self.assertEqual(calls[0][0], "mobile: installMultipleApks")
         self.assertFalse(calls[0][1]["options"]["replace"])
         self.assertEqual([x[0] for x in calls],
                          ["mobile: installMultipleApks", "mobile: isAppInstalled", "mobile: listApps"])
+        self.assertTrue(receipt["original_splits_audited"])
         self.assertFalse(receipt["provider_session_closed"])
         self.assertFalse(receipt["publication_attempted"])
         print("KWAI_SPLITS_APPIUM_W3C_CONTRACT=PASS")
 
     def test_webdriver_unverified_version_fails_closed(self):
+        calls = []
         def execute(script, args):
+            calls.append(script)
             if script == "mobile: listApps":
                 return {"com.kwai.video": {"versionCode": 1}}
             return True
-        with patch.dict(os.environ, {"SPAWNDROID_SPLIT_INSTALL_CANARY_ENABLED": "1"}):
+        with verified_fixture() as (source, doc, directory, _):
             with self.assertRaisesRegex(splits.SplitError, "remote_version_unverified"):
                 splits.webdriver_script(execute, "com.kwai.video", 647103,
-                                        [x["url"] for x in example()["files"]])
+                    [x["url"] for x in doc["files"]],
+                    manifest=source, verified_directory=directory, approved_hosts=SOURCE)
+        self.assertIn("mobile: installMultipleApks", calls)
 
     def test_missing_installed_package_fails_closed(self):
-        def execute(script, args):
-            return False
-        with patch.dict(os.environ, {"SPAWNDROID_SPLIT_INSTALL_CANARY_ENABLED": "1"}):
+        with verified_fixture() as (source, doc, directory, _):
             with self.assertRaisesRegex(splits.SplitError, "remote_install_not_confirmed"):
-                splits.webdriver_script(execute, "com.kwai.video", 647103,
-                                        [x["url"] for x in example()["files"]])
+                splits.webdriver_script(lambda *args: False, "com.kwai.video", 647103,
+                    [x["url"] for x in doc["files"]],
+                    manifest=source, verified_directory=directory, approved_hosts=SOURCE)
+
+    def test_webdriver_requires_real_source_manifest(self):
+        calls = []
+        with verified_fixture() as (source, doc, directory, audit):
+            with self.assertRaisesRegex(splits.SplitError, "verified_source_manifest_required"):
+                splits.webdriver_script(lambda *a: calls.append(a), "com.kwai.video", 647103,
+                                        [x["url"] for x in doc["files"]])
+            audit.assert_not_called()
+        self.assertEqual(calls, [])
+
+    def test_webdriver_rejects_unverified_changed_url(self):
+        calls = []
+        with verified_fixture() as (source, doc, directory, audit):
+            urls = [x["url"] for x in doc["files"]]
+            urls[1] = "https://original.example.test/private/swapped.apk"
+            with self.assertRaisesRegex(splits.SplitError, "urls_not_bound"):
+                splits.webdriver_script(lambda *a: calls.append(a), "com.kwai.video", 647103,
+                                        urls, manifest=source,
+                                        verified_directory=directory, approved_hosts=SOURCE)
+            audit.assert_not_called()
+        self.assertEqual(calls, [])
+
+    def test_webdriver_rejects_unverified_package(self):
+        calls = []
+        with verified_fixture() as (source, doc, directory, audit):
+            with self.assertRaisesRegex(splits.SplitError, "package_or_version_mismatch"):
+                splits.webdriver_script(lambda *a: calls.append(a), "com.kwai.video", 647104,
+                                        [x["url"] for x in doc["files"]],
+                                        manifest=source, verified_directory=directory,
+                                        approved_hosts=SOURCE)
+            audit.assert_not_called()
+        self.assertEqual(calls, [])
+
+    def test_webdriver_rejects_false_signature_receipt(self):
+        calls = []
+        with verified_fixture(receipt_override={"signed_splits_verified": False}) as (source, doc, directory, _):
+            with self.assertRaisesRegex(splits.SplitError, "source_receipt_invalid"):
+                splits.webdriver_script(lambda *a: calls.append(a), "com.kwai.video", 647103,
+                                        [x["url"] for x in doc["files"]],
+                                        manifest=source, verified_directory=directory,
+                                        approved_hosts=SOURCE)
+        self.assertEqual(calls, [])
+
+    def test_webdriver_rejects_receipt_wrong_certificate(self):
+        calls = []
+        with verified_fixture(receipt_override={"cert": "0"*64}) as (source, doc, directory, _):
+            with self.assertRaisesRegex(splits.SplitError, "source_receipt_invalid"):
+                splits.webdriver_script(lambda *a: calls.append(a), "com.kwai.video", 647103,
+                                        [x["url"] for x in doc["files"]],
+                                        manifest=source, verified_directory=directory,
+                                        approved_hosts=SOURCE)
+        self.assertEqual(calls, [])
+
+    def test_webdriver_requires_github_hosted_cloud(self):
+        calls = []
+        with verified_fixture() as (source, doc, directory, audit):
+            with patch.dict(os.environ, {"GITHUB_ACTIONS": "false"}):
+                with self.assertRaisesRegex(splits.SplitError, "cloud_only_execution_required"):
+                    splits.webdriver_script(lambda *a: calls.append(a), "com.kwai.video", 647103,
+                        [x["url"] for x in doc["files"]],
+                        manifest=source, verified_directory=directory, approved_hosts=SOURCE)
+            audit.assert_not_called()
+        self.assertEqual(calls, [])
+
+    def test_webdriver_rejects_directory_outside_runner(self):
+        calls = []
+        with verified_fixture() as (source, doc, directory, audit):
+            with tempfile.TemporaryDirectory() as other:
+                with self.assertRaisesRegex(splits.SplitError, "source_not_in_ephemeral_runner"):
+                    splits.webdriver_script(lambda *a: calls.append(a), "com.kwai.video", 647103,
+                        [x["url"] for x in doc["files"]],
+                        manifest=source, verified_directory=Path(other), approved_hosts=SOURCE)
+            audit.assert_not_called()
+        self.assertEqual(calls, [])
+
+    def test_webdriver_rejects_nonallowlisted_https_host(self):
+        calls = []
+        with verified_fixture() as (source, doc, directory, audit):
+            source["files"][1]["url"] = "https://unknown.invalid/split_1.apk"
+            with self.assertRaisesRegex(splits.SplitError, "component_url_host_denied"):
+                splits.webdriver_script(lambda *a: calls.append(a), "com.kwai.video", 647103,
+                    [x["url"] for x in doc["files"]],
+                    manifest=source, verified_directory=directory, approved_hosts=SOURCE)
+            audit.assert_not_called()
+        self.assertEqual(calls, [])
 
 
 if __name__ == "__main__":
