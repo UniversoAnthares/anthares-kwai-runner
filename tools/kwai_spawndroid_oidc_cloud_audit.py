@@ -68,13 +68,19 @@ def _assert_claims_shape(token: str) -> None:
     except (ValueError, TypeError):
         raise SplitError("oidc_claims_unreadable") from None
     ref = BRANCH
+    event = os.environ.get("GITHUB_EVENT_NAME", "")
+    if event not in ("push", "workflow_dispatch"):
+        raise SplitError("oidc_event_not_authorized")
+    if (event == "workflow_dispatch" and
+            os.environ.get("SPAWNDROID_SPLIT_INSTALL_CANARY_ENABLED") != "1"):
+        raise SplitError("oidc_manual_canary_not_approved")
     expected = {
         "iss": "https://token.actions.githubusercontent.com",
         "aud": AUD,
         "repository": REPO,
         "ref": ref,
         "ref_type": "branch",
-        "event_name": "push",
+        "event_name": event,
         "runner_environment": "github-hosted",
         "workflow_ref": REPO + "/.github/workflows/kwai-spawndroid-stage-cloud-audit.yml@" + ref,
     }
