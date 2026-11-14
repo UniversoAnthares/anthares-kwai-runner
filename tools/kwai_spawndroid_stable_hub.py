@@ -50,7 +50,7 @@ class SpawnDroidHub:
                 result = json.loads(raw.decode("utf-8"))
                 if not isinstance(result, dict):
                     raise HubError("invalid_response")
-                if result.get("value", {}).get("error"):
+                if isinstance(result.get("value"), dict) and result["value"].get("error"):
                     raise HubError("webdriver_error")
                 return result
         except urllib.error.HTTPError as exc:
