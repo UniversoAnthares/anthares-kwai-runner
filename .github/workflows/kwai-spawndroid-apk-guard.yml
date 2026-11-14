@@ -4,12 +4,16 @@ on:
   pull_request:
     paths:
       - 'tools/kwai_spawndroid_apk_guard.py'
+      - 'tools/kwai_spawndroid_original_splits.py'
       - 'tests/test_kwai_spawndroid_apk_guard.py'
+      - 'tests/test_kwai_spawndroid_original_splits.py'
       - '.github/workflows/kwai-spawndroid-apk-guard.yml'
   push:
     paths:
       - 'tools/kwai_spawndroid_apk_guard.py'
+      - 'tools/kwai_spawndroid_original_splits.py'
       - 'tests/test_kwai_spawndroid_apk_guard.py'
+      - 'tests/test_kwai_spawndroid_original_splits.py'
       - '.github/workflows/kwai-spawndroid-apk-guard.yml'
   workflow_dispatch:
     inputs:
@@ -41,9 +45,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Compile guard without touching provider
-        run: python3 -B -m py_compile tools/kwai_spawndroid_apk_guard.py tests/test_kwai_spawndroid_apk_guard.py
+        run: python3 -B -m py_compile tools/kwai_spawndroid_apk_guard.py tools/kwai_spawndroid_original_splits.py tests/test_kwai_spawndroid_apk_guard.py tests/test_kwai_spawndroid_original_splits.py
       - name: Run synthetic contract tests without external access
-        run: python3 -B -m unittest discover -s tests -p test_kwai_spawndroid_apk_guard.py -v
+        run: |
+          python3 -B -m unittest discover -s tests -p test_kwai_spawndroid_apk_guard.py -v
+          python3 -B -m unittest discover -s tests -p test_kwai_spawndroid_original_splits.py -v
       - name: Assert production cloud routing stays disabled
         run: |
           python3 - <<'PY'
