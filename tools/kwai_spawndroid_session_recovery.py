@@ -214,6 +214,8 @@ class RecoveryCoordinator:
         fingerprint = _session_hash(session_id)
         previous = self.store.read(account)
         # Never infer teardown from provider's elapsed time or stale UI state.
+        if previous and previous.status is Status.RECONCILE_REQUIRED:
+            return Decision(account, Status.RECONCILE_REQUIRED)
         if previous and not previous.teardown_verified:
             return Decision(account, Status.TEARDOWN_UNVERIFIED)
         if previous and previous.session_fingerprint == fingerprint:
@@ -232,6 +234,14 @@ class RecoveryCoordinator:
             return self._commit(account, previous, fingerprint,
                                 Status.PROVIDER_UNAVAILABLE, "PROBE")
         strategy = "EXISTING_OFFICIAL_SESSION"
+        if not isinstance(observation, IdentityObservation) or observation.package != package:
+            return self._commit(account, previous, fingerprint,
+                                Status.IDENTITY_MISMATCH, strategy)
+        # Verify package and observation freshness before any official login.
+        if (self._now() - _utc(observation.observed_at) < timedelta(0) or
+                self._now() - _utc(observation.observed_at) > MAX_OBSERVATION_AGE):
+            return self._commit(account, previous, fingerprint,
+                                Status.EVIDENCE_EXPIRED, strategy)
         if observation.challenge_required:
             return self._commit(account, previous, fingerprint,
                                 Status.NEEDS_HUMAN, "CHALLENGE")
