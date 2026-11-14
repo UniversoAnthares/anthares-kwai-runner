@@ -149,8 +149,8 @@ def read_v2_signer(raw):
     certs_blob, q = lp32(sd, q)
     extras, q = lp32(sd, q)
     if q != len(sd) or not certs_blob:
-        raise ApkSigFailure("APK_SIGNED_DATA_INVALID_q%d_len%d_cert%d" %
-                            (q, len(sd), len(certs_blob)))
+        raise ApkSigFailure("APK_SIGNED_DATA_INVALID_q%d_len%d_cert%d_suffix%s" %
+                            (q, len(sd), len(certs_blob), sd[q:].hex()[:32]))
     digests = {}
     for item in entries_lp32(digests_blob):
         if len(item) < 8:
