@@ -121,7 +121,8 @@ function verifyGitHubOidc(string $jwt): void {
     foreach ($required as $key => $expected) {
         if (!isset($claims[$key]) || !is_string($claims[$key]) ||
             !hash_equals($expected, $claims[$key])) {
-            throw new RuntimeException('JWT_CLAIM_DENIED');
+            // Only an allowlisted claim name is reported; never its value.
+            throw new RuntimeException('JWT_CLAIM_DENIED_' . $key);
         }
     }
     $iat = $claims['iat'] ?? null;
@@ -151,6 +152,15 @@ function verifyGitHubOidc(string $jwt): void {
 try {
     verifyGitHubOidc($jwt);
 } catch (Throwable $exception) {
+    // Private, append-only diagnostic: fixed error code; never JWT, values,
+    // URLs, IP addresses or account data. The public response remains 403.
+    $reason = (string)$exception->getMessage();
+    if (!preg_match('/\\A[A-Z0-9_]{4,80}\\z/D', $reason)) {
+        $reason = 'OIDC_VALIDATION_FAILED';
+    }
+    $auditPath = '/home/u566597497/.anthares-spawndroid-apks/oidc-broker-denials.log';
+    @file_put_contents($auditPath, gmdate('Y-m-d\\TH:i:s\\Z') .
+        ' ' . $reason . PHP_EOL, FILE_APPEND | LOCK_EX);
     refuse(403);
 }
 
