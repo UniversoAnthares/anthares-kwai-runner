@@ -120,7 +120,6 @@ function verifyGitHubOidc(string $jwt): void {
     $required = [
         'iss' => 'https://token.actions.githubusercontent.com',
         'aud' => 'urn:anthares:kwai:apk-stage:v1',
-        'sub' => 'repo:' . $repository . ':ref:' . $ref,
         'repository' => $repository,
         'ref' => $ref,
         'ref_type' => 'branch',
@@ -128,6 +127,13 @@ function verifyGitHubOidc(string $jwt): void {
         'workflow_ref' => $workflowRef,
         'runner_environment' => 'github-hosted',
     ];
+    // GitHub organizations may customize the subject template. Authorization
+    // is bound to signed repository + exact branch + workflow_ref + audience +
+    // event + hosted-runner claims, independently of subject formatting.
+    if (!isset($claims['sub']) || !is_string($claims['sub']) ||
+        strlen($claims['sub']) < 5 || strlen($claims['sub']) > 512) {
+        throw new RuntimeException('JWT_SUB_INVALID');
+    }
     foreach ($required as $key => $expected) {
         if (!isset($claims[$key]) || !is_string($claims[$key]) ||
             !hash_equals($expected, $claims[$key])) {
