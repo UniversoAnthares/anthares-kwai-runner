@@ -45,7 +45,22 @@ def http(url, headers=None, body=None, timeout=40):
         with urllib.request.urlopen(request, timeout=timeout) as response:
             out = json.load(response)
     except urllib.error.HTTPError as exc:
-        raise SafeStop("HTTP_" + str(exc.code) + "_" + (urlparse(url).hostname or "unknown")) from exc
+        # An actionable, redacted stage replaces generic HTTP 502 diagnostics.
+        # Never echo response bodies, URLs, cookies or tokens into CI logs.
+        details = ""
+        try:
+            evidence = json.loads(exc.read(3000).decode("utf-8", "replace"))
+            if isinstance(evidence, dict):
+                error = str(evidence.get("error") or "")
+                stage = str(evidence.get("stage") or "")
+                allowed = re.compile(r"^[a-z][a-z0-9_]{0,79}$")
+                safe_error = error if allowed.fullmatch(error) else "unknown"
+                safe_stage = stage if allowed.fullmatch(stage) else "unknown"
+                details = "_" + safe_error + "_" + safe_stage
+        except (OSError, ValueError, UnicodeError):
+            pass
+        raise SafeStop("HTTP_" + str(exc.code) + "_" +
+                       (urlparse(url).hostname or "unknown") + details) from exc
     except (OSError, ValueError) as exc:
         raise SafeStop("UPSTREAM_RESULT_UNCERTAIN_" + type(exc).__name__) from exc
     if not isinstance(out, dict):
