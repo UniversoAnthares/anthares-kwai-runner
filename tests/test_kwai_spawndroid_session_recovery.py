@@ -227,6 +227,36 @@ class Tests(unittest.TestCase):
         self.assertEqual(self.gate.assert_publishable(
             PRIMARY, SESSION1, queue_clean=True).status, m.Status.SESSION_UNVERIFIED)
 
+    def test_security_denial_survives_teardown(self):
+        self.probes[(PRIMARY, SESSION1)] = self.evidence(authenticated=False)
+        self.probes[(PRIMARY, SESSION2)] = self.evidence()
+        self.login_outcome = m.LoginResult.DENIED
+        self.assertEqual(self.start(official_login_permitted=True).status,
+                         m.Status.AUTH_DENIED)
+        self.assertEqual(self.gate.confirm_teardown(
+            PRIMARY, SESSION1, provider_terminal=True).status, m.Status.AUTH_DENIED)
+        self.assertEqual(self.gate.preflight(
+            PRIMARY, queue_clean=True, quota_available=True).status, m.Status.AUTH_DENIED)
+        self.assertEqual(self.start(sid=SESSION2, older=True).status,
+                         m.Status.AUTH_DENIED)
+
+    def test_human_challenge_survives_teardown(self):
+        self.probes[(PRIMARY, SESSION1)] = self.evidence(authenticated=False, challenge=True)
+        self.probes[(PRIMARY, SESSION2)] = self.evidence()
+        self.assertEqual(self.start().status, m.Status.NEEDS_HUMAN)
+        self.assertEqual(self.gate.confirm_teardown(
+            PRIMARY, SESSION1, provider_terminal=True).status, m.Status.NEEDS_HUMAN)
+        self.assertEqual(self.start(sid=SESSION2, older=True).status, m.Status.NEEDS_HUMAN)
+
+    def test_identity_mismatch_survives_teardown(self):
+        self.probes[(PRIMARY, SESSION1)] = self.evidence(handle=SECONDARY)
+        self.probes[(PRIMARY, SESSION2)] = self.evidence()
+        self.assertEqual(self.start().status, m.Status.IDENTITY_MISMATCH)
+        self.assertEqual(self.gate.confirm_teardown(
+            PRIMARY, SESSION1, provider_terminal=True).status, m.Status.IDENTITY_MISMATCH)
+        self.assertEqual(self.start(sid=SESSION2, older=True).status,
+                         m.Status.IDENTITY_MISMATCH)
+
     def test_in_memory_store_production_refused(self):
         with self.assertRaisesRegex(ValueError, "durable_store_required"):
             m.RecoveryCoordinator(store=m.InMemoryStore(),
