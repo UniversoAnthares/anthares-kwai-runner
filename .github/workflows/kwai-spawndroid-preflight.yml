@@ -1,0 +1,78 @@
+name: Kwai SpawnDroid Free Android Preflight (experimental)
+on:
+  pull_request:
+    paths:
+      - 'tools/kwai_spawndroid_probe.py'
+      - 'tests/test_kwai_spawndroid_probe.py'
+      - '.github/workflows/kwai-spawndroid-preflight.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tools/kwai_spawndroid_probe.py'
+      - 'tests/test_kwai_spawndroid_probe.py'
+      - '.github/workflows/kwai-spawndroid-preflight.yml'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'status = read-only, canary = one isolated Android boot/teardown'
+        type: choice
+        required: true
+        default: status
+        options: [status, canary]
+      artifact_id:
+        description: 'Existing verified Kwai APK artifact slug, required only for canary'
+        required: false
+        type: string
+        default: ''
+permissions:
+  contents: read
+concurrency:
+  group: kwai-spawndroid-experimental-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  offline-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile standalone SpawnDroid API probe
+        run: python3 -m py_compile tools/kwai_spawndroid_probe.py tests/test_kwai_spawndroid_probe.py
+      - name: Validate quotas, fail-closed and teardown with mocks only
+        run: python3 -m unittest discover -s tests -p 'test_kwai_spawndroid_probe.py' -v
+      - name: Assert production routing remains local until real dual account proof
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          routing=json.loads(Path('ci-hub/executor-routing.json').read_text(encoding='utf-8'))
+          assert routing['android_execution']['cloud_cutover']['enabled'] is False
+          assert routing['android_execution']['primary_device']=='physical_android'
+          assert routing['providers']['github_android_experimental']['active'] is False
+          print('KWAI_SPAWNDROID_NO_PRODUCTION_CUTOVER=PASS')
+          PY
+  api-preflight:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    needs: offline-contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    env:
+      SPAWNDROID_API_KEY: ${{ secrets.SPAWNDROID_API_KEY }}
+      SPAWNDROID_HOBBY_FREE_CONFIRMED: ${{ vars.SPAWNDROID_HOBBY_FREE_CONFIRMED }}
+      SPAWNDROID_KWAI_ARTIFACT_ID: ${{ inputs.artifact_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read-only workspace check or bounded explicit canary
+        shell: bash
+        env:
+          REQUESTED_MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          if [ "$REQUESTED_MODE" = status ]; then
+            python3 tools/kwai_spawndroid_probe.py --mode status
+          else
+            test "$REQUESTED_MODE" = canary
+            test -n "$SPAWNDROID_KWAI_ARTIFACT_ID"
+            test "$SPAWNDROID_HOBBY_FREE_CONFIRMED" = 1
+            export SPAWNDROID_EXPERIMENTAL_CANARY_ENABLED=1
+            python3 tools/kwai_spawndroid_probe.py --mode canary --max-seconds 150
+          fi
