@@ -161,8 +161,9 @@ def verify_component(path: Path, *, package: str, version: int) -> str:
     except guard.ValidationError as exc:
         # Static parser reason only; no certificate text or platform log.
         reason = str(exc)
-        if reason not in ("unexpected_signer_count", "invalid_certificate_digest",
-                          "apk_v2_v3_signature_required"):
+        if not (reason.startswith("unexpected_signer_count_") or
+                reason in ("unexpected_signer_count", "invalid_certificate_digest",
+                           "apk_v2_v3_signature_required")):
             reason = "output_structure_unexpected"
         raise SplitError("split_apksigner_" + reason + "_" + path.name) from None
     if not hmac.compare_digest(cert, guard.EXPECTED_CERT_SHA256):
