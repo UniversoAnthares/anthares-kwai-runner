@@ -1,0 +1,62 @@
+name: Kwai original APKs - OIDC Hostinger cloud signature audit
+
+on:
+  push:
+    branches:
+      - feature/spawndroid-kwai-apk-verified-upload-20261114
+    paths:
+      - 'tools/kwai_spawndroid_oidc_broker.php'
+      - 'tools/kwai_spawndroid_oidc_cloud_audit.py'
+      - '.github/workflows/kwai-spawndroid-stage-cloud-audit.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: kwai-oidc-original-apk-signature-audit
+  cancel-in-progress: false
+
+jobs:
+  original-apk-audit:
+    if: github.repository == 'UniversoAnthares/anthares-kwai-runner' && github.event_name == 'push' && github.ref == 'refs/heads/feature/spawndroid-kwai-apk-verified-upload-20261114'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact branch commit
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Enforce no production cutover
+        run: |
+          python3 - <<'PY'
+          import json
+          with open("ci-hub/executor-routing.json") as f:
+              doc=json.load(f)
+          assert doc["android_execution"]["cloud_cutover"]["enabled"] is False
+          print("KWAI_OIDC_NO_CLOUD_CUTOVER=PASS")
+          PY
+      - name: Confirm official Android verification utilities
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          test -d "$SDK/build-tools"
+          DIR="$(find "$SDK/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          test -x "$DIR/aapt" && test -x "$DIR/apksigner"
+          echo "ANDROID_AAPT=$DIR/aapt" >> "$GITHUB_ENV"
+          echo "ANDROID_APKSIGNER=$DIR/apksigner" >> "$GITHUB_ENV"
+          echo "KWAI_OFFICIAL_ANDROID_APKSIGNER_AVAILABLE=PASS"
+      - name: Obtain short-lived GitHub OIDC, fetch and verify original 25 APK splits
+        shell: bash
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          python3 -B tools/kwai_spawndroid_oidc_cloud_audit.py
+      - name: Confirm no device use or publication
+        if: always()
+        run: |
+          echo "SPAWNDROID_DEVICE_MINUTES_USED=0"
+          echo "KWAI_ACCOUNT_LOGIN_ATTEMPTED=0"
+          echo "KWAI_PUBLICATION_ATTEMPTED=0"
