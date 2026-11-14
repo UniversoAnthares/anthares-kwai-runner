@@ -82,6 +82,9 @@ READY: sessão, pacote, conta, validade e uploader verificadas; somente esta
 sessão poderá publicar após conferência do ledger.
 NEEDS_HUMAN: interromper e solicitar interação do titular no fluxo oficial.
 AUTH_DENIED/AUTH_REVOKED/AUTH_EXPIRED: bloquear; respeitar motivo e política.
+NEEDS_HUMAN, AUTH_DENIED, AUTH_REVOKED, AUTH_EXPIRED e IDENTITY_MISMATCH
+continuam bloqueados mesmo após teardown confirmado; desbloqueio exige
+procedimento explícito na autoridade canônica e nova verificação oficial.
 IDENTITY_MISMATCH: bloquear para evitar publicação em conta trocada.
 UPLOAD_UNAVAILABLE: autenticação pode existir, publicação segue suspensa.
 QUOTA_BLOCKED: cancelar tentativa própria, confirmar término; não fazer retry
@@ -92,8 +95,8 @@ RECONCILE_REQUIRED: impedir segundo envio até ledger/efeito externo reconciliad
 SESSION_REUSED, SESSION_UNVERIFIED, EVIDENCE_EXPIRED, CAS_CONFLICT: bloquear.
 
 ## Homologação
-CI offline: https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/43596033556
-23 testes aprovados (prova do contrato, não do Android real).
+CI offline: https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/43596415580
+26 testes aprovados (prova do contrato, não do Android real).
 
 Aceite real ainda exige, SEPARADAMENTE, para cada conta:
 - APK de procedência assinada cadastrado, saldo gratuito confirmado,
