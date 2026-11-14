@@ -136,18 +136,30 @@ def verify_component(path: Path, *, package: str, version: int) -> str:
                 raise SplitError("split_zip_corrupt")
     except (zipfile.BadZipFile, OSError):
         raise SplitError("split_zip_corrupt") from None
+    # Split APK manifests can differ from base.apk. Diagnose the exact tool
+    # stage without ever including tool stderr, original URLs or credentials.
     try:
         badges = guard._run([guard._tool("ANDROID_AAPT", "aapt"),
                              "dump", "badging", str(path)])
+    except guard.ValidationError:
+        raise SplitError("split_aapt_execution_failed_" + path.name) from None
+    try:
         p, v, _, _ = guard.parse_aapt(badges)
-        if p != package or v != version:
-            raise SplitError("split_package_or_version_mismatch")
-        cert = guard.parse_apksigner(guard._run([
+    except guard.ValidationError:
+        raise SplitError("split_aapt_manifest_parse_failed_" + path.name) from None
+    if p != package or v != version:
+        raise SplitError("split_package_or_version_mismatch_" + path.name)
+    try:
+        signed = guard._run([
             guard._tool("ANDROID_APKSIGNER", "apksigner"), "verify",
             "--verbose", "--print-certs", str(path)
-        ]))
+        ])
     except guard.ValidationError:
-        raise SplitError("split_signature_or_manifest_unverified") from None
+        raise SplitError("split_apksigner_tool_failed_" + path.name) from None
+    try:
+        cert = guard.parse_apksigner(signed)
+    except guard.ValidationError:
+        raise SplitError("split_apksigner_output_invalid_" + path.name) from None
     if not hmac.compare_digest(cert, guard.EXPECTED_CERT_SHA256):
         raise SplitError("publisher_certificate_mismatch")
     return cert
