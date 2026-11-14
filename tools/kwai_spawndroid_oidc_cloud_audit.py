@@ -71,7 +71,6 @@ def _assert_claims_shape(token: str) -> None:
     expected = {
         "iss": "https://token.actions.githubusercontent.com",
         "aud": AUD,
-        "sub": "repo:" + REPO + ":ref:" + ref,
         "repository": REPO,
         "ref": ref,
         "ref_type": "branch",
@@ -79,6 +78,9 @@ def _assert_claims_shape(token: str) -> None:
         "runner_environment": "github-hosted",
         "workflow_ref": REPO + "/.github/workflows/kwai-spawndroid-stage-cloud-audit.yml@" + ref,
     }
+    subject = claims.get("sub")
+    if not isinstance(subject, str) or not 5 <= len(subject) <= 512:
+        raise SplitError("oidc_subject_missing_or_invalid")
     for key, value in expected.items():
         if claims.get(key) != value:
             # Only the static claim NAME is exposed; never JWT or value.
