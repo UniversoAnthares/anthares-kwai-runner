@@ -59,8 +59,13 @@ def parse_aapt(text: str) -> tuple[str, int, str, tuple[str, ...]]:
 
 
 def parse_apksigner(text: str) -> str:
+    # Android Build Tools may label the same signer as "Signer #1",
+    # "Signer (minSdkVersion=...)" or "V3.0 Signer". All still require a
+    # verified signature and exactly one ORIGINAL publisher certificate.
     signers = re.findall(
-        r"(?mi)^Signer #\d+ certificate SHA-256 digest:\s*([0-9a-f: ]+)$", text
+        r"(?mi)^(?:Signer\s*#\d+|Signer\s*\([^)]*\)|V[23](?:\.\d+)?\s+Signer)"
+        r"\s*:?\s*certificate SHA-256 digest:\s*([0-9a-f: ]+)$",
+        text,
     )
     normalized = {re.sub(r"[^0-9a-f]", "", v.lower()) for v in signers}
     if len(normalized) != 1:
