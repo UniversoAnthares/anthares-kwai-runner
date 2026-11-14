@@ -7,6 +7,7 @@ on:
     paths:
       - 'tools/kwai_spawndroid_oidc_broker.php'
       - 'tools/kwai_spawndroid_oidc_cloud_audit.py'
+      - 'tools/kwai_spawndroid_original_splits.py'
       - 'tests/test_kwai_spawndroid_oidc_cloud_audit.py'
       - '.github/workflows/kwai-spawndroid-stage-cloud-audit.yml'
 
