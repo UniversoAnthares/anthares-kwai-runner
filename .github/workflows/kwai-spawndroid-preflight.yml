@@ -27,7 +27,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: kwai-spawndroid-experimental-${{ github.ref }}
+  group: kwai-spawndroid-experimental
   cancel-in-progress: false
 jobs:
   offline-contract:

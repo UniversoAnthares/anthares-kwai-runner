@@ -46,7 +46,7 @@ class SpawnDroidHub:
                                      headers=headers, data=body)
         try:
             with self.transport(req, timeout=28) as resp:
-                raw = resp.read(65536)
+                raw = resp.read(1048576)
                 result = json.loads(raw.decode("utf-8"))
                 if not isinstance(result, dict):
                     raise HubError("invalid_response")
@@ -90,39 +90,74 @@ class SpawnDroidHub:
         caps = value.get("capabilities") or {}
         if not isinstance(caps,dict):
             caps = {}
-        finished = False
+        # W3C session capabilities are returned by the cloud Android provider.
+        # Never infer ARM64 or provider termination from the success of an
+        # activation command alone.
+        platform_version = str(caps.get("platformVersion") or "")
+        device_id = str(caps.get("appium:udid") or "")
+        provider_id = str(caps.get("spawndroid:sessionId") or "")
         proof = False
+        teardown_ack = False
+        webdriver_gone = False
+        report = {}
         try:
             pkg = caps.get("spawndroid:appPackage")
             if pkg != KWAIPKG:
                 raise HubError("installed_package_mismatch")
-            # Activate the installed official Kwai app. The Hub injects
-            # device ID and user gets no privileged Android container access.
+            if not device_id or not platform_version:
+                raise HubError("android_device_capabilities_unverified")
             activation = self.send("POST", "/session/" + session_id +
                                    "/execute/sync", {
                 "script": "mobile: activateApp",
                 "args": [{"appId": KWAIPKG}]
             })
-            if not isinstance(activation.get("value"), (dict,list,type(None),str,int,bool)):
-                raise HubError("activation_unverified")
+            if activation.get("value") is not None:
+                raise HubError("activation_response_unexpected")
+            foreground = self.send("POST", "/session/" + session_id +
+                                   "/execute/sync", {
+                "script": "mobile: queryAppState",
+                "args": [{"appId": KWAIPKG}]
+            })
+            if foreground.get("value") != 4:
+                raise HubError("kwai_not_in_foreground")
+            source = self.send("GET", "/session/" + session_id + "/source")
+            xml = source.get("value")
+            if not isinstance(xml, str) or "<hierarchy" not in xml:
+                raise HubError("kwai_ui_source_unverified")
             proof = True
-            return {"android_session_started":True,
-                    "official_kwai_package_verified":True,
-                    "kwai_app_activated":True,
-                    "account_authenticated":False,
-                    "publication_attempted":False,
-                    "device_terminated":True}
+            report = {
+                "session_id": session_id,
+                "provider_session_id": provider_id,
+                "android_device_id": device_id,
+                "android_version": platform_version,
+                "android_arm64_verified": False,
+                "kwai_package": KWAIPKG,
+                "kwai_foreground_verified": True,
+                "webdriver_ui_tree_verified": True,
+                "account_authenticated": False,
+                "publication_attempted": False,
+            }
         finally:
             try:
                 self.send("DELETE", "/session/" + session_id +
                           "?result=" + ("passed" if proof else "failed"))
-                finished = True
+                teardown_ack = True
             except HubError:
                 pass
-            if not finished:
-                # Keep non-terminal session errors visible. Never imply that
-                # the cloud device has been stopped without confirmation.
+            if teardown_ack:
+                # DELETE acknowledgement alone does not establish teardown.
+                # A second read must observe the W3C invalid-session result.
+                try:
+                    self.send("GET", "/session/" + session_id)
+                except HubError as exc:
+                    webdriver_gone = str(exc) == "session_not_found"
+            if not webdriver_gone:
                 raise HubError("hub_teardown_unverified")
+        report["webdriver_session_terminated"] = True
+        # The provider's device-minute reservation requires an independent
+        # SpawnDroid REST/console readback. Expose this separate gate honestly.
+        report["provider_device_termination_verified"] = False
+        return report
 
 
 def main():
@@ -143,9 +178,10 @@ def main():
             args.slug,
             enable=os.getenv("SPAWNDROID_HUB_CANARY_ENABLED")=="1",
             free_hobby=os.getenv("SPAWNDROID_HOBBY_FREE_CONFIRMED")=="1")
-        print("KWAI_STABLE_HUB=APP_ACTIVATED_AND_STOPPED")
+        print("KWAI_STABLE_HUB=APP_VERIFIED_WEBDRIVER_CLOSED_PROVIDER_UNVERIFIED")
+        print("KWAI_STABLE_HUB_EVIDENCE="+json.dumps(proof,sort_keys=True))
         print("KWAI_PUBLICATION_ATTEMPTED=0")
-        return 0
+        return 22
     except HubError as exc:
         print("KWAI_STABLE_HUB="+str(exc))
         print("KWAI_PUBLICATION_ATTEMPTED=0")
