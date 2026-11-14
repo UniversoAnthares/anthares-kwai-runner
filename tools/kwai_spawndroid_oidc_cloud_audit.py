@@ -11,6 +11,7 @@ No device, Appium session, login, or publication is initiated.
 from __future__ import annotations
 
 import json
+import base64
 import os
 from pathlib import Path
 import re
@@ -53,6 +54,37 @@ def _get_oidc() -> str:
         raise SplitError("github_oidc_request_failed") from None
 
 
+def _assert_claims_shape(token: str) -> None:
+    """Local diagnostics only; Hostinger MUST still cryptographically verify JWT."""
+    try:
+        parts = token.split(".")
+        if len(parts) != 3:
+            raise ValueError("parts")
+        encoded = parts[1]
+        raw = base64.urlsafe_b64decode(encoded + "=" * ((-len(encoded)) % 4))
+        claims = json.loads(raw)
+        if not isinstance(claims, dict):
+            raise ValueError("claims")
+    except (ValueError, TypeError):
+        raise SplitError("oidc_claims_unreadable") from None
+    ref = BRANCH
+    expected = {
+        "iss": "https://token.actions.githubusercontent.com",
+        "aud": AUD,
+        "sub": "repo:" + REPO + ":ref:" + ref,
+        "repository": REPO,
+        "ref": ref,
+        "ref_type": "branch",
+        "event_name": "push",
+        "runner_environment": "github-hosted",
+        "workflow_ref": REPO + "/.github/workflows/kwai-spawndroid-stage-cloud-audit.yml@" + ref,
+    }
+    for key, value in expected.items():
+        if claims.get(key) != value:
+            # Only the static claim NAME is exposed; never JWT or value.
+            raise SplitError("oidc_claim_" + key + "_mismatch")
+
+
 def _fetch_manifest(token: str) -> dict:
     if not token:
         raise SplitError("github_oidc_missing")
@@ -89,6 +121,7 @@ def audit_cloud() -> dict:
     expiry_allow = 1600
     # Never log the OIDC JWT or any HMAC-signed APK URL.
     token = _get_oidc()
+    _assert_claims_shape(token)
     doc = _fetch_manifest(token)
     del token
     source = validate_manifest(doc, {"anthares.us"})
