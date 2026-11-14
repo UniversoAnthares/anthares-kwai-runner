@@ -158,8 +158,13 @@ def verify_component(path: Path, *, package: str, version: int) -> str:
         raise SplitError("split_apksigner_tool_failed_" + path.name) from None
     try:
         cert = guard.parse_apksigner(signed)
-    except guard.ValidationError:
-        raise SplitError("split_apksigner_output_invalid_" + path.name) from None
+    except guard.ValidationError as exc:
+        # Static parser reason only; no certificate text or platform log.
+        reason = str(exc)
+        if reason not in ("unexpected_signer_count", "invalid_certificate_digest",
+                          "apk_v2_v3_signature_required"):
+            reason = "output_structure_unexpected"
+        raise SplitError("split_apksigner_" + reason + "_" + path.name) from None
     if not hmac.compare_digest(cert, guard.EXPECTED_CERT_SHA256):
         raise SplitError("publisher_certificate_mismatch")
     return cert
