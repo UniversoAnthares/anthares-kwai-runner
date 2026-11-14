@@ -5,11 +5,11 @@ import edge from '../infra/cloudflare-cortes-queue-ha/src/index.js';
 
 const neonURL='https://br-crimson-unit-b89nau08-cortesqueue.compute.c-14.us-east-1.aws.neon.tech/';
 const originalFetch=globalThis.fetch;
-const oldEnv=process.env.DATABASE_URL;
+const oldEnv=process.env.CORTES_AUDIT_DATABASE_URL;
 const db='postgresql://user:example@c-14.us-east-1.aws.neon.tech/anthares';
 
 test('Neon queue exposes only read-only health without authentication', async()=>{
- process.env.DATABASE_URL=db;
+ process.env.CORTES_AUDIT_DATABASE_URL=db;
  globalThis.fetch=async url=>{
   assert.match(String(url),/^https:\/\/api\.us-east-1\.aws\.neon\.tech\/sql/);
   return Response.json({rows:[{target_key:'linkedin:primary',status:'queued',n:2}]});
@@ -23,7 +23,7 @@ test('Neon queue exposes only read-only health without authentication', async()=
   assert.equal(b.rls_attested,false);
   assert.equal(b.isolation_status,'UNPROVEN_SQL_ROLE_AND_RLS_SCOPE');
   assert.equal(b.counts[0].target_key,'linkedin:primary');
- }finally{globalThis.fetch=originalFetch;process.env.DATABASE_URL=oldEnv;}
+ }finally{globalThis.fetch=originalFetch;process.env.CORTES_AUDIT_DATABASE_URL=oldEnv;}
 });
 
 test('Neon queue refuses unsigned job enqueues and independent worker mutations', async()=>{

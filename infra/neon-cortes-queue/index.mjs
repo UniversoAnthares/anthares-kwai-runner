@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import {AsyncLocalStorage} from 'node:async_hooks';
 import {kwaiPersistentCloudIdentity,localBlockedByCloudCutover} from './kwai-persistent-cloud-identity.mjs';
 import {deriveKwaiPacing,KWAI_PACING_VERSION} from './kwai-pacing-policy.mjs';
 import {validateOneoffKwaiPublicProof,ONEOFF_WORKFLOW,ONEOFF_RECONCILED_KIND} from './kwai-oneoff-public-reconcile.mjs';
@@ -16,10 +17,31 @@ const BUFFER_LOCAL_DAY="(now() AT TIME ZONE 'America/Campo_Grande')::date";
 const REPO='UniversoAnthares/anthares-kwai-runner';
 const CLIPPER='UniversoAnthares/anthares-clipper';
 let keys=null,keyExpires=0;
+const sqlScope=new AsyncLocalStorage();
+// Every runtime query must have an explicitly scoped, non-BYPASSRLS login.
+export function kwaiSqlScope(targetKey){
+ if(targetKey==='kwai:lucasrosalem')return 'kwai_primary';
+ if(targetKey==='kwai:universoanthares')return 'kwai_secondary';
+ return null;
+}
+const SQL_URL_ENV=Object.freeze({
+ audit:'CORTES_AUDIT_DATABASE_URL',
+ other:'CORTES_OTHER_DATABASE_URL',
+ kwai_primary:'CORTES_KWAI_PRIMARY_DATABASE_URL',
+ kwai_secondary:'CORTES_KWAI_SECONDARY_DATABASE_URL',
+});
+function scopedConnection(){
+ const role=sqlScope.getStore();
+ const name=SQL_URL_ENV[role];
+ if(!name)throw Error('DATABASE_ROLE_SCOPE_REQUIRED');
+ const conn=process.env[name];
+ if(!conn)throw Error('DATABASE_SCOPED_CONFIG_MISSING');
+ return conn;
+}
 const sha=s=>crypto.createHash('sha256').update(String(s)).digest('hex');
 function answer(obj,status=200){return Response.json(obj,{status,headers:{'Cache-Control':'no-store'}});}
 async function query(sql,params=[]){
- const conn=process.env.DATABASE_URL;
+ const conn=scopedConnection();
  if(!conn)throw Error('DATABASE_CONFIG_MISSING');
  const db=new URL(conn);
  if(db.protocol!=='postgresql:'&&db.protocol!=='postgres:')throw Error('DATABASE_URL_INVALID');
@@ -2677,6 +2699,7 @@ async function personalAction(verb,b){
  return r.length?{ok:true,job:r[0]}:{ok:false,error:'PERSONAL_STALE_FENCE'};
 }
 export default {async fetch(request){
+ return sqlScope.run(request.method==='GET'?'audit':'other',async()=>{
  const url=new URL(request.url),action=url.searchParams.get('action')||'';
  if(request.method==='GET'&&action==='health'){
   try{
@@ -2758,8 +2781,13 @@ export default {async fetch(request){
   }
   // One-off public reconciliation endpoint retired; no HTTP action is reachable.
   if(action.startsWith('kwai-')){
-   const out=await kwaiAction(action,body,actor);
-   return answer(out,out.ok?200:out.error==='KWAI_PUBLISHER_NOT_ENABLED'?423:409);
+   // The account determines the SQL login. Any other account fails closed.
+   const lane=kwaiSqlScope(body.target_key);
+   if(!lane)return answer({ok:false,error:'KWAI_SQL_ACCOUNT_REQUIRED'},409);
+   return await sqlScope.run(lane,async()=>{
+    const out=await kwaiAction(action,body,actor);
+    return answer(out,out.ok?200:out.error==='KWAI_PUBLISHER_NOT_ENABLED'?423:409);
+   });
   }
   if(action==='enqueue'){
    if(actor.role!=='producer')return answer({ok:false,error:'PRODUCER_ONLY'},403);
@@ -2783,4 +2811,5 @@ export default {async fetch(request){
   }
   return answer({ok:false,error:'NOT_FOUND'},404);
  }catch{return answer({ok:false,error:'QUEUE_BACKEND_UNAVAILABLE'},503);}
+ });
 }};
