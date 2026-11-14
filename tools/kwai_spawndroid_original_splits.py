@@ -175,20 +175,47 @@ def download_and_verify(doc: dict, hosts: set[str], destination: Path) -> dict:
     return audit_downloaded_set(doc, destination)
 
 
-def webdriver_script(executor, package: str, version: int, urls: list[str]) -> dict:
-    """Called ONLY inside an already-owned Appium 3 session.
+def webdriver_script(executor, package: str, version: int, urls: list[str], *,
+                     manifest: dict | None = None,
+                     verified_directory: Path | None = None,
+                     approved_hosts: set[str] | None = None) -> dict:
+    """Install only an entire original, verified set inside an owned Appium session.
 
-    executor(script, args) is supplied by Agent02's session lifecycle; this
-    function neither creates nor disposes an Android runner.
+    The caller owns session creation and teardown. The exact URLs forwarded to
+    Appium must match the set verified from local APK bytes in a cloud runner.
+    This does NOT independently attest the bytes fetched later by Appium;
+    object storage must guarantee immutable content until remote installation.
     """
     if os.environ.get("SPAWNDROID_SPLIT_INSTALL_CANARY_ENABLED") != "1":
         raise SplitError("appium_canary_not_authorized")
+    runner_temp = os.environ.get("RUNNER_TEMP")
+    if os.environ.get("GITHUB_ACTIONS") != "true" or not runner_temp:
+        raise SplitError("cloud_only_execution_required")
+    if manifest is None or verified_directory is None or not approved_hosts:
+        raise SplitError("verified_source_manifest_required")
     if package not in EXPECTED_COUNTS:
         raise SplitError("package_not_allowed")
-    if not urls or len(urls) != EXPECTED_COUNTS[package]:
-        raise SplitError("split_urls_incomplete")
+    doc = validate_manifest(manifest, approved_hosts)
+    if doc["package"] != package or doc["versionCode"] != version:
+        raise SplitError("appium_package_or_version_mismatch")
+    canonical_urls = [entry["url"] for entry in doc["files"]]
+    if not isinstance(urls, list) or urls != canonical_urls:
+        raise SplitError("appium_urls_not_bound_to_verified_manifest")
+    # Resolve both paths; require a freshly downloaded temporary source set.
+    root = Path(runner_temp).resolve()
+    directory = Path(verified_directory).resolve()
+    if not directory.is_dir() or root == directory or root not in directory.parents:
+        raise SplitError("verified_source_not_in_ephemeral_runner")
+    receipt = audit_downloaded_set(doc, directory)
+    if (receipt.get("signed_splits_verified") is not True
+            or receipt.get("package") != package
+            or receipt.get("versionCode") != version
+            or receipt.get("count") != EXPECTED_COUNTS[package]
+            or receipt.get("bytes") != doc["bytes"]
+            or receipt.get("cert") != guard.EXPECTED_CERT_SHA256):
+        raise SplitError("verified_source_receipt_invalid")
     executor("mobile: installMultipleApks", {
-        "apks": urls,
+        "apks": canonical_urls,
         "options": {"grantPermissions": False, "replace": False,
                     "timeout": 180000},
     })
@@ -202,6 +229,7 @@ def webdriver_script(executor, package: str, version: int, urls: list[str]) -> d
     if not isinstance(value, dict) or str(value.get("versionCode")) != str(version):
         raise SplitError("remote_version_unverified")
     return {"installed": True, "package": package, "versionCode": version,
+            "original_splits_audited": True,
             "publication_attempted": False, "login_attempted": False,
             "provider_session_closed": False}
 
