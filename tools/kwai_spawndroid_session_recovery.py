@@ -50,6 +50,16 @@ class Status(str, Enum):
     CAS_CONFLICT = "CAS_CONFLICT"
 
 
+HARD_BLOCKS = frozenset({
+    Status.RECONCILE_REQUIRED,
+    Status.NEEDS_HUMAN,
+    Status.AUTH_DENIED,
+    Status.AUTH_REVOKED,
+    Status.AUTH_EXPIRED,
+    Status.IDENTITY_MISMATCH,
+})
+
+
 class LoginResult(str, Enum):
     COMPLETED = "COMPLETED"
     HUMAN_CHALLENGE = "HUMAN_CHALLENGE"
@@ -193,8 +203,8 @@ class RecoveryCoordinator:
         if account not in ACCOUNT_PACKAGES:
             raise ValueError("unsupported_account")
         prev = self.store.read(account)
-        if prev and prev.status is Status.RECONCILE_REQUIRED:
-            return Decision(account, Status.RECONCILE_REQUIRED)
+        if prev and prev.status in HARD_BLOCKS:
+            return Decision(account, prev.status)
         if prev and not prev.teardown_verified:
             return Decision(account, Status.TEARDOWN_UNVERIFIED)
         if not queue_clean:
@@ -214,8 +224,8 @@ class RecoveryCoordinator:
         fingerprint = _session_hash(session_id)
         previous = self.store.read(account)
         # Never infer teardown from provider's elapsed time or stale UI state.
-        if previous and previous.status is Status.RECONCILE_REQUIRED:
-            return Decision(account, Status.RECONCILE_REQUIRED)
+        if previous and previous.status in HARD_BLOCKS:
+            return Decision(account, previous.status)
         if previous and not previous.teardown_verified:
             return Decision(account, Status.TEARDOWN_UNVERIFIED)
         if previous and previous.session_fingerprint == fingerprint:
@@ -339,8 +349,9 @@ class RecoveryCoordinator:
         if not provider_terminal:
             return self._commit(account, prev, fingerprint,
                                 Status.TEARDOWN_UNVERIFIED, "TEARDOWN")
-        # Preserve an uncertain publication even after device deletion.
-        status = (Status.RECONCILE_REQUIRED
-                  if prev.status is Status.RECONCILE_REQUIRED else Status.CLOSED)
+        # Preserve challenges, denials, revocations, mismatches and uncertain
+        # publications across teardown. The authorized owner must resolve
+        # these through the canonical controller before allocating again.
+        status = prev.status if prev.status in HARD_BLOCKS else Status.CLOSED
         return self._commit(account, prev, fingerprint, status,
                             "PROVIDER_TERMINAL", teardown_verified=True)
