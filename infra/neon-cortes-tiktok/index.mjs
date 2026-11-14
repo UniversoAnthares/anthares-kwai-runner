@@ -99,6 +99,9 @@ async function schema(){
  // Idempotent additive migration: failed media preflight must never monopolize the queue.
  await pool.query('ALTER TABLE cortes_tiktok_publications ADD COLUMN IF NOT EXISTS preflight_failures integer NOT NULL DEFAULT 0');
  await pool.query('ALTER TABLE cortes_tiktok_publications ADD COLUMN IF NOT EXISTS retry_not_before timestamptz');
+ // Every uncertain clip must be audited independently, even with a busy queue.
+ await pool.query('ALTER TABLE cortes_tiktok_publications ADD COLUMN IF NOT EXISTS reconcile_checked_at timestamptz');
+ await pool.query('ALTER TABLE cortes_tiktok_publications ADD COLUMN IF NOT EXISTS reconcile_attempts integer NOT NULL DEFAULT 0');
  ready=true;
 }
 
@@ -210,7 +213,12 @@ async function getNext(){
  if(concurrent.rowCount)return{ok:true,job:null,mode:'busy'};
 
  // Keep an uncertain upload isolated for reconciliation without starving safe queued clips.
- const uncertain=await pool.query('SELECT * FROM cortes_tiktok_publications WHERE status IN (\'uncertain\',\'started\') ORDER BY created_at LIMIT 1');
+ // Audit fairness: every uncertain record is revisited, with per-record
+ // cooldown. Lack of a visible post never authorizes automatic retransmission.
+ const uncertain=await pool.query(
+  "SELECT id FROM cortes_tiktok_publications WHERE status IN ('uncertain','started') "+
+  "AND (reconcile_checked_at IS NULL OR reconcile_checked_at<now()-interval '4 hours') "+
+  "ORDER BY reconcile_checked_at ASC NULLS FIRST,created_at ASC LIMIT 1");
  const timing=await proportionalDue(false);
  const daily=timing.used;
  const paced=timing.mode==='paced';
@@ -229,7 +237,14 @@ async function getNext(){
    'lease_until=now()+interval \'8 minutes\',updated_at=now() FROM candidate WHERE p.id=candidate.id RETURNING p.*');
   if(q.rowCount)return{ok:true,job:q.rows[0],mode:'publish'};
  }
- if(uncertain.rowCount)return{ok:true,job:uncertain.rows[0],mode:'reconcile'};
+ if(uncertain.rowCount){
+  const checked=await pool.query(
+   "UPDATE cortes_tiktok_publications SET reconcile_checked_at=now(), "+
+   "reconcile_attempts=reconcile_attempts+1 "+
+   "WHERE id=$1 AND status IN ('uncertain','started') RETURNING *",
+   [uncertain.rows[0].id]);
+  if(checked.rowCount)return{ok:true,job:checked.rows[0],mode:'reconcile'};
+ }
  if(timing.mode==='cap')return{ok:true,job:null,mode:'cap',pacing:timing};
  if(paced)return{ok:true,job:null,mode:'paced',pacing:timing};
  return{ok:true,job:null,mode:'idle'};
