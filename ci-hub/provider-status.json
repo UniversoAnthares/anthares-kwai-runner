@@ -15,6 +15,9 @@
       "codespaces"
     ],
     "quota_failure_action": "cancel_owned_attempt_immediately_then_confirm_terminal_and_NOT_APPLIED_before_next_independent_verified_quota_provider",
+    "quota_exhausted_provider_to_last_priority": true,
+    "blocked_quota_scope_ineligible_for_new_dispatch": true,
+    "quota_state_source": "ci-hub/quota-status.json",
     "anthares_failure_action": "repair_anthares_component_before_external_migration",
     "manual_owner_only_for": [
       "mfa",
@@ -60,12 +63,15 @@
       "scope": "Anthares Remote private recovery transport #2"
     },
     "vercel_neon_control": {
-      "status": "READY_PRIMARY_LIVE_VERIFIED",
-      "evidence_class": "VERIFIED",
-      "verified_at_utc": "2026-10-18T12:39:20.560Z",
-      "evidence": "Vercel production deployment READY; Anthares Remote capabilities authenticated; Neon project anthares-ara-ha active and ARA heartbeat fresh.",
-      "eligible": true,
-      "scope": "canonical low-latency Anthares Remote MCP/control plane",
+      "status": "BLOCKED_QUOTA_HOBBY_FLUID_CPU_VERCEL_COMPUTE",
+      "evidence_class": "VERIFIED_AUTHENTICATED_VERCEL_USAGE_AND_TEST_HUB",
+      "verified_at_utc": "2026-11-12",
+      "evidence": "Vercel Hobby Usage in authenticated profile: Deployments Paused since Oct 29 due to Fluid Active CPU quota, end Nov 28; Test Hub AOI8 20261104 observed HTTP402 DEPLOYMENT_DISABLED. Independent Cloudflare/Neon standby and Neon OIDC CI receipts are already deployed, each with scoped evidence.",
+      "eligible": false,
+      "scope": "Vercel Hobby compute for Anthares Remote MCP; preserve Neon data and other remote transports",
+      "quota_scope": "anthares_vercel_hobby_fluid_active_cpu",
+      "routing_priority": "LAST",
+      "reopen_condition": "fresh verified quota/health after pause ends; coordinated lease-fenced cutover only",
       "cloudflare_dependency": false
     },
     "anthares_browser": {

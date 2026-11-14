@@ -3,15 +3,32 @@
   "provider_status_source": "ci-hub/provider-status.json",
   "continuity_policy": "ci-hub/CONTINUITY.md",
   "regression_check_required_each_round": true,
+  "quota_priority_policy": {
+    "rule": "on_confirmed_provider_quota_move_provider_account_product_scope_to_last_and_mark_ineligible",
+    "selection": "first_nonblocked_provider_with_fresh_independent_quota_and_equivalent_functional_contract",
+    "scope_key": "provider/account/product/quota_window",
+    "on_quota": "cancel_exact_owned_attempt_then_verify_terminal_and_NOT_APPLIED_for_effects_before_any_new_attempt",
+    "on_cancel_uncertain": "RECONCILE_REQUIRED_STOP",
+    "on_no_eligible_reserve": "CANCELLED_NO_INDEPENDENT_RESERVE_WITH_DURABLE_QUEUE",
+    "blocked_scope_source": "ci-hub/quota-status.json",
+    "unblock_only_after": "fresh_provider_quota_ready_proof_and_owner_fenced_receipt",
+    "blocked_current": [
+      "anthares_vercel_hobby_fluid_active_cpu"
+    ],
+    "replacement_contract": "no_new_cost_no_duplicate_publisher_no_credentials_no_manual_retry_on_uncertain"
+  },
   "remote_control": {
     "primary": "anthares_remote",
     "surface": "anthares_remote",
     "backend_priority": [
-      "vercel_neon_control",
       "gitlab_private_issue_queue",
-      "github_private_issue_queue"
+      "github_private_issue_queue",
+      "vercel_neon_control"
     ],
     "current_selected_backend": "vercel_neon_control",
+    "selected_backend_state": "HISTORICAL_STALE_UNTIL_VERIFIED_RESELECTION",
+    "fresh_backend_selection_required_for_new_jobs": true,
+    "current_quota_block": "anthares_vercel_hobby_fluid_active_cpu",
     "recovery_priority": [
       "gitlab_private_issue_queue",
       "github_private_issue_queue"
@@ -21,7 +38,7 @@
       "fresh_command_roundtrip",
       "result_acknowledgement"
     ],
-    "selection_rule": "use Vercel+Neon as the canonical MCP/control plane; preserve GitLab private issue queue as recovery transport #1 and GitHub private issue queue as recovery transport #2; all transports remain inside the Anthares Remote surface; durable receipt dedupe is mandatory across providers; Cloudflare is not part of the ARA operational path",
+    "selection_rule": "For new jobs skip the blocked Vercel Hobby Fluid Active CPU scope and choose the first independently verified compatible Anthares Remote backend. GitLab private issue queue precedes GitHub private issue queue as preserved recovery transports; Vercel is last and ineligible during quota pause. The already deployed signed Cloudflare/Neon standby is a compute contingency, not a new Remote surface or automatically promoted writer; maintain shared receipt dedupe and lease fencing. The recorded selected Vercel backend is historical and must be reconciled before use. Generic Vercel Functions need separate equivalent adapter proof.",
     "on_failure": "failover_between_anthares_remote_backends_without_switching_remote_surface_or_reexecuting_committed_job_ids"
   },
   "android_execution": {
@@ -386,9 +403,12 @@
     },
     "vercel_neon_control": {
       "active": true,
-      "remote_backend_eligible": true,
-      "status": "READY_PRIMARY_REDEPLOY_PERSISTENCE_PROVEN",
-      "role": "ara_primary_mcp_control"
+      "remote_backend_eligible": false,
+      "status": "BLOCKED_QUOTA_HOBBY_FLUID_CPU_FOR_NEW_REMOTE_COMPUTE_20261112",
+      "role": "ara_preserved_historical_mcp_control",
+      "quota_scope": "anthares_vercel_hobby_fluid_active_cpu",
+      "routing_priority": "LAST",
+      "reopen_condition": "fresh endpoint+quota proof after pause, then coordinate owner and shared ledger before promotion"
     },
     "gitlab_private_issue_queue": {
       "active": true,

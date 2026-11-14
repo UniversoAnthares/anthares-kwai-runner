@@ -5,9 +5,30 @@
     "stale_data_is_not_ready": true,
     "quota_failure_is_not_component_failure": true,
     "aggregate_provider_status_forbidden_when_products_have_separate_quotas": true,
-    "billing_enablement_requires_owner_decision": true
+    "billing_enablement_requires_owner_decision": true,
+    "blocked_quota_provider_goes_last": true,
+    "blocked_scope_is_ineligible_until_fresh_verified_capacity": true,
+    "independent_quota_and_functional_contract_required_before_successor": true,
+    "cancel_terminal_and_not_applied_required_before_effectful_retry": true
   },
   "entries": {
+    "vercel_hobby_fluid_active_cpu_deployments": {
+      "state": "BLOCKED_QUOTA",
+      "confidence": "verified_authenticated_vercel_usage_dashboard",
+      "scope": "Vercel Hobby Anthares; Fluid Active CPU; deployment/build and affected Vercel-hosted functions",
+      "quota_scope": "anthares_vercel_hobby_fluid_active_cpu",
+      "observed_at_utc": "2026-11-12",
+      "evidence": "Authenticated Vercel Usage shows Deployments Paused since Oct 29 2026 for Fluid Active CPU, Hobby fair-use exceeded, pause ends Nov 28 2026; prior Vercel function endpoints returned HTTP 402 DEPLOYMENT_DISABLED (Test Hub AOI8 20261104).",
+      "routing_priority": "LAST",
+      "eligible_for_new_dispatch": false,
+      "reopen_condition": "After suspension ends, verify actual quota remaining, endpoint healthy and same workload contract; rerank only at a new independent dispatch with no active same-task lease.",
+      "functional_reserves": {
+        "ara_remote_control_compute": "existing Cloudflare/Neon signed standby; current Anthares Remote Cloudflare WebSocket session read-only connected; verify actual job and lease before switching owner",
+        "ci_quota_receipts": "Neon free authenticated OIDC controller already live, 19 receipts verified; watcher remains disabled per owner and must not be re-enabled to prove quota",
+        "generic_vercel_function": "WAITING_COMPATIBLE_FAILOVER; require proven adapter, idempotency and independent provider quota before any promotion"
+      },
+      "scope_caveat": "A deployment pause is not proof that GitHub, Cloudflare or Neon quota is exhausted. Vercel account API read-only access was available; do not broadly mark unrelated integrations blocked."
+    },
     "github_actions_public": {
       "state": "READY",
       "confidence": "verified",

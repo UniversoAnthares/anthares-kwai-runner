@@ -37,6 +37,19 @@ class Route:
     cancellation_capable: bool = False
 
 
+
+def demote_blocked_scopes(candidates: Iterable[Route],
+                          blocked_quota_scopes: Iterable[str]) -> list[Route]:
+    """Keep blocked provider/account/product quota scopes last, preserving tie order.
+
+    Eligibility still needs a fresh independent quota check before dispatch;
+    routing metadata alone does not prove a reserve is safe to use.
+    """
+    routes = list(candidates)
+    blocked = set(blocked_quota_scopes)
+    return ([r for r in routes if r.quota_scope not in blocked]
+            + [r for r in routes if r.quota_scope in blocked])
+
 def is_quota(*, http_status: int | None, code: str = "", message: str = "") -> bool:
     norm = (code or "").strip().lower().replace("-", "_")
     if http_status in (401, 403, 405, 451):
@@ -94,7 +107,8 @@ def cancel_first(*, ledger: LocalLedger, task_id: str, attempt_id: str,
                  cancel: Callable[[str], bool], status: Callable[[str], str],
                  enqueue: Callable[[Route, str, str], str],
                  side_effects_possible: bool = True,
-                 reconcile: Callable[[str], str] | None = None) -> dict:
+                 reconcile: Callable[[str], str] | None = None,
+                 blocked_quota_scopes: Iterable[str] = ()) -> dict:
     """Cancel owned attempt immediately, verify terminal state, then fail over.
 
     Callback endpoints must be scoped to the EXACT owned remote run/pipeline ID.
@@ -142,8 +156,12 @@ def cancel_first(*, ledger: LocalLedger, task_id: str, attempt_id: str,
             row["state"] = "RECONCILE_REQUIRED"
             ledger.update(attempt_id, row)
             return row
-    eligible = next((r for r in candidates
-                     if r.name != current.name and r.quota_scope != current.quota_scope
+    # Include the exhausted current scope even when a stale route still says READY.
+    blocked = set(blocked_quota_scopes)
+    blocked.add(current.quota_scope)
+    ordered = demote_blocked_scopes(candidates, blocked)
+    eligible = next((r for r in ordered
+                     if r.name != current.name and r.quota_scope not in blocked
                      and r.eligible and r.independent_quota_verified
                      and r.cancellation_capable), None)
     if eligible is None:
