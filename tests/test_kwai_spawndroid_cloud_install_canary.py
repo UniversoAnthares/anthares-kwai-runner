@@ -151,7 +151,7 @@ class CanaryContracts(unittest.TestCase):
         self.assertEqual(calls[0][2]["script"], "mobile: isAppInstalled")
         self.assertEqual(calls[0][2]["args"][0]["appId"], canary.PACKAGE)
 
-    def synthetic_run(self, *, install_raises=False):
+    def synthetic_run(self, *, install_raises=False, teardown_raises=False):
         with tempfile.TemporaryDirectory() as tmp:
             env = example_env(tmp)
             apk_entries = [
@@ -190,12 +190,19 @@ class CanaryContracts(unittest.TestCase):
                     "webdriverUrl": "https://stream.spawndroid.io/ci/x/tok_wd/wd/hub",
                     "device": {"serial": "127.0.0.1:5555"},
                  }), \
-                 patch.object(canary, "_close_session", return_value=True) as closed:
+                 patch.object(canary, "_close_session", side_effect=(
+                     canary.CanaryBlocked("synthetic_teardown_unverified")
+                     if teardown_raises else None), return_value=True) as closed:
                 if install_raises:
                     with self.assertRaisesRegex(canary.splits.SplitError, "synthetic_install_failed"):
                         canary.run_real_canary(env, request=fake_request)
                     closed.assert_called_once()
                     self.assertFalse(closed.call_args.kwargs["passed"])
+                elif teardown_raises:
+                    with self.assertRaisesRegex(canary.CanaryBlocked, "device_teardown_reconcile_required"):
+                        canary.run_real_canary(env, request=fake_request)
+                    closed.assert_called_once()
+                    self.assertTrue(closed.call_args.kwargs["passed"])
                 else:
                     result = canary.run_real_canary(env, request=fake_request)
                     self.assertTrue(result["installed"])
@@ -219,6 +226,11 @@ class CanaryContracts(unittest.TestCase):
     def test_install_failure_teardown_contract(self):
         self.synthetic_run(install_raises=True)
         print("SPAWNDROID_ONE_SHOT_FAIL_CLOSED_TEARDOWN_SYNTHETIC=PASS")
+
+    def test_unconfirmed_teardown_blocks_success(self):
+        self.synthetic_run(teardown_raises=True)
+        print("SPAWNDROID_TEARDOWN_RECONCILE_REQUIRED_SYNTHETIC=PASS")
+
 
 
 if __name__ == "__main__":
