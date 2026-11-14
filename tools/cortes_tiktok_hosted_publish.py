@@ -14,6 +14,7 @@ import sys
 import tempfile
 import time
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 import urllib.request
 from pathlib import Path
 
@@ -202,6 +203,11 @@ def request_followup_if_pending(control):
         status=q.qcall("status",control)
         count=(status.get("count") or {}) if status.get("ok") else {}
         pending=int(count.get("queued",0))
+        now=datetime.now(ZoneInfo("America/Campo_Grande"))
+        # Chain solely during 06:00–23:00. Neon still enforces precise slots.
+        if now.hour < 6 or now.hour >= 23:
+            print("CORTES_TIKTOK_AUTOCHAIN_OUTSIDE_WINDOW",flush=True)
+            return
         if pending<=0:
             print("CORTES_TIKTOK_AUTOCHAIN=IDLE",flush=True)
             return
@@ -291,6 +297,10 @@ def main():
     job=claim.get("job")
     if mode in ("idle","busy","paced","cap") or not job:
         print("CORTES_TIKTOK_QUEUE_"+(mode or "IDLE").upper(),flush=True)
+        # GitHub schedule wakeups may be delayed. Keep the bounded,
+        # event-driven backup alive while jobs remain queued.
+        if mode in ("idle","paced"):
+            request_followup_if_pending(control)
         return 0
     sid,generation=q.validate_job(job)
     matching=q.found(before,sid)
@@ -329,6 +339,7 @@ def main():
             request_followup_if_pending(control)
         else:
             print("CORTES_TIKTOK_UNCERTAIN_REQUIRES_REVIEW segment="+sid,flush=True)
+        request_followup_if_pending(control)
         return 0
     if mode!="publish" or job.get("status")!="leased":
         raise q.SafeStop("TIKTOK_INVALID_QUEUE_STATE")
