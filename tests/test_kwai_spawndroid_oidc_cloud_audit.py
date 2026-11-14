@@ -84,6 +84,14 @@ class ContractTests(unittest.TestCase):
                 audit._fetch_manifest("SECRET_TEST_TOKEN")
             self.assertNotIn("SECRET_TEST_TOKEN", str(cm.exception))
 
+    def test_broker_503_is_sanitized(self):
+        def unavailable(req, timeout=0):
+            raise urllib.error.HTTPError(req.full_url, 503, "Service unavailable", None, None)
+        with patch("urllib.request.urlopen", side_effect=unavailable):
+            with self.assertRaisesRegex(audit.SplitError, "broker_http_503") as cm:
+                audit._fetch_manifest("JWT_MUST_STAY_PRIVATE")
+            self.assertNotIn("JWT_MUST_STAY_PRIVATE", str(cm.exception))
+
     def test_broker_never_sends_jwt_in_query(self):
         call = []
         def accept(req, timeout=0):
