@@ -123,7 +123,9 @@ function verifyGitHubOidc(string $jwt): void {
         'repository' => $repository,
         'ref' => $ref,
         'ref_type' => 'branch',
-        'event_name' => 'push',
+        // Both events remain pinned to this exact repo/ref/workflow.
+        // workflow_dispatch delivers URLs only; the Android runner has
+        // additional explicit quota/credential gates in its own job.
         'workflow_ref' => $workflowRef,
         'runner_environment' => 'github-hosted',
     ];
@@ -133,6 +135,10 @@ function verifyGitHubOidc(string $jwt): void {
     if (!isset($claims['sub']) || !is_string($claims['sub']) ||
         strlen($claims['sub']) < 5 || strlen($claims['sub']) > 512) {
         throw new RuntimeException('JWT_SUB_INVALID');
+    }
+    $event = $claims['event_name'] ?? null;
+    if (!is_string($event) || !in_array($event, ['push', 'workflow_dispatch'], true)) {
+        throw new RuntimeException('JWT_CLAIM_DENIED_event_name');
     }
     foreach ($required as $key => $expected) {
         if (!isset($claims[$key]) || !is_string($claims[$key]) ||
