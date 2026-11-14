@@ -148,9 +148,14 @@ def read_v2_signer(raw):
     digests_blob, q = lp32(sd, 0)
     certs_blob, q = lp32(sd, q)
     extras, q = lp32(sd, q)
-    if q != len(sd) or not certs_blob:
-        raise ApkSigFailure("APK_SIGNED_DATA_INVALID_q%d_len%d_cert%d_suffix%s" %
-                            (q, len(sd), len(certs_blob), sd[q:].hex()[:32]))
+    if not certs_blob:
+        raise ApkSigFailure("APK_SIGNER_CERTIFICATE_MISSING")
+    # Some Google Play-delivered splits append one zero uint32. This suffix
+    # remains inside the signed byte sequence; signature verification below
+    # covers every byte, including the suffix. apksigner is still the final
+    # Android-compatibility authority.
+    if q != len(sd) and sd[q:] != b"\x00\x00\x00\x00":
+        raise ApkSigFailure("APK_SIGNED_DATA_UNSUPPORTED_TRAILER")
     digests = {}
     for item in entries_lp32(digests_blob):
         if len(item) < 8:
