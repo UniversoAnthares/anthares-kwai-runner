@@ -18,6 +18,7 @@ import sys
 import tempfile
 import urllib.parse
 import urllib.request
+import urllib.error
 
 from kwai_spawndroid_original_splits import (
     SplitError, validate_manifest, download_and_verify
@@ -67,8 +68,12 @@ def _fetch_manifest(token: str) -> dict:
             if resp.status != 200:
                 raise SplitError("broker_unauthorized_or_unavailable")
             doc = json.loads(resp.read(40000))
+    except urllib.error.HTTPError as exc:
+        if 400 <= exc.code <= 599:
+            raise SplitError("broker_http_" + str(exc.code)) from None
+        raise SplitError("broker_response_invalid") from None
     except (ValueError, OSError):
-        raise SplitError("broker_unauthorized_or_unavailable") from None
+        raise SplitError("broker_transport_or_json_unavailable") from None
     if not isinstance(doc, dict):
         raise SplitError("broker_payload_invalid")
     return doc
