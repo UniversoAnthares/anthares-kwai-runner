@@ -294,6 +294,35 @@ def main():
     sid,generation=q.validate_job(job)
     matching=q.found(before,sid)
     if mode=="reconcile":
+        # Local owned-profile inventory is the first proof. On no match,
+        # independently inspect TikTok Studio and the public profile with
+        # Browserless. Neon rotates each uncertain case with a 4h cooldown.
+        # Missing posts, incomplete pagination or transport failures never
+        # imply permission to repeat an upload.
+        if not matching:
+            try:
+                evidence=q.wcall("/profile-inventory-secondary",
+                    q.worker_auth(),{"segments":[sid]},timeout=150)
+                if (evidence.get("ok") and evidence.get("identity_verified")
+                        and evidence.get("account")==EXPECTED):
+                    ids=(evidence.get("matched") or {}).get(sid) or []
+                    safe_ids={str(x) for x in ids if q.ID_RE.fullmatch(str(x))}
+                    if len(safe_ids)==1:
+                        matching=next(iter(safe_ids))
+                        print("CORTES_TIKTOK_SECONDARY_EXACT_MATCH segment="+sid,
+                              flush=True)
+                    elif len(safe_ids)>1:
+                        print("CORTES_TIKTOK_SECONDARY_COLLISION segment="+sid,
+                              flush=True)
+                    else:
+                        print("CORTES_TIKTOK_SECONDARY_NO_MATCH_INCOMPLETE segment="+sid,
+                              flush=True)
+                else:
+                    print("CORTES_TIKTOK_SECONDARY_PROOF_UNAVAILABLE segment="+sid,
+                          flush=True)
+            except (q.SafeStop, OSError, TimeoutError):
+                print("CORTES_TIKTOK_SECONDARY_DEFERRED_NO_REUPLOAD segment="+sid,
+                      flush=True)
         if matching:
             q.finish(job,generation,matching,control)
             request_followup_if_pending(control)
