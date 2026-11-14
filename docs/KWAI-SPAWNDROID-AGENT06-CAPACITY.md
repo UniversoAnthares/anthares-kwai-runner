@@ -22,7 +22,7 @@ O contrato `tools/kwai_spawndroid_admission.py` aceita somente:
 
 Usa P95 *por conta*, reserva de falhas, arredondamento conservador de minutos por sessão e maior custo entre as contas para estimar o teto **compartilhado**. Divide a capacidade mensal remanescente pelos dias restantes para um ritmo sustentável. Planeja somente dentro de 06:00–23:00, com cutoff exclusivo e intervalo mínimo. A função Neon continua sendo autoridade de relógio e lease: o planejador offline não cria jobs.
 
-Exemplo de cálculo (dados **sintéticos** do teste): sessões de 160 s após device-ready e reserva de 25% = 4 minutos reservados por vídeo. Se as duas contas mantivessem esse P95, 200 min permitiriam no máximo 50 posts durante o mês, divididos entre as duas. Substitua exclusivamente por evidências remotas reais.
+Exemplo de cálculo (dados **sintéticos** do teste): sessões com 140 segundos faturáveis após device-ready e reserva de 25% equivalem a 175 segundos provisionados por vídeo, arredondados conservadoramente para 3 minutos de dispositivo. Nesse cenário, 200 minutos permitiriam no máximo 66 posts no mês, divididos entre as duas contas. Substitua exclusivamente por evidências remotas reais.
 
 ## Quotas e recuperação
 `quota_cancel_disposition` valida a máquina de estados de decisão. HTTP 402 confirmado deve acionar **chamada real de cancelamento** no adaptador que detém o ID da sessão, seguida de readback de estado terminal. Sem confirmação: `CANCEL_UNCONFIRMED`. Efeito Kwai desconhecido: `RECONCILE_REQUIRED`. Efeito comprovadamente `NOT_APPLIED`, sem reserva independente: `CANCELLED_NO_INDEPENDENT_RESERVE` e corte permanece na fila. HTTP 429 é falta de slot concorrente, e 401/403 indicam autenticação/permissão: não tratar como quota e não contornar controles.
