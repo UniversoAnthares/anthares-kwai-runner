@@ -73,7 +73,7 @@ class GuardTests(unittest.TestCase):
 
     def test_apksigner_mixed_untrusted_signer_denied(self):
         new_format = GOOD_SIGNER + (
-            "V3.0 Signer: certificate SHA-256 digest: " + "f" * 64 + "\\n"
+            "V3.0 Signer: certificate SHA-256 digest: " + "f" * 64
         )
         with self.assertRaisesRegex(guard.ValidationError, "signer_count"):
             guard.parse_apksigner(new_format)
