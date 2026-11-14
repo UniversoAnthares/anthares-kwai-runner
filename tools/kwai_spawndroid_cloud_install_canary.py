@@ -293,6 +293,9 @@ def run_real_canary(env=os.environ, *, request=_request):
                       ("PASS" if closed else "UNCERTAIN"), flush=True)
             except CanaryBlocked:
                 print("SPAWNDROID_DEVICE_TEARDOWN=RECONCILE_REQUIRED", flush=True)
+                # A successful install may not be reported while its runner
+                # remains possibly active; preserve a visible failed state.
+                raise CanaryBlocked("device_teardown_reconcile_required") from None
         print("KWAI_PUBLICATION_ATTEMPTED=0", flush=True)
 
 
