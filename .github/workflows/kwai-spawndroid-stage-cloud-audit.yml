@@ -9,6 +9,7 @@ on:
       - 'tools/kwai_spawndroid_oidc_cloud_audit.py'
       - 'tools/kwai_spawndroid_original_splits.py'
       - 'tools/kwai_spawndroid_apk_guard.py'
+      - 'tests/test_kwai_spawndroid_apk_guard.py'
       - 'tests/test_kwai_spawndroid_oidc_cloud_audit.py'
       - '.github/workflows/kwai-spawndroid-stage-cloud-audit.yml'
 
@@ -41,6 +42,8 @@ jobs:
           PY
       - name: Run OIDC broker client negative-path contracts (offline)
         run: python3 -B -m unittest discover -s tests -p test_kwai_spawndroid_oidc_cloud_audit.py -v
+      - name: Test apksigner labels and publisher identity (offline)
+        run: python3 -B -m unittest discover -s tests -p test_kwai_spawndroid_apk_guard.py -v
       - name: Confirm official Android verification utilities
         shell: bash
         run: |
