@@ -171,7 +171,7 @@ def main() -> int:
         # Emit only developer-authored invariant identifiers. Never expose
         # urllib errors or signed URLs in logs.
         code = str(exc)
-        if not re.fullmatch(r"[a-z0-9_]{4,100}", code):
+        if not re.fullmatch(r"[a-z0-9_.-]{4,120}", code):
             code = "cloud_apk_audit_failed"
         print("KWAI_CLOUD_ORIGINAL_APK_AUDIT=" + code)
         print("KWAI_PUBLICATION_ATTEMPTED=0")
