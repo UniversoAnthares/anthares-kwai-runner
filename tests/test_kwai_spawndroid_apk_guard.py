@@ -57,6 +57,27 @@ class GuardTests(unittest.TestCase):
     def test_parse_signature_verified(self):
         self.assertEqual(guard.parse_apksigner(GOOD_SIGNER), CERT)
 
+    def test_apksigner_android_37_v3_signer_label(self):
+        new_format = GOOD_SIGNER.replace(
+            "Signer #1 certificate SHA-256 digest:",
+            "V3.0 Signer: certificate SHA-256 digest:"
+        )
+        self.assertEqual(guard.parse_apksigner(new_format), CERT)
+
+    def test_apksigner_sdk_range_signer_label(self):
+        new_format = GOOD_SIGNER.replace(
+            "Signer #1 certificate SHA-256 digest:",
+            "Signer (minSdkVersion=24, maxSdkVersion=32) certificate SHA-256 digest:"
+        )
+        self.assertEqual(guard.parse_apksigner(new_format), CERT)
+
+    def test_apksigner_mixed_untrusted_signer_denied(self):
+        new_format = GOOD_SIGNER + (
+            "V3.0 Signer: certificate SHA-256 digest: " + "f" * 64 + "\\n"
+        )
+        with self.assertRaisesRegex(guard.ValidationError, "signer_count"):
+            guard.parse_apksigner(new_format)
+
     def test_reject_unverified_signature(self):
         s = GOOD_SIGNER.replace("v2 scheme (APK Signature Scheme v2): true",
                                 "v2 scheme (APK Signature Scheme v2): false")
