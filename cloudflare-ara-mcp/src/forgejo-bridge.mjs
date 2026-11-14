@@ -16,14 +16,14 @@ async function api(env, method, path) {
   const headers = { 'Accept': 'application/json', 'User-Agent': 'Anthares-Forgejo-Read-Bridge' };
   const t = token(env);
   if (t) headers.Authorization = 'token ' + safeHeaderValue(t);
-  const r = await fetchWithoutRedirects(url, { method, headers });
+  const r = await fetchWithoutRedirects(url, { method, headers, signal: AbortSignal.timeout(12000) });
   if (!r.ok) throw new Error('forgejo_request_failed');
   return r.json();
 }
 function validateRepo(v){ const s=String(v||'').trim(); if(!s||s.length>REPO_MAX_LEN||s.includes('..')||s.includes('//')||s.includes('\\')||/[\x00-\x1f]/.test(s)||s.includes('%')||s.includes(':')||s.startsWith('/')||s.endsWith('/')) throw new Error('invalid_repo'); if(!ALLOWED_REPOS.has(s)) throw new Error('repository_not_allowed'); return s; }
 function validatePath(v){ const s=String(v||'').trim(); if(!s||s.length>PATH_MAX_LEN||s.startsWith('/')||s.startsWith('\\')||s.includes('\\')||/[\x00-\x1f]/.test(s)||s.includes('%')||s.includes(':')||s.includes('..')) throw new Error('invalid_path'); const segments=s.split('/'); if (segments.some(x=>!x || x==='.' || x==='..' || x==='.git')) throw new Error('path_traversal'); return s; }
 function validateOwner(v){ const s=String(v||'').trim(); if(!s||!ALLOWED_OWNERS.has(s)) throw new Error('owner_not_allowed'); return s; }
-const FORGEJO_ENDPOINT_RE = /^\/api\/v1\/(?:version|users\/[^/]+\/repos(?:\?.*)?|repos\/[^/]+\/contents\/[^/]+(?:\?.*)?|repos\/[^/]+\/actions\/runs(?:\/\d+)?(?:\/jobs)?(?:\?.*)?)$/;
+const FORGEJO_ENDPOINT_RE = /^\/api\/v1\/(?:version|users\/[^/?]+\/repos(?:\?limit=\d+)?|repos\/[^/?]+\/[^/?]+\/(?:contents\/[^?]+(?:\?ref=[A-Za-z0-9._%-]+)?|actions\/runs(?:\/\d+)?(?:\/jobs)?(?:\?limit=\d+)?))$/;
 function validateEndpoint(path){ if(!FORGEJO_ENDPOINT_RE.test(path)) throw new Error('forgejo_endpoint_not_allowed'); return path; }
 function validateRunId(v){ const n=Number(v); if(!Number.isInteger(n)||n<=0||n>Number.MAX_SAFE_INTEGER) throw new Error('invalid_run_id'); return n; }
 export const forgejoTools = [
@@ -40,11 +40,11 @@ export async function callForgejoTool(env, name, args={}) {
     return api(env, 'GET', '/api/v1/users/' + encodeURIComponent(owner) + '/repos?limit=50');
   }
   const repo = validateRepo(args.repo);
-  const repoEnc = encodeURIComponent(repo);
+  const repoEnc = repo.split('/').map(encodeURIComponent).join('/');
   if (name === 'forgejo_get_file') {
     const path = validatePath(args.path);
     const ref = String(args.ref || 'main').replace(/[^A-Za-z0-9._-]/g, '');
-    const data = await api(env, 'GET', '/api/v1/repos/' + repoEnc + '/contents/' + encodeURIComponent(path) + '?ref=' + encodeURIComponent(ref));
+    const data = await api(env, 'GET', '/api/v1/repos/' + repoEnc + '/contents/' + path.split('/').map(encodeURIComponent).join('/') + '?ref=' + encodeURIComponent(ref));
     if (data && data.content) {
       try { data.decoded = atob(String(data.content).replace(/\s/g,'')).slice(0, MAX_B64_BYTES); } catch {}
     }
@@ -55,11 +55,24 @@ export async function callForgejoTool(env, name, args={}) {
     return api(env, 'GET', '/api/v1/repos/' + repoEnc + '/actions/runs?limit=' + limit);
   }
   if (name === 'forgejo_get_run') {
-    const runId = validateRunId(args.run_id);
-    const run = await api(env, 'GET', '/api/v1/repos/' + repoEnc + '/actions/runs/' + runId);
+    const requestedRun = validateRunId(args.run_id);
+    // The web UI uses repository-local run numbers; the REST API uses
+    // database run IDs. For example, UI run #1 has API id 567.
+    const runsResponse = await api(env, 'GET', '/api/v1/repos/' + repoEnc + '/actions/runs?limit=50');
+    const runs = Array.isArray(runsResponse.workflow_runs) ? runsResponse.workflow_runs : [];
+    const target = '/actions/runs/' + requestedRun;
+    const uiMatch = runs.find(item => {
+      if (typeof item?.html_url !== 'string') return false;
+      try { return new URL(item.html_url).pathname.endsWith(target); } catch { return false; }
+    });
+    const apiRunId = uiMatch ? validateRunId(uiMatch.id) : requestedRun;
+    const run = await api(env, 'GET', '/api/v1/repos/' + repoEnc + '/actions/runs/' + apiRunId);
     let jobs = null;
-    try { jobs = await api(env, 'GET', '/api/v1/repos/' + repoEnc + '/actions/runs/' + runId + '/jobs'); } catch {}
-    return { run, jobs };
+    // Forgejo v15.0.9 can expose run metadata while lacking the REST
+    // /runs/:id/jobs route; preserve this distinction for callers.
+    try { jobs = await api(env, 'GET', '/api/v1/repos/' + repoEnc + '/actions/runs/' + apiRunId + '/jobs'); } catch {}
+    return { run, jobs, ui_run_number: uiMatch ? requestedRun : null, api_run_id: apiRunId,
+      jobs_status: jobs === null ? 'UNAVAILABLE' : 'AVAILABLE' };
   }
   throw new Error('unknown_forgejo_tool');
 }
