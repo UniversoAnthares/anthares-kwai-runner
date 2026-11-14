@@ -21,7 +21,8 @@ TIMEZONE = ZoneInfo("America/Campo_Grande")
 HOBBY_SAFE_MAX_MINUTES = 200
 MAX_SESSION_SECONDS = 15 * 60
 MIN_SAMPLES_PER_ACCOUNT = 3
-PHASES = ("requested_at", "ready_at", "authenticated_at", "mp4_loaded_at",
+PHASES = ("requested_at", "ready_at", "app_activated_at",
+          "authenticated_at", "mp4_loaded_at",
           "published_at", "public_verified_at", "closed_at")
 
 
@@ -96,11 +97,12 @@ def measured_costs(rows, now):
         costs[account].append({
             "billed_seconds": billed,
             "provision_seconds": (times[1] - times[0]).total_seconds(),
-            "auth_seconds": (times[2] - times[1]).total_seconds(),
-            "transfer_seconds": (times[3] - times[2]).total_seconds(),
-            "publish_seconds": (times[4] - times[3]).total_seconds(),
-            "proof_seconds": (times[5] - times[4]).total_seconds(),
-            "teardown_seconds": (times[6] - times[5]).total_seconds(),
+            "app_activation_seconds": (times[2] - times[1]).total_seconds(),
+            "auth_seconds": (times[3] - times[2]).total_seconds(),
+            "transfer_seconds": (times[4] - times[3]).total_seconds(),
+            "publish_seconds": (times[5] - times[4]).total_seconds(),
+            "proof_seconds": (times[6] - times[5]).total_seconds(),
+            "teardown_seconds": (times[7] - times[6]).total_seconds(),
         })
     for account in ACCOUNTS:
         if len(costs[account]) < MIN_SAMPLES_PER_ACCOUNT:
@@ -207,7 +209,7 @@ def evaluate(document, *, now=None):
             "reserved_device_minutes_per_post": rounded,
             "phase_p95_seconds": {
                 field: nearest_rank_p95([x[field] for x in rows[account]])
-                for field in ("auth_seconds", "transfer_seconds",
+                for field in ("app_activation_seconds", "auth_seconds", "transfer_seconds",
                               "publish_seconds", "proof_seconds", "teardown_seconds")
             }
         }
