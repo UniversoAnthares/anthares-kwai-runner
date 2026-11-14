@@ -1,0 +1,59 @@
+name: Kwai SpawnDroid Stable WebDriver Hub (safe canary)
+on:
+  pull_request:
+    paths:
+      - 'tools/kwai_spawndroid_stable_hub.py'
+      - 'tests/test_kwai_spawndroid_stable_hub.py'
+      - '.github/workflows/kwai-spawndroid-hub.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tools/kwai_spawndroid_stable_hub.py'
+      - 'tests/test_kwai_spawndroid_stable_hub.py'
+      - '.github/workflows/kwai-spawndroid-hub.yml'
+  workflow_dispatch:
+    inputs:
+      artifact_slug:
+        description: 'Build slug for verified official Kwai com.kwai.video'
+        type: string
+        required: true
+      canary:
+        description: 'Explicitly request one Android app activation then teardown'
+        type: boolean
+        default: false
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: kwai-spawndroid-hub-experimental
+  cancel-in-progress: false
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile Hub adapter
+        run: python3 -m py_compile tools/kwai_spawndroid_stable_hub.py tests/test_kwai_spawndroid_stable_hub.py
+      - name: Run offline WebDriver protocol and teardown tests
+        run: python3 -m unittest discover -s tests -p test_kwai_spawndroid_stable_hub.py -v
+  remote-canary:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.canary }}
+    needs: contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    env:
+      SPAWNDROID_CI_TOKEN: ${{ secrets.SPAWNDROID_CI_TOKEN }}
+      SPAWNDROID_HOBBY_FREE_CONFIRMED: ${{ vars.SPAWNDROID_HOBBY_FREE_CONFIRMED }}
+      SPAWNDROID_KWAI_ARTIFACT_SLUG: ${{ inputs.artifact_slug }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: One Android session, activate verified Kwai then stop
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$SPAWNDROID_HOBBY_FREE_CONFIRMED" = 1
+          test -n "$SPAWNDROID_CI_TOKEN"
+          test -n "$SPAWNDROID_KWAI_ARTIFACT_SLUG"
+          export SPAWNDROID_HUB_CANARY_ENABLED=1
+          python3 tools/kwai_spawndroid_stable_hub.py --execute --slug "$SPAWNDROID_KWAI_ARTIFACT_SLUG"
