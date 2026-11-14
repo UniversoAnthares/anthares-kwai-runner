@@ -294,7 +294,7 @@ def main():
     parser.add_argument("--min-files", type=int, default=1)
     args = parser.parse_args()
     try:
-        doc = json.loads(Path(args.manifest).read_text("utf8"))
+        doc = json.loads(Path(args.manifest).read_text("utf-8-sig"))
         package = doc.get("package")
         if package not in ("com.kwai.video", "kwai.lite.video"):
             raise ApkSigFailure("UNEXPECTED_APK_PACKAGE")
