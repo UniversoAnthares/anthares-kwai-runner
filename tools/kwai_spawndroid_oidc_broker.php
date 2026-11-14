@@ -165,7 +165,7 @@ try {
     // Private, append-only diagnostic: fixed error code; never JWT, values,
     // URLs, IP addresses or account data. The public response remains 403.
     $reason = (string)$exception->getMessage();
-    if (!preg_match('/\\A[A-Z0-9_]{4,80}\\z/D', $reason)) {
+    if (!preg_match('/\\A[A-Za-z0-9_]{4,80}\\z/D', $reason)) {
         $reason = 'OIDC_VALIDATION_FAILED';
     }
     $auditPath = '/home/u566597497/.anthares-spawndroid-apks/oidc-broker-denials.log';
