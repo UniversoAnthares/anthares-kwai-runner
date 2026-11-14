@@ -217,7 +217,7 @@ async function getNext(){
  // cooldown. Lack of a visible post never authorizes automatic retransmission.
  const uncertain=await pool.query(
   "SELECT id FROM cortes_tiktok_publications WHERE status IN ('uncertain','started') "+
-  "AND (reconcile_checked_at IS NULL OR reconcile_checked_at<now()-interval '30 minutes') "+
+  "AND (reconcile_checked_at IS NULL OR reconcile_checked_at<now()-interval '4 hours') "+
   "ORDER BY reconcile_checked_at ASC NULLS FIRST,created_at ASC LIMIT 1");
  const timing=await proportionalDue(false);
  const daily=timing.used;
