@@ -4,7 +4,7 @@
 - Testar um Android remoto ARM64, sem usar o computador pessoal como executor.
 - Custo adicional permitido: R$ 0. Sem plano pago, cartão, upgrade ou excedente.
 - Contas finais: `@lucasrosalem` (Kwai Lite) e `@universoanthares` (Kwai).
-- Este teste limita-se ao pacote Kwai `com.kwai.video` já reconhecido no repositório; o pacote exato do Kwai Lite deverá ser verificado separadamente.
+- O primeiro teste usa o aplicativo Kwai regular `com.kwai.video`, associado à conta futura `@universoanthares`. O pacote exato do Kwai Lite e a conta `@lucasrosalem` serão verificados separadamente; nenhum login acontece neste preflight.
 - O código **não publica**, **não autentica contas**, **não altera o Neon** e **não muda a seleção atual de executores**.
 
 ## Diagnóstico de arquitetura
