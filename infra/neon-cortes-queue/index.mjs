@@ -19,6 +19,11 @@ const CLIPPER='UniversoAnthares/anthares-clipper';
 let keys=null,keyExpires=0;
 const sqlScope=new AsyncLocalStorage();
 // Every runtime query must have an explicitly scoped, non-BYPASSRLS login.
+export function kwaiSqlScope(targetKey){
+ if(targetKey==='kwai:lucasrosalem')return 'kwai_primary';
+ if(targetKey==='kwai:universoanthares')return 'kwai_secondary';
+ return null;
+}
 const SQL_URL_ENV=Object.freeze({
  audit:'CORTES_AUDIT_DATABASE_URL',
  other:'CORTES_OTHER_DATABASE_URL',
@@ -2777,8 +2782,7 @@ export default {async fetch(request){
   // One-off public reconciliation endpoint retired; no HTTP action is reachable.
   if(action.startsWith('kwai-')){
    // The account determines the SQL login. Any other account fails closed.
-   const lane=body.target_key==='kwai:lucasrosalem'?'kwai_primary':
-              body.target_key==='kwai:universoanthares'?'kwai_secondary':null;
+   const lane=kwaiSqlScope(body.target_key);
    if(!lane)return answer({ok:false,error:'KWAI_SQL_ACCOUNT_REQUIRED'},409);
    return await sqlScope.run(lane,async()=>{
     const out=await kwaiAction(action,body,actor);
