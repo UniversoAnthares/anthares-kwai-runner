@@ -100,6 +100,26 @@ jobs:
               const workflow=codeberg?'cortes-tiktok-codeberg-fenced-canary.yml':
                 (target==='lucas4'?'cortes-tiktok-lucasrosalem4-cloud-publisher.yml':
                                       'cortes-tiktok-publisher.yml');
+              // A disabled publisher is an intentional administrative safety gate.
+              // Never dispatch or reactivate it from a P0 recovery workflow.
+              let targetState='unknown';
+              try {
+                const {data:registered}=await github.rest.actions.getWorkflow({
+                  owner,repo,workflow_id:workflow
+                });
+                targetState=String(registered.state||'unknown');
+              } catch(error) {
+                core.warning('TIKTOK_QA_P0_TARGET_STATE_UNAVAILABLE account='+target+
+                             ' workflow='+workflow);
+                suppressed++;
+                continue;
+              }
+              if(targetState!=='active') {
+                core.notice('TIKTOK_QA_P0_TARGET_INACTIVE account='+target+
+                            ' workflow='+workflow+' state='+targetState);
+                suppressed++;
+                continue;
+              }
               const {data:prior}=await github.rest.actions.listWorkflowRuns({
                 owner,repo,workflow_id:workflow,per_page:25
               });
