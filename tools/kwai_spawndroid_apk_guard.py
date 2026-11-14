@@ -64,7 +64,12 @@ def parse_apksigner(text: str) -> str:
     )
     normalized = {re.sub(r"[^0-9a-f]", "", v.lower()) for v in signers}
     if len(normalized) != 1:
-        raise ValidationError("unexpected_signer_count")
+        # Counts only. No certificate text, hashes, paths or signed URLs.
+        labels = sum("certificate sha-256 digest:" in line.lower()
+                     for line in text.splitlines()
+                     if line.strip().lower().startswith("signer #"))
+        raise ValidationError(
+            "unexpected_signer_count_%d_labels_%d" % (len(normalized), labels))
     cert = next(iter(normalized))
     if not re.fullmatch(r"[0-9a-f]{64}", cert):
         raise ValidationError("invalid_certificate_digest")
