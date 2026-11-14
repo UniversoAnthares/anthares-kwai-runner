@@ -2,6 +2,7 @@
 import hashlib
 import importlib.util
 import io
+import os
 from pathlib import Path
 import sys
 import tempfile
@@ -146,6 +147,14 @@ class SplitManifestTests(unittest.TestCase):
                 with self.assertRaisesRegex(splits.SplitError, "publisher_certificate_mismatch"):
                     splits.verify_component(p, package="com.kwai.video", version=647103)
 
+    def test_appium_canary_denied_by_default(self):
+        with patch.dict(os.environ, {"SPAWNDROID_SPLIT_INSTALL_CANARY_ENABLED": "0"}):
+            with self.assertRaisesRegex(splits.SplitError, "appium_canary_not_authorized"):
+                splits.webdriver_script(lambda *args: self.fail("must not execute"),
+                                        "com.kwai.video", 647103,
+                                        [x["url"] for x in example()["files"]])
+        print("KWAI_SPLITS_DEFAULT_NO_ANDROID_SESSION=PASS")
+
     def test_webdriver_invokes_multiple_apks_only(self):
         calls = []
         def execute(script, args):
@@ -156,7 +165,8 @@ class SplitManifestTests(unittest.TestCase):
                 return {"com.kwai.video": {"versionCode": 647103}}
             return None
         urls = [x["url"] for x in splits.validate_manifest(example(), SOURCE)["files"]]
-        receipt = splits.webdriver_script(execute, "com.kwai.video", 647103, urls)
+        with patch.dict(os.environ, {"SPAWNDROID_SPLIT_INSTALL_CANARY_ENABLED": "1"}):
+            receipt = splits.webdriver_script(execute, "com.kwai.video", 647103, urls)
         self.assertEqual(calls[0][0], "mobile: installMultipleApks")
         self.assertFalse(calls[0][1]["options"]["replace"])
         self.assertEqual([x[0] for x in calls],
@@ -170,16 +180,18 @@ class SplitManifestTests(unittest.TestCase):
             if script == "mobile: listApps":
                 return {"com.kwai.video": {"versionCode": 1}}
             return True
-        with self.assertRaisesRegex(splits.SplitError, "remote_version_unverified"):
-            splits.webdriver_script(execute, "com.kwai.video", 647103,
-                                    [x["url"] for x in example()["files"]])
+        with patch.dict(os.environ, {"SPAWNDROID_SPLIT_INSTALL_CANARY_ENABLED": "1"}):
+            with self.assertRaisesRegex(splits.SplitError, "remote_version_unverified"):
+                splits.webdriver_script(execute, "com.kwai.video", 647103,
+                                        [x["url"] for x in example()["files"]])
 
     def test_missing_installed_package_fails_closed(self):
         def execute(script, args):
             return False
-        with self.assertRaisesRegex(splits.SplitError, "remote_install_not_confirmed"):
-            splits.webdriver_script(execute, "com.kwai.video", 647103,
-                                    [x["url"] for x in example()["files"]])
+        with patch.dict(os.environ, {"SPAWNDROID_SPLIT_INSTALL_CANARY_ENABLED": "1"}):
+            with self.assertRaisesRegex(splits.SplitError, "remote_install_not_confirmed"):
+                splits.webdriver_script(execute, "com.kwai.video", 647103,
+                                        [x["url"] for x in example()["files"]])
 
 
 if __name__ == "__main__":
