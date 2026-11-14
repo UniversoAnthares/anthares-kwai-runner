@@ -15,6 +15,16 @@ header('X-Content-Type-Options: nosniff');
 header("Content-Security-Policy: default-src 'none'");
 
 function refuse(int $code): void {
+    if ($code === 503) {
+        // One non-sensitive code location. Never store JWT or signed URLs.
+        $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 1);
+        $line = (int)($trace[0]['line'] ?? 0);
+        @file_put_contents(
+            '/home/u566597497/.anthares-spawndroid-apks/oidc-broker-denials.log',
+            gmdate('Y-m-d') . ' BROKER_INVENTORY_503_LINE_' . $line . PHP_EOL,
+            FILE_APPEND | LOCK_EX
+        );
+    }
     http_response_code($code);
     header('Content-Type: application/json; charset=utf-8');
     echo '{"ok":false}';
