@@ -51,8 +51,9 @@ jobs:
           SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
           test -d "$SDK/build-tools"
           DIR="$(find "$SDK/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
-          test -x "$DIR/aapt" && test -x "$DIR/apksigner"
+          test -x "$DIR/aapt" && test -x "$DIR/aapt2" && test -x "$DIR/apksigner"
           echo "ANDROID_AAPT=$DIR/aapt" >> "$GITHUB_ENV"
+          echo "ANDROID_AAPT2=$DIR/aapt2" >> "$GITHUB_ENV"
           echo "ANDROID_APKSIGNER=$DIR/apksigner" >> "$GITHUB_ENV"
           echo "KWAI_OFFICIAL_ANDROID_APKSIGNER_AVAILABLE=PASS"
       - name: Obtain short-lived GitHub OIDC, fetch and verify original 25 APK splits
