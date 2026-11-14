@@ -7,6 +7,7 @@ on:
     paths:
       - 'tools/kwai_spawndroid_oidc_broker.php'
       - 'tools/kwai_spawndroid_oidc_cloud_audit.py'
+      - 'tests/test_kwai_spawndroid_oidc_cloud_audit.py'
       - '.github/workflows/kwai-spawndroid-stage-cloud-audit.yml'
 
 permissions:
@@ -36,6 +37,8 @@ jobs:
           assert doc["android_execution"]["cloud_cutover"]["enabled"] is False
           print("KWAI_OIDC_NO_CLOUD_CUTOVER=PASS")
           PY
+      - name: Run OIDC broker client negative-path contracts (offline)
+        run: python3 -B -m unittest discover -s tests -p test_kwai_spawndroid_oidc_cloud_audit.py -v
       - name: Confirm official Android verification utilities
         shell: bash
         run: |
