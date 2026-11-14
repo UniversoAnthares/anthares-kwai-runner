@@ -44,7 +44,7 @@ jobs:
       - name: Check deployed entrypoint syntax
         run: node --check infra/neon-cortes-queue/index.mjs
       - name: Verify two account gates and proportional intervals
-        run: node --test infra/neon-cortes-queue/kwai-pacing-policy.test.mjs infra/neon-cortes-queue/kwai-pacing-integration.test.mjs infra/neon-cortes-queue/kwai-oneoff-public-reconcile.test.mjs infra/neon-cortes-queue/kwai-unproven-discard.test.mjs infra/neon-cortes-queue/kwai-captionless-proof.test.mjs infra/neon-cortes-queue/kwai-wp-reconciled-callback.test.mjs
+        run: node --test infra/neon-cortes-queue/kwai-pacing-policy.test.mjs infra/neon-cortes-queue/kwai-pacing-integration.test.mjs infra/neon-cortes-queue/kwai-oneoff-public-reconcile.test.mjs infra/neon-cortes-queue/kwai-unproven-discard.test.mjs infra/neon-cortes-queue/kwai-captionless-proof.test.mjs infra/neon-cortes-queue/kwai-wp-reconciled-callback.test.mjs infra/neon-cortes-queue/kwai-rls-scope.test.mjs
       - name: Check bounded-reconcile Python helper syntax
         run: python3 -c "import ast,pathlib;ast.parse(pathlib.Path('tools/kwai_unproven_reconcile_policy.py').read_text())"
       - name: Verify MediaStore fallback without Android or media files
