@@ -86,7 +86,7 @@ class TestHub(unittest.TestCase):
 
     def test_activation_and_teardown(self):
         proof=self.hub.verify_kwai_once("official-kwai",enable=True,free_hobby=True)
-        self.assertTrue(proof["kwai_app_activated"])
+        self.assertTrue(proof["kwai_foreground_verified"])
         self.assertFalse(proof["publication_attempted"])
         self.assertTrue(proof["webdriver_session_terminated"])
         self.assertFalse(proof["provider_device_termination_verified"])
@@ -95,21 +95,21 @@ class TestHub(unittest.TestCase):
         self.assertEqual([x[0] for x in self.transport.calls],
                          ["POST","POST","POST","GET","DELETE","GET"])
         self.assertEqual(self.transport.assert_command["script"],"mobile: queryAppState")
-        self.assertEqual(self.transport.calls[-1][1].split("?")[-1],"result=passed")
+        self.assertEqual(self.transport.calls[-2][1].split("?")[-1],"result=passed")
 
     def test_wrong_package_never_launches_app(self):
         self.transport.package="com.other"
         with self.assertRaisesRegex(mod.HubError,"installed_package_mismatch"):
             self.hub.verify_kwai_once("official-kwai",enable=True,free_hobby=True)
         self.assertEqual([x[0] for x in self.transport.calls],["POST","DELETE","GET"])
-        self.assertEqual(self.transport.calls[-1][1].split("?")[-1],"result=failed")
+        self.assertEqual(self.transport.calls[-2][1].split("?")[-1],"result=failed")
 
     def test_app_failure_is_reported_and_teardown(self):
         self.transport.activate_ok=False
         with self.assertRaisesRegex(mod.HubError,"host_unavailable"):
             self.hub.verify_kwai_once("official-kwai",enable=True,free_hobby=True)
         self.assertEqual([x[0] for x in self.transport.calls],["POST","POST","DELETE","GET"])
-        self.assertEqual(self.transport.calls[-1][1].split("?")[-1],"result=failed")
+        self.assertEqual(self.transport.calls[-2][1].split("?")[-1],"result=failed")
 
     def test_app_not_in_foreground_is_failure_and_stops(self):
         self.transport.app_state=3
