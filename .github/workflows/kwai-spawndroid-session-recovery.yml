@@ -1,0 +1,30 @@
+name: Kwai SpawnDroid Session Recovery (offline contracts)
+on:
+  pull_request:
+    paths:
+      - 'tools/kwai_spawndroid_session_recovery.py'
+      - 'tests/test_kwai_spawndroid_session_recovery.py'
+      - '.github/workflows/kwai-spawndroid-session-recovery.yml'
+  push:
+    branches:
+      - main
+      - 'agent05/spawndroid-safe-session-recovery-20261114'
+    paths:
+      - 'tools/kwai_spawndroid_session_recovery.py'
+      - 'tests/test_kwai_spawndroid_session_recovery.py'
+      - '.github/workflows/kwai-spawndroid-session-recovery.yml'
+permissions:
+  contents: read
+concurrency:
+  group: kwai-spawndroid-session-recovery-offline-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  offline-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax check
+        run: python3 -m py_compile tools/kwai_spawndroid_session_recovery.py tests/test_kwai_spawndroid_session_recovery.py
+      - name: Credential-free recovery regressions
+        run: python3 -m unittest discover -s tests -p test_kwai_spawndroid_session_recovery.py -v
