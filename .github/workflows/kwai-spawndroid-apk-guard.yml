@@ -1,0 +1,113 @@
+name: Kwai SpawnDroid verified APK upload (safe, no Android)
+
+on:
+  pull_request:
+    paths:
+      - 'tools/kwai_spawndroid_apk_guard.py'
+      - 'tests/test_kwai_spawndroid_apk_guard.py'
+      - '.github/workflows/kwai-spawndroid-apk-guard.yml'
+  push:
+    paths:
+      - 'tools/kwai_spawndroid_apk_guard.py'
+      - 'tests/test_kwai_spawndroid_apk_guard.py'
+      - '.github/workflows/kwai-spawndroid-apk-guard.yml'
+  workflow_dispatch:
+    inputs:
+      apk_download_url:
+        description: 'Direct HTTPS URL to individual Kwai APK (not XAPK)'
+        required: true
+        type: string
+      expected_sha256:
+        description: 'SHA-256 of complete APK, independently sourced'
+        required: true
+        type: string
+      register_in_spawndroid:
+        description: 'After verification, register only; no Android session'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kwai-spawndroid-apk-guard-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  offline-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile guard without touching provider
+        run: python3 -B -m py_compile tools/kwai_spawndroid_apk_guard.py tests/test_kwai_spawndroid_apk_guard.py
+      - name: Run synthetic contract tests without external access
+        run: python3 -B -m unittest discover -s tests -p test_kwai_spawndroid_apk_guard.py -v
+      - name: Assert production cloud routing stays disabled
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path("ci-hub/executor-routing.json").read_text(encoding="utf8"))
+          assert d["android_execution"]["cloud_cutover"]["enabled"] is False
+          print("KWAI_SPAWNDROID_APK_GUARD_NO_CUTOVER=PASS")
+          PY
+
+  verify-and-optional-upload:
+    needs: offline-contracts
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      CANDIDATE_URL: ${{ inputs.apk_download_url }}
+      CANDIDATE_SHA: ${{ inputs.expected_sha256 }}
+      SPAWNDROID_API_KEY: ${{ secrets.SPAWNDROID_API_KEY }}
+      REGISTER_INPUT: ${{ inputs.register_in_spawndroid }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download trusted APK from HTTPS into ephemeral cloud runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          export APK_CLOUD_FILE="$RUNNER_TEMP/kwai-official-universal.apk"
+          echo "APK_CLOUD_FILE=$APK_CLOUD_FILE" >> "$GITHUB_ENV"
+          python3 - <<'PY'
+          import os,re,urllib.parse
+          u=urllib.parse.urlparse(os.environ["CANDIDATE_URL"])
+          allowed={"dw.uptodown.com", "kwai-social-video-network.en.uptodown.com",
+                   "kwai-social-video-network.br.uptodown.com",
+                   "www.apkmirror.com", "apkmirror.com"}
+          assert u.scheme=="https" and u.hostname in allowed and not u.username and not u.password, "APK_SOURCE_NOT_ALLOWLISTED"
+          assert re.fullmatch("[0-9a-fA-F]{64}",os.environ["CANDIDATE_SHA"]), "EXPECTED_SHA_INVALID"
+          print("APK_SOURCE_SCHEME_AND_HOST=VERIFIED")
+          PY
+          curl --silent --show-error --fail --location --retry 0 \
+            --proto '=https' --proto-redir '=https' \
+            --connect-timeout 15 --max-time 450 --max-filesize 536870912 \
+            --output "$APK_CLOUD_FILE" "$CANDIDATE_URL"
+          test -s "$APK_CLOUD_FILE"
+          echo "APK_CLOUD_DOWNLOAD_FINISHED=PASS"
+      - name: Verify complete SHA-256, package and APK signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          BUILD_DIR="$(find "$SDK/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          test -x "$BUILD_DIR/apksigner" && test -x "$BUILD_DIR/aapt"
+          export ANDROID_APKSIGNER="$BUILD_DIR/apksigner"
+          export ANDROID_AAPT="$BUILD_DIR/aapt"
+          if [ "$REGISTER_INPUT" = "true" ]; then
+            export SPAWNDROID_REGISTER_APPROVED=1
+            python3 tools/kwai_spawndroid_apk_guard.py \
+              --apk "$APK_CLOUD_FILE" --sha256 "$CANDIDATE_SHA" --register
+          else
+            python3 tools/kwai_spawndroid_apk_guard.py \
+              --apk "$APK_CLOUD_FILE" --sha256 "$CANDIDATE_SHA"
+          fi
+      - name: Remove temporary APK from ephemeral runner
+        if: always()
+        shell: bash
+        run: |
+          if [ -n "${APK_CLOUD_FILE:-}" ]; then rm -f -- "$APK_CLOUD_FILE"; fi
+          echo "APK_TEMP_ARTIFACT_REMOVED=PASS"
