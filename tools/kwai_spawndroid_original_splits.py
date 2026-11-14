@@ -181,6 +181,10 @@ def webdriver_script(executor, package: str, version: int, urls: list[str]) -> d
     executor(script, args) is supplied by Agent02's session lifecycle; this
     function neither creates nor disposes an Android runner.
     """
+    if os.environ.get("SPAWNDROID_SPLIT_INSTALL_CANARY_ENABLED") != "1":
+        raise SplitError("appium_canary_not_authorized")
+    if package not in EXPECTED_COUNTS:
+        raise SplitError("package_not_allowed")
     if not urls or len(urls) != EXPECTED_COUNTS[package]:
         raise SplitError("split_urls_incomplete")
     executor("mobile: installMultipleApks", {
