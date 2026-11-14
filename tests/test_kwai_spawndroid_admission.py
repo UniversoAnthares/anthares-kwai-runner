@@ -21,7 +21,7 @@ def fixture():
     for a, account in enumerate(mod.ACCOUNTS):
         for i in range(3):
             base = NOW - timedelta(hours=4 + a, minutes=i * 10)
-            offsets = (0, 20, 60, 80, 120, 150, 160)
+            offsets = (0, 20, 35, 60, 80, 120, 150, 160)
             entry = dict(
                 account=account,
                 session_id=f"sess-{account}-{i}",
@@ -70,6 +70,7 @@ class TestKwaiSpawnDroidAdmission(unittest.TestCase):
         self.assertEqual(result["accounts"]["universoanthares"]["reserved_device_minutes_per_post"], 3)
         self.assertGreater(result["accounts"]["lucasrosalem"]["p95_provision_seconds"], 0)
         self.assertGreater(result["accounts"]["lucasrosalem"]["phase_p95_seconds"]["proof_seconds"], 0)
+        self.assertGreater(result["accounts"]["lucasrosalem"]["phase_p95_seconds"]["app_activation_seconds"], 0)
         print("SPAWNDROID_200M_MONTHLY_SHARED_POOL_GUARD_PASS")
 
     def test_quota_is_cumulative_across_both_accounts(self):
@@ -154,6 +155,7 @@ class TestKwaiSpawnDroidAdmission(unittest.TestCase):
         item["measurements"] = [
             {**x, "requested_at": iso(mod.timestamp(x["requested_at"]) + timedelta(hours=1)),
              "ready_at": iso(mod.timestamp(x["ready_at"]) + timedelta(hours=1)),
+             "app_activated_at": iso(mod.timestamp(x["app_activated_at"]) + timedelta(hours=1)),
              "authenticated_at": iso(mod.timestamp(x["authenticated_at"]) + timedelta(hours=1)),
              "mp4_loaded_at": iso(mod.timestamp(x["mp4_loaded_at"]) + timedelta(hours=1)),
              "published_at": iso(mod.timestamp(x["published_at"]) + timedelta(hours=1)),
