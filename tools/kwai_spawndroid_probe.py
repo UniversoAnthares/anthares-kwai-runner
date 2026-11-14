@@ -24,7 +24,7 @@ import urllib.request
 
 API = "https://app.spawndroid.io"
 EXPECTED_PACKAGE = "com.kwai.video"  # Kwai official APK, repo's existing Android contract.
-EXPECTED_ACCOUNT = "lucasrosalem"
+EXPECTED_ACCOUNT = "universoanthares"
 MAX_CANARY_SECONDS = 180
 ARTIFACT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{1,110}$")
 SESSION = re.compile(r"^sess_[A-Za-z0-9_-]{3,90}$")
