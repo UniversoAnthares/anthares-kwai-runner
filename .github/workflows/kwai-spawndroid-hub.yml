@@ -25,7 +25,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: kwai-spawndroid-hub-experimental
+  group: kwai-spawndroid-experimental
   cancel-in-progress: false
 jobs:
   contracts:
@@ -44,6 +44,8 @@ jobs:
     timeout-minutes: 6
     env:
       SPAWNDROID_CI_TOKEN: ${{ secrets.SPAWNDROID_CI_TOKEN }}
+      SPAWNDROID_API_KEY: ${{ secrets.SPAWNDROID_API_KEY }}
+      SPAWNDROID_KWAI_VERIFIED_SLUG: ${{ vars.SPAWNDROID_KWAI_VERIFIED_SLUG }}
       SPAWNDROID_HOBBY_FREE_CONFIRMED: ${{ vars.SPAWNDROID_HOBBY_FREE_CONFIRMED }}
       SPAWNDROID_KWAI_ARTIFACT_SLUG: ${{ inputs.artifact_slug }}
     steps:
@@ -54,6 +56,9 @@ jobs:
           set -euo pipefail
           test "$SPAWNDROID_HOBBY_FREE_CONFIRMED" = 1
           test -n "$SPAWNDROID_CI_TOKEN"
+          test -n "$SPAWNDROID_API_KEY"
+          test -n "$SPAWNDROID_KWAI_VERIFIED_SLUG"
+          test "$SPAWNDROID_KWAI_ARTIFACT_SLUG" = "$SPAWNDROID_KWAI_VERIFIED_SLUG"
           test -n "$SPAWNDROID_KWAI_ARTIFACT_SLUG"
           export SPAWNDROID_HUB_CANARY_ENABLED=1
           python3 tools/kwai_spawndroid_stable_hub.py --execute --slug "$SPAWNDROID_KWAI_ARTIFACT_SLUG"
