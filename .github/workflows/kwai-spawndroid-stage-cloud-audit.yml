@@ -1,6 +1,23 @@
 name: Kwai original APKs - OIDC Hostinger cloud signature audit
 
 on:
+  workflow_dispatch:
+    inputs:
+      canary:
+        description: 'Run exactly one remote install, no Kwai login or publication'
+        required: true
+        default: false
+        type: boolean
+      demo_artifact_slug:
+        description: 'Existing SpawnDroid demo build slug, NOT a Kwai account'
+        required: true
+        default: 'spawndroid-demo-ae64feef92'
+        type: string
+      confirm_hobby_free:
+        description: 'I verified free Hobby quota and authorize one Android test'
+        required: true
+        default: false
+        type: boolean
   push:
     branches:
       - feature/spawndroid-kwai-apk-verified-upload-20261114
@@ -11,6 +28,8 @@ on:
       - 'tools/kwai_spawndroid_apk_guard.py'
       - 'tests/test_kwai_spawndroid_apk_guard.py'
       - 'tests/test_kwai_spawndroid_oidc_cloud_audit.py'
+      - 'tools/kwai_spawndroid_cloud_install_canary.py'
+      - 'tests/test_kwai_spawndroid_cloud_install_canary.py'
       - '.github/workflows/kwai-spawndroid-stage-cloud-audit.yml'
 
 permissions:
@@ -18,7 +37,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: kwai-oidc-original-apk-signature-audit
+  group: kwai-spawndroid-experimental
   cancel-in-progress: false
 
 jobs:
@@ -67,5 +86,78 @@ jobs:
         if: always()
         run: |
           echo "SPAWNDROID_DEVICE_MINUTES_USED=0"
+          echo "KWAI_ACCOUNT_LOGIN_ATTEMPTED=0"
+          echo "KWAI_PUBLICATION_ATTEMPTED=0"
+
+
+  cloud-canary-offline-contracts:
+    if: github.repository == 'UniversoAnthares/anthares-kwai-runner' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.canary == true))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile and verify fail-closed Android canary offline
+        run: |
+          python3 -B -m py_compile tools/kwai_spawndroid_cloud_install_canary.py tests/test_kwai_spawndroid_cloud_install_canary.py
+          python3 -B -m unittest discover -s tests -p test_kwai_spawndroid_cloud_install_canary.py -v
+      - name: Enforce no production activation
+        run: |
+          python3 - <<'PY'
+          import json
+          with open("ci-hub/executor-routing.json") as f:
+              routing = json.load(f)
+          assert routing["android_execution"]["cloud_cutover"]["enabled"] is False
+          print("KWAI_SPAWNDROID_CLOUD_CANARY_NO_CUTOVER=PASS")
+          PY
+
+  cloud-install-one-shot:
+    needs: cloud-canary-offline-contracts
+    if: github.repository == 'UniversoAnthares/anthares-kwai-runner' && github.ref == 'refs/heads/feature/spawndroid-kwai-apk-verified-upload-20261114' && github.event_name == 'workflow_dispatch' && inputs.canary == true && inputs.confirm_hobby_free == true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 11
+    env:
+      SPAWNDROID_API_KEY: ${{ secrets.SPAWNDROID_API_KEY }}
+      SPAWNDROID_SPLIT_INSTALL_CANARY_ENABLED: "1"
+      SPAWNDROID_HOBBY_FREE_CONFIRMED: "1"
+      SPAWNDROID_DEMO_ARTIFACT_SLUG: ${{ inputs.demo_artifact_slug }}
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify explicit SpawnDroid ownership and cost gates before OIDC or Android
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SPAWNDROID_API_KEY"
+          test "$SPAWNDROID_DEMO_ARTIFACT_SLUG" = 'spawndroid-demo-ae64feef92'
+          test "$SPAWNDROID_HOBBY_FREE_CONFIRMED" = '1'
+          python3 -B - <<'PY'
+          import os,sys
+          sys.path.insert(0, "tools")
+          from kwai_spawndroid_cloud_install_canary import required_gates
+          required_gates(os.environ)
+          print("SPAWNDROID_CLOUD_CANARY_AUTH_AND_BUDGET_GATES=PASS")
+          PY
+      - name: Locate official Android verification tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          DIR="$(find "$SDK/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          test -x "$DIR/aapt" && test -x "$DIR/aapt2" && test -x "$DIR/apksigner"
+          echo "ANDROID_AAPT=$DIR/aapt" >> "$GITHUB_ENV"
+          echo "ANDROID_AAPT2=$DIR/aapt2" >> "$GITHUB_ENV"
+          echo "ANDROID_APKSIGNER=$DIR/apksigner" >> "$GITHUB_ENV"
+      - name: Run one original-split install and verify teardown
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B tools/kwai_spawndroid_cloud_install_canary.py
+      - name: Confirm that the test never publishes Kwai media
+        if: always()
+        run: |
           echo "KWAI_ACCOUNT_LOGIN_ATTEMPTED=0"
           echo "KWAI_PUBLICATION_ATTEMPTED=0"
