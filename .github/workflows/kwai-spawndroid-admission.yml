@@ -1,0 +1,40 @@
+name: Kwai SpawnDroid Hobby admission (offline only)
+on:
+  pull_request:
+    paths:
+      - 'tools/kwai_spawndroid_admission.py'
+      - 'tests/test_kwai_spawndroid_admission.py'
+      - '.github/workflows/kwai-spawndroid-admission.yml'
+  push:
+    branches:
+      - 'agent06/spawndroid-capacity-failclosed-20261114'
+    paths:
+      - 'tools/kwai_spawndroid_admission.py'
+      - 'tests/test_kwai_spawndroid_admission.py'
+      - '.github/workflows/kwai-spawndroid-admission.yml'
+permissions:
+  contents: read
+concurrency:
+  group: kwai-spawndroid-admission-offline-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  offline-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile capacity admission and contract tests
+        run: python3 -m py_compile tools/kwai_spawndroid_admission.py tests/test_kwai_spawndroid_admission.py
+      - name: Exercise fail-closed Hobby quota, pacing and cancellation rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_kwai_spawndroid_admission.py -v 2>&1 | tee "${RUNNER_TEMP}/kwai-capacity-qa.log"
+          grep -q "SPAWNDROID_200M_MONTHLY_SHARED_POOL_GUARD_PASS" "${RUNNER_TEMP}/kwai-capacity-qa.log"
+          grep -q "SPAWNDROID_NO_BILLING_OR_STALE_QUOTA_FAIL_CLOSED_PASS" "${RUNNER_TEMP}/kwai-capacity-qa.log"
+          grep -q "SPAWNDROID_15MIN_SESSION_BILLING_GUARD_PASS" "${RUNNER_TEMP}/kwai-capacity-qa.log"
+          grep -q "SPAWNDROID_UNCERTAIN_NEVER_RESENT_PASS" "${RUNNER_TEMP}/kwai-capacity-qa.log"
+          grep -q "SPAWNDROID_EFFECTIVE_SPACING_AND_23H_EXCLUSION_PASS" "${RUNNER_TEMP}/kwai-capacity-qa.log"
+          grep -q "SPAWNDROID_NEON_ACCOUNT_CAP_100_PASS" "${RUNNER_TEMP}/kwai-capacity-qa.log"
+          grep -q "SPAWNDROID_CANCEL_FIRST_QUOTA_AND_UNKNOWN_SIDE_EFFECTS_PASS" "${RUNNER_TEMP}/kwai-capacity-qa.log"
+          echo SPAWNDROID_OFFLINE_CONTRACT_SIGNALS=PASS
