@@ -1,0 +1,37 @@
+name: Kwai SpawnDroid Auth Recovery (Agent 05, offline contract)
+on:
+  pull_request:
+    paths:
+      - 'tools/kwai_spawndroid_auth_recovery.py'
+      - 'tests/test_kwai_spawndroid_auth_recovery.py'
+      - '.github/workflows/kwai-spawndroid-auth-recovery.yml'
+      - 'docs/KWAI-SPAWNDROID-AUTH-RECOVERY-AGENT05.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: kwai-spawndroid-auth-agent05
+  cancel-in-progress: false
+jobs:
+  offline-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax verification
+        run: python3 -m py_compile tools/kwai_spawndroid_auth_recovery.py tests/test_kwai_spawndroid_auth_recovery.py
+      - name: Two-account recovery and fail-closed regression tests
+        run: python3 -m unittest discover -s tests -p 'test_kwai_spawndroid_auth_recovery.py' -v
+      - name: Verify default gate requires current-session authentication
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from tools.kwai_spawndroid_auth_recovery import decide
+          for account, package in (("universoanthares", "com.kwai.video"), ("lucasrosalem", "kwai.lite.video")):
+              result = decide({"account": account, "package": package, "session_id": "session00001",
+                               "provider_session_state": "ready", "ledger_state": "settled"})
+              assert result["status"] == "AUTH_REQUIRED"
+              assert not result["publication_authorized"]
+              assert not result["cloud_cutover_authorized"]
+          print("AUTH_AGENT05_TWO_ACCOUNT_FAIL_CLOSED=PASS")
+          PY
