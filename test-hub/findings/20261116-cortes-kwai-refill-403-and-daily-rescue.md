@@ -23,3 +23,12 @@ Run 43917516014 (reserve=1) enfileirou um master. Android físico preservou/veri
 
 ## Pendências e restrições
 Rever o resultado final do produtor 43918950439 e progresso real (o status geral success anterior ocultou zero vídeos novos). Confirmar um futuro `schedule` horário efetivo e um resgate verdadeiro quando faltar a execução matinal; o teste cobriu bloqueio seguro quando havia daily ativo. Postagens `started` ou `uncertain` requerem prova de URL, conta e mídia antes do ACK. Sem reenvio cego, troca de conta, deleção ou alteração de espelho GitLab. Código de produção alterado somente no GitHub canônico.
+
+
+## Continuação 16/11, 14h02–14h15 locais
+- O segundo perfil Kwai foi confirmado publicamente às 14h02 com `KWAI_PUBLIC_VIDEO_PROVEN`, ACK e Neon confirmed_today=1: https://www.kwai.com/@universoanthares/video/5195052280660245125. Restavam 12 itens enfileirados para cada perfil às 14h04.
+- Nova chamada à API WordPress devolveu `HTTP 403`, `Server: hcdn`, `Content-Type: text/html` com documento `Bot Verification`, inclusive em `/wp-json/wp/v2/media`. A Hostinger identifica esse comportamento como bloqueio CDN de chamadas legítimas à REST API. Exceção granular de endpoint exige suporte Hostinger, preservando o nível global de proteção. Exemplo seguro de x-hcdn-request-id de requisição bloqueada: `f1bd79e7339f9b9e9128850e15cb6240-asc-edge12`.
+- Run CORTES diário 43918950439 terminou `success`, mas geração de curtos produziu `pending=66 new_processed=0 phase_complete=0`; dezenas de erros `CORTES_EDITORIAL_WORDPRESS_PENDING ... write_http_403`. Status geral era falso positivo de progresso.
+- Nova tentativa de refill 43923759705 retornou HTTP 403 na leitura `/wp-json/anthares/v1/cortes/state`, apesar dos lotes anteriores aprovados e preservados no Neon. O WAF é intermitente por requisição/rota e pode atingir até leituras autenticadas.
+- Clipper PR draft #316: https://github.com/UniversoAnthares/anthares-clipper/pull/316. Patch `cortes_short_batch.py` reconhece desafio HTML da CDN, limita chamadas bloqueadas a uma por processo, preserva anexos e falha a rodada sem progresso (em vez de reportar sucesso). SHA de branch compilado com AST Python, sem criar arquivo no PC. PR ainda sem merge; ajuste Hostinger permanece pendente.
+- Às 14h15, o executor da conta principal iniciou o segundo vídeo agendado às 14h10; registro `started`, prova pública aguardada. O secundário tinha 1 confirmado hoje e próximo horário programado para 14h39.
