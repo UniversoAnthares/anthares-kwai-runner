@@ -1,0 +1,35 @@
+name: Anthares Studio — Item 2 Read-only Production Audit
+on:
+  push:
+    branches:
+      - audit/studio-item2-20261116
+    paths:
+      - .github/workflows/studio-item2-audit.yml
+permissions:
+  contents: read
+concurrency:
+  group: anthares-studio-item2-readonly-20261116
+  cancel-in-progress: false
+jobs:
+  audit:
+    if: github.repository == 'UniversoAnthares/anthares-kwai-runner' && github.ref == 'refs/heads/audit/studio-item2-20261116'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Validate audit syntax without running remote code
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          code=compile(Path('tools/studio-item2-audit.py').read_text(),'tools/studio-item2-audit.py','exec')
+          scope={'__name__':'syntax_check_only'}
+          exec(code,scope)
+          compile(scope['REMOTE'],'remote_studio_item2.py','exec')
+          print('STUDIO_ITEM2_SYNTAX=PASS')
+          PY
+      - name: Run protected read-only inspection on Hostinger
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        run: python3 tools/studio-item2-audit.py
