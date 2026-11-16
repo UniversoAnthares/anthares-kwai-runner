@@ -34,7 +34,9 @@ expected={
  'legacy_php':'13c3c79676bc25ead5a2b02caa15306cbdefbfaf6647fbf8a636b85ab5d906bf'
 }
 def require(flag,label):
- if not flag:raise RuntimeError(label)
+ if not flag:
+  print('STUDIO_AUDIT_FAILURE='+label,flush=True)
+  raise RuntimeError(label)
 require(root.is_dir() and new.is_dir() and old.is_dir(),'EXPECTED_SITE_LAYOUT_ABSENT')
 for name,p in paths.items():
  require(p.is_file() and not p.is_symlink(),'FILE_MISSING_OR_LINK_'+name)
@@ -59,7 +61,7 @@ lint=subprocess.run([phpbin,'-l',str(paths['studio_php'])],text=True,capture_out
 require(lint.returncode==0,'PHP_LINT_ERROR')
 print('STUDIO_PHP_LINT=PASS',flush=True)
 wp=shutil.which('wp') or next((str(c) for c in (home/'bin/wp',pathlib.Path('/usr/local/bin/wp'),pathlib.Path('/usr/bin/wp')) if c.is_file()),None)
-require(bool(wp),'WP_CLI_UNAVAILABLE')
+print('STUDIO_WPCLI_AVAILABLE='+str(int(bool(wp))),flush=True)
 code=r'''$page=get_page_by_path("studio",OBJECT,"page");
 $legacy=get_page_by_path("estudio",OBJECT,"page");
 $plugins=(array)get_option("active_plugins",[]);
@@ -86,9 +88,16 @@ $out=array(
  "post_denied_with_423"=>is_wp_error($post) && $post->get_error_code()==="anst_staging_locked" && (int)($post->get_error_data()["status"]??0)===423
 );
 echo "STUDIO_WORDPRESS_AUDIT=".wp_json_encode($out,JSON_UNESCAPED_SLASHES)."\n";'''
-command=[wp,'--path='+str(root),'--skip-themes','--no-color','eval',code]
+if wp:
+ command=[wp,'--path='+str(root),'--skip-themes','--no-color','eval',code]
+else:
+ # Real WordPress bootstrap, read-only fallback if wp-cli is missing.
+ bootstrap='define("WP_USE_THEMES",false);define("DISABLE_WP_CRON",true);require '+json.dumps(str(root/'wp-load.php'))+';'
+ command=[phpbin,'-d','display_errors=stderr','-r',bootstrap+code]
 result=subprocess.run(command,text=True,capture_output=True,timeout=75)
-require(result.returncode==0,'WP_CLI_EVAL_FAILED')
+if result.returncode!=0:
+ print('STUDIO_AUDIT_FAILURE=WORDPRESS_EXECUTION_RETURNED_NONZERO',flush=True)
+ raise RuntimeError('WORDPRESS_EXECUTION_RETURNED_NONZERO')
 matched=re.search(r'^STUDIO_WORDPRESS_AUDIT=([^\r\n]+)',result.stdout,re.M)
 require(matched is not None,'WORDPRESS_AUDIT_NOT_RETURNED')
 audit=json.loads(matched.group(1))
