@@ -1,0 +1,36 @@
+name: Anthares Studio CSS - One-time Scoped Live Fix
+on:
+  push:
+    branches:
+      - fix/studio-css-live-20261116
+    paths:
+      - .github/workflows/studio-css-live-20261116.yml
+permissions:
+  contents: read
+concurrency:
+  group: anthares-studio-css-live-20261116
+  cancel-in-progress: false
+jobs:
+  studio-css-deploy:
+    if: github.repository == 'UniversoAnthares/anthares-kwai-runner' && github.ref == 'refs/heads/fix/studio-css-live-20261116'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Compile deploy client and remote script without executing
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          p=pathlib.Path('tools/studio-css-live-once.py')
+          code=compile(p.read_text(encoding='utf-8'),str(p),'exec')
+          scope={'__name__':'qa_only'}
+          exec(code,scope)
+          compile(scope['REMOTE_SCRIPT'],'remote-studio-css','exec')
+          print('STUDIO_CSS_STATIC_SYNTAX=PASS')
+          PY
+      - name: Apply protected Hostinger SSH patch, atomic backup and rollback
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        run: python3 tools/studio-css-live-once.py
