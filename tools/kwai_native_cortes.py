@@ -238,6 +238,26 @@ def latest(s,prefix,preserve_upload=False):
    if attempt or not str(exc).startswith('missing:'+RID_USER): raise
  account=(user.attrib.get('text') or '').strip().lstrip('@').lower()
  if account!=ACCOUNT: raise E('profile-account:'+account)
+ # On the authenticated secondary profile, a recommendation can divert video taps.
+ # Dismiss only the exact optional card and verify that the account stays fixed.
+ if ACCOUNT=='universoanthares':
+  promo_title=any(n.attrib.get('resource-id')=='com.kwai.video:id/title' and
+                  (n.attrib.get('text') or '').strip().casefold().startswith('compartilhe seu fim de semana')
+                  for n in root.iter('node'))
+  promo_cta=any(n.attrib.get('resource-id')=='com.kwai.video.basis:id/button' and
+                (n.attrib.get('text') or '').strip().casefold()=='ir'
+                for n in root.iter('node'))
+  promo_close=[n for n in root.iter('node') if
+               n.attrib.get('resource-id')=='com.kwai.video.basis:id/close' and
+               n.attrib.get('clickable')=='true' and n.attrib.get('enabled')=='true' and
+               center(n.attrib.get('bounds',''))]
+  if promo_title and promo_cta and len(promo_close)==1:
+   tap(s,promo_close[0]);time.sleep(1)
+   root,px=dump(s,prefix+'-profile-promo-closed')
+   verified=[n for n in rid(root,RID_USER) if
+             (n.attrib.get('text') or '').strip().lstrip('@').lower()==ACCOUNT]
+   if len(verified)!=1:raise E('account-lost-after-promo-dismissal')
+   out('KWAI_PROFILE_RECOMMENDATION_DISMISSED=1')
  thumbs=[n for n in rid(root,RID_THUMB) if n.attrib.get('clickable')=='true' and center(n.attrib.get('bounds',''))]
  if not thumbs:
   if ACCOUNT!='universoanthares':raise E('no-published-thumb')
