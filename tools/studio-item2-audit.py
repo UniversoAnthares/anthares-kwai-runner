@@ -88,16 +88,16 @@ $out=array(
  "post_denied_with_423"=>is_wp_error($post) && $post->get_error_code()==="anst_staging_locked" && (int)($post->get_error_data()["status"]??0)===423
 );
 echo "STUDIO_WORDPRESS_AUDIT=".wp_json_encode($out,JSON_UNESCAPED_SLASHES)."\n";'''
-if wp:
- command=[wp,'--path='+str(root),'--skip-themes','--no-color','eval',code]
-else:
- # Real WordPress bootstrap, read-only fallback if wp-cli is missing.
- bootstrap='define("WP_USE_THEMES",false);define("DISABLE_WP_CRON",true);require '+json.dumps(str(root/'wp-load.php'))+';'
- command=[phpbin,'-d','display_errors=stderr','-r',bootstrap+code]
+# Prefer the real WordPress bootstrap over a CLI shim that can reject noninteractive invocations.
+bootstrap='define("WP_USE_THEMES",false);define("DISABLE_WP_CRON",true);require '+json.dumps(str(root/'wp-load.php'))+';'
+command=[phpbin,'-d','display_errors=stderr','-r',bootstrap+code]
 result=subprocess.run(command,text=True,capture_output=True,timeout=75)
 if result.returncode!=0:
- print('STUDIO_AUDIT_FAILURE=WORDPRESS_EXECUTION_RETURNED_NONZERO',flush=True)
- raise RuntimeError('WORDPRESS_EXECUTION_RETURNED_NONZERO')
+ err=result.stderr or ''
+ flags=['Parse error','Fatal error','undefined function','database connection','Access denied','permission denied','No such file']
+ kind=next((i.replace(' ','_').upper() for i in flags if i.lower() in err.lower()),'UNCLASSIFIED')
+ print('STUDIO_AUDIT_FAILURE=PHP_BOOTSTRAP_'+kind,flush=True)
+ raise RuntimeError('PHP_BOOTSTRAP_FAILED')
 matched=re.search(r'^STUDIO_WORDPRESS_AUDIT=([^\r\n]+)',result.stdout,re.M)
 require(matched is not None,'WORDPRESS_AUDIT_NOT_RETURNED')
 audit=json.loads(matched.group(1))
