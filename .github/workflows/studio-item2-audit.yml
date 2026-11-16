@@ -5,6 +5,7 @@ on:
       - audit/studio-item2-20261116
     paths:
       - .github/workflows/studio-item2-audit.yml
+      - tools/studio-item2-audit.py
 permissions:
   contents: read
 concurrency:
