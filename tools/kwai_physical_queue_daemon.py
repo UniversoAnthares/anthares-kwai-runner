@@ -982,11 +982,34 @@ def daemon():
  dual=(EXPECTED_ACCOUNT=='lucasrosalem' and os.getenv('ANTHARES_KWAI_SECONDARY_ENABLED','0')=='1')
  last_secondary_restart=0
  def parent_is_alive():
+  # Do not terminate a live secondary worker on a transient tasklist timeout.
+  # Windows process handles provide an atomic, read-only liveness check.
   if parent_pid<=0:return True
   try:
-   result=subprocess.run(['tasklist','/FI','PID eq '+str(parent_pid)],capture_output=True,text=True,timeout=8)
-   return result.returncode==0 and str(parent_pid) in (result.stdout or '')
-  except Exception:return False
+   import ctypes
+   kernel=ctypes.WinDLL('kernel32',use_last_error=True)
+   kernel.OpenProcess.argtypes=(ctypes.c_uint32,ctypes.c_int,ctypes.c_uint32)
+   kernel.OpenProcess.restype=ctypes.c_void_p
+   kernel.WaitForSingleObject.argtypes=(ctypes.c_void_p,ctypes.c_uint32)
+   kernel.WaitForSingleObject.restype=ctypes.c_uint32
+   kernel.CloseHandle.argtypes=(ctypes.c_void_p,)
+   kernel.CloseHandle.restype=ctypes.c_int
+   handle=kernel.OpenProcess(0x00100000,0,parent_pid) # SYNCHRONIZE
+   if not handle:
+    error=ctypes.get_last_error()
+    if error==87: return False # ERROR_INVALID_PARAMETER: PID absent
+    log('KWAI_SECONDARY_PARENT_STATUS_UNVERIFIED error='+str(error))
+    return True # Access or transport uncertainty is not proof of exit
+   try:
+    wait=kernel.WaitForSingleObject(handle,0)
+    if wait==0:return False # WAIT_OBJECT_0: process terminated
+    if wait==258:return True # WAIT_TIMEOUT: process still alive
+    log('KWAI_SECONDARY_PARENT_WAIT_UNVERIFIED result='+str(wait))
+    return True
+   finally:kernel.CloseHandle(handle)
+  except Exception as exc:
+   log('KWAI_SECONDARY_PARENT_PROBE_UNVERIFIED '+type(exc).__name__)
+   return True
  def launch_secondary():
   childenv=os.environ.copy()
   childenv.update(KWAI_EXPECTED_ACCOUNT='universoanthares',
