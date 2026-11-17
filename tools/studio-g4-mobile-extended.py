@@ -72,11 +72,26 @@ def main():
       show_mural(page,newid,project)
       source=page.locator(f'.aest-mural-card[data-card-id="{cid}"]')
       destination=page.locator('.aest-mural-drop[data-column="trama"]')
+      responses=[]
+      def on_response(response):
+       if '/cards/reorder' in response.url:responses.append(response.status)
+      page.on('response',on_response)
       source.drag_to(destination,force=True,timeout=14000)
-      page.wait_for_timeout(700)
-      out=br.require_api(page,'GET','bootstrap?project='+str(project),None,200,'MOBILE_DRAG_PERSIST')
-      card=next(c for c in out['cards'] if c['id']==cid)
-      check(card['column']=='trama','MOBILE_DRAG_NOT_SAVED')
+      observed=''
+      for _ in range(15):
+       page.wait_for_timeout(500)
+       out=br.require_api(page,'GET','bootstrap?project='+str(project),None,200,'MOBILE_DRAG_PERSIST')
+       card=next(c for c in out['cards'] if c['id']==cid)
+       observed=card['column']
+       if observed=='trama':break
+      if observed!='trama':
+       parent=page.locator(f'.aest-mural-card[data-card-id="{cid}"]').locator('xpath=ancestor::*[@data-column][1]')
+       dom=parent.get_attribute('data-column') if parent.count() else 'MISSING'
+       print('G4_MOBILE_DRAG_DIAG_SAVED='+str(observed),flush=True)
+       print('G4_MOBILE_DRAG_DIAG_DOM='+str(dom),flush=True)
+       print('G4_MOBILE_DRAG_REORDER_HTTP='+','.join(map(str,responses)),flush=True)
+       print('G4_MOBILE_DRAG_DIAG_DIALOG='+str(page.locator('.aest-card-notes-dialog').count()),flush=True)
+      check(observed=='trama','MOBILE_DRAG_NOT_SAVED')
       print('G4_C023_VIEWPORT_390_HTML5_CARD_DRAG=PASS',flush=True)
       # C008: scroll restoration using a dense project route and browser history.
       page.goto(f'{g4.BASE_URL}/?page_id={newid}#studio/projeto/{project}/planejamento',
