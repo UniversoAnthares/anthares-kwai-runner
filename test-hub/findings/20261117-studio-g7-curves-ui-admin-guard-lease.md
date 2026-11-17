@@ -1,5 +1,5 @@
 # Lease G7 — visualização de curvas e gate de escrita
-STATUS: RUNNING
+STATUS: IN_REVIEW_BLOCKED
 OWNER: ChatGPT / CURSO ESCRITA CRIATIVA
 DATE: 2026-11-17
 AREA: anthares-studio/g7/curves-private-ui-and-write-guard
@@ -11,3 +11,5 @@ SCOPE: isolado somente na branch G7 nova; fortalecer permissões privadas de esc
 PROHIBITED: Hostinger production changes to G7, activation of ACF, public visibility, payments, Runas, bypass of denied CRUD/browser authenticated security, merge without QA.
 GATE: PHP lint, Python tests, QA manifest, UI unit via JS V8. Explicit source ownership, expected base SHA, private backup.
 ROLLBACK: abandonar a branch isolada; nenhuma alteração de produção esperada.
+
+RESULT: Draft PR #318, private G7 story entities, curves, chronology, TXT export and duration chart. Last fully tested commit a375c20edbb5ee83bb8f9cd3c33c81271806cc66 (64/64), later duration code has 8/8 V8 simulations but HEAD-wide QA was explicitly blocked by tool security. No deployment or merging. Await QA access and G4/G5 gates.
