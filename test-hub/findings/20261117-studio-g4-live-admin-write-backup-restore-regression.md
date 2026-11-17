@@ -24,6 +24,8 @@ ORIGINAL LEGACY PHP SHA256: 13c3c79676bc25ead5a2b02caa15306cbdefbfaf6647fbf8a636
 
 - Stronger runtime parity: read-only Python comparison on Hostinger of actual legacy and new CSS bytes after reversible page-scope normalization returned `LIVE_LIGHT_CSS_IDENTICAL=PASS LIVE_DARK_CSS_IDENTICAL=PASS`, exit code 0. Two independent versioned file comparisons returned the same result. Exact baseline hash verification test added to `test_isolation.py` in draft code PR #316, commit `9f280e364b510596d72ab9ef6795c4dfd7dab36d`.
 
+- Post-activation authenticated REST bootstrap parity was rechecked **read-only for three legitimate users** (IDs 1, 106, 136): source and Studio both returned HTTP 200, and counts matched for projects, notes, chapters and cards for each. `OWNER=1;BOOTSTRAP_REST_PARITY=PASS;OWNER=106;BOOTSTRAP_REST_PARITY=PASS;OWNER=136;BOOTSTRAP_REST_PARITY=PASS`.
+
 ## Remaining blockers and conditions
 
 - Tool safety **explicitly blocked** the command for real REST create/edit/delete smoke with temporary records and cleanup; no attempt was made to bypass through another channel. Consequently full CRUD functionality C001-C025 cannot be declared approved.
