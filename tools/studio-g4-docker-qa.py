@@ -304,6 +304,19 @@ def setup_docker(root,info):
     clean=re.sub(r'[^A-Za-z0-9 _:/,().-]','_',line)[:175]
     print('G4_PLUGIN_DIAGNOSTIC='+clean,flush=True)
    raise
+ # Populate ACF Free course option on the disposable site before browser ACF ON.
+ # Production already has this migration; blank WordPress needs a synthetic seed.
+ wp('option','update','anst_acf_runtime_enabled','1')
+ acf_seed=r"""$key='field_anst16c_course_lesson_links_json_v1';
+if(!function_exists('get_field')||!function_exists('update_field')||!acf_get_field($key))WP_CLI::error('G4_ACF_GROUP_MISSING');
+update_field($key,'{}','option');
+$got=get_field($key,'option',false);
+if((string)$got!=='{}')WP_CLI::error('G4_ACF_COURSE_SEED_FAILED');
+WP_CLI::line('G4_SYNTHETIC_COURSE_ACF_OPTION=PASS');"""
+ out=wp('eval',acf_seed)
+ check('G4_SYNTHETIC_COURSE_ACF_OPTION=PASS' in out,'G4_ACF_COURSE_OPTION_NOT_READY')
+ print('G4_SYNTHETIC_COURSE_ACF_OPTION=PASS',flush=True)
+ wp('option','update','anst_acf_runtime_enabled','0')
  active=info.get('stylesheet','')
  if active:
   try:
