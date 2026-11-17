@@ -30,3 +30,13 @@ Restam sem homologação específica exaustiva: C008 reload/back/forward e estad
 - anst_writes_enabled=0, anst_trash_cleanup_enabled=0. Nenhuma criação/edição dos 71 posts reais feita nos testes.
 - Reversão runtime ACF: com WP-CLI em PHP 8.3, modo --skip-plugins, restaurar opção anterior conforme studio-g5-option-rollback-20261117T123246Z (zero/ausente); rollback de código pelo backup privado respectivo. Nunca reativar limpeza sem teste.
 - PR #314 permanece DRAFT até completar matriz G4 e reconciliação governada para branch canônica, embora arquivos aprovados já estejam instalados no servidor.
+
+## G4 — Ampliação da homologação após ativação G5, execução 17/11 12:43 UTC
+- [GitHub Actions #44085411557](https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/44085411557) — sucesso com os blobs GitHub integrados 4/4, incluindo o PHP de aprovação atualizado `16f5c014...`.
+- Reexecutou 12 pares visuais de 0/1/N projetos em 1440×900/390×844, modo claro/escuro: `G4_VISUAL_BASELINE_PASS=1`.
+- Cinco entradas globais e sete grupos internos testados no browser: `G6_NAV_VISUAL_5_AND_7=PASS`.
+- C008 (parcial): navegação por 7 grupos, deep links, reload e back/forward com fragmento preservado: `G4_C008_G6_DEEP_LINK_HISTORY=PASS`. Persistência exata de rolagem ainda requer teste.
+- C023 (parcial): sete grupos acessíveis no mobile 390 px, abrir manuscrito e ausência de overflow: `G4_C023_G6_MOBILE_NAV=PASS`. Drag, Quill e modais no mobile permanecem pendentes.
+- C025 (parcial): página privada anônima retorna 403/404 sem título sintético do projeto; REST anônimo 401/403: `G4_C025_PRIVATE_REST_UNAUTH=PASS`. Cache-Control autenticado e integração com CDN ainda requerem revisão.
+- Evidência: 26 screenshots sintéticas compactadas como artefato da execução; contêineres removidos.
+- Estado de produção G5 já comprovado independentemente na execução #44084091092; nenhum projeto live foi modificado no ensaio.
