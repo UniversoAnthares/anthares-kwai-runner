@@ -5,6 +5,7 @@ on:
       - audit/studio-item3-integrity-20261116
     paths:
       - .github/workflows/studio-item3-integrity.yml
+      - tools/studio-item3-integrity-audit.py
 permissions:
   contents: read
 concurrency:
