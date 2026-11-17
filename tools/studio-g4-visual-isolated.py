@@ -46,13 +46,14 @@ require __DIR__.'/index.php';
 ROUTER
 $PHP -S 127.0.0.1:PORT -t "$T/wp" "$T/wp/router.php" > "$T/web.log" 2>&1 &
 WEB_PID=$!
-for i in $(seq 1 12);do
+for i in $(seq 1 3);do
  if curl --noproxy '*' -fsS --max-time 2 'http://127.0.0.1:PORT/wp-login.php' >/dev/null 2>&1;then break;fi
  sleep 1
 done
 if ! curl --noproxy '*' -fsS --max-time 3 'http://127.0.0.1:PORT/wp-login.php' >/dev/null 2>&1;then
  echo 'G4_HTTP_START_FAILED=1'
  echo "G4_HTTP_LOG_BYTES=$(wc -c < "$T/web.log")"
+ echo "G4_WEB_LOG_FIRST=$(head -n 1 \"$T/web.log\" | sed -E 's/[^A-Za-z0-9 .,:_()\/-]/_/g' | cut -c1-140)"
  curl --noproxy '*' -s -o /dev/null --max-time 3 'http://127.0.0.1:PORT/wp-login.php' || echo "G4_CURL_ERROR_CODE=$?"
  curl --noproxy '*' -sS -o /dev/null --max-time 3 -w 'G4_HTTP_CODE=%{http_code}\n' 'http://127.0.0.1:PORT/wp-login.php' || :
  if kill -0 "$WEB_PID" 2>/dev/null;then echo 'G4_WEB_PROCESS_ALIVE=1';else echo 'G4_WEB_PROCESS_ALIVE=0';fi
