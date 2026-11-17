@@ -103,6 +103,10 @@ elif MODE=='apply':
   first=run_cli(args)
   match=re.search(r'ACF_APPLY_VERIFIED written=(\d+) skipped=(\d+)',first)
   require(match is not None,'ACF_FIRST_APPLY_UNVERIFIED')
+  if before['ACF_TARGET_EXISTING']=='414':
+   require(match.group(1)=='0' and match.group(2)=='414','ACF_REAPPLY_NOT_IDEMPOTENT')
+  else:
+   require(match.group(1)=='414' and match.group(2)=='0','ACF_FIRST_WRITE_NOT_414')
   print('STUDIO_G5_FIRST_WRITTEN='+match.group(1)+' SKIPPED='+match.group(2),flush=True)
   second=run_cli(args)
   match2=re.search(r'ACF_APPLY_VERIFIED written=(\d+) skipped=(\d+)',second)
