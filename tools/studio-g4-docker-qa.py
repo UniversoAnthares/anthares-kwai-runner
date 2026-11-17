@@ -368,9 +368,16 @@ def main():
        check(name in nav,'G6_NAV_MISSING_'+name)
       pids=wp('post','list','--post_type=anst_projeto','--post_status=publish','--field=ID').splitlines()
       check(len(pids)>=1,'G6_SYNTHETIC_PROJECT_MISSING')
-      page.goto(BASE_URL+'/?page_id='+str(newid)+'#studio/projeto/'+pids[0]+'/visao',
-                wait_until='domcontentloaded')
-      page.locator('.aest-group-tabs').wait_for(state='visible',timeout=20000)
+      page.goto(BASE_URL+'/?page_id='+str(newid)+'#studio/projetos',wait_until='domcontentloaded')
+      try:
+       page.locator('.aest-project-tile-open').first.wait_for(state='visible',timeout=18000)
+       page.locator('.aest-project-tile-open').first.click()
+       page.locator('.aest-group-tabs').wait_for(state='visible',timeout=14000)
+      except Exception:
+       print('G6_ROUTE_DEBUG_HASH='+str(page.evaluate('location.hash')),flush=True)
+       print('G6_ROUTE_DEBUG_TILES='+str(page.locator('.aest-project-tile-open').count()),flush=True)
+       print('G6_ROUTE_DEBUG_GROUPS='+str(page.locator('.aest-group-tabs').count()),flush=True)
+       raise
       buttons=page.locator('.aest-group-tabs button')
       check(buttons.count()==7,'G6_SEVEN_GROUPS_MISSING')
       print('G6_NAV_VISUAL_5_AND_7=PASS',flush=True)
