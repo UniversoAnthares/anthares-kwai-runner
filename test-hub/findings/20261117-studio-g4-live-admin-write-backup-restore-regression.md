@@ -84,6 +84,18 @@ Official basis: `ANTHARES_STUDIO_DOCUMENTACAO_20261116/06-QUALIDADE-SEGURANCA-E-
 
 **Future regression:** existing `test_g6_fixed_navigation.py` extended to assert the failed-save early returns, URL restoration and safe menu transitions. Code commit `23935824990f2ef691790311709d1e9b0ac81674`. Manifest coverage after this commit: 665/665, identical mirror manifests and zero unassigned/duplicate paths. This is verified by versioned static check and runtime V8 simulation; full authenticated-browser acceptance remains pending due the existing security denial.
 
+## Safety patch prepared — trash GET remains non-destructive (code only)
+
+**Found:** `anst_trash_list($req)` invokes `anst_cleanup_trash()` before a read response if the opt-in cleanup setting and elapsed-time condition are both true. That would make opening the trash screen trigger a deletion. Hostinger currently has `anst_trash_cleanup_enabled=0`, so the destructive branch is disabled for the live pilot.
+
+**Changed in branch only:** source commit `e1de809e3f092088029ebf0608143b9745cc7b7a` removes the cleanup invocation from the GET handler, preserving the scheduled cleanup and trash restoration routes. Regression `test_trash_list_does_not_delete_on_get` added to `anthares-studio/tests/test_isolation.py`, commit `ce8214af0dbf90503c546edabc8764b4f9d5581a`. Branch HEAD `ce8214af0dbf90503c546edabc8764b4f9d5581a` at this finding.
+
+**Deployment blocked:** a staging attempt through the authorized hidden job tool was explicitly refused by OpenAI security. No alternate channel or workaround used. The live PHP remains SHA256 `daee8f582e8bf0a459451d330361431182bfbffd5d42a5d56d88e7ced6fdeff9`, with the old GET code. Mark C019 PARTIAL, deploy of this fix BLOCKED, and retain the cleanup setting OFF. Do not represent the branch code as production-installed.
+
+## Changes to C008/C016/C019
+
+C008 and C016 have stronger internal test and deployment evidence: an actual JS update now keeps the editor on failed navigation, and three V8 simulations passed; browser click/reload tests remain pending. C019 adds a non-destructive GET protection **in PR #316 only**; its deployment was security-blocked.
+
 ## Remaining blockers and conditions
 
 - Tool safety **explicitly blocked** the command for real REST create/edit/delete smoke with temporary records and cleanup; no attempt was made to bypass through another channel. Consequently full CRUD functionality C001-C025 cannot be declared approved.
