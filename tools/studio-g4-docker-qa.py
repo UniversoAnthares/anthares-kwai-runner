@@ -414,7 +414,7 @@ def main():
       buttons=page.locator('.aest-group-tabs button')
       check(buttons.count()==7,'G6_SEVEN_GROUPS_MISSING')
       run_rest_matrix(root)
-     print('G6_NAV_VISUAL_5_AND_7=PASS',flush=True)
+      print('G6_NAV_VISUAL_5_AND_7=PASS',flush=True)
       page.screenshot(path=str(root/'shots/g6-five-seven-desktop.png'),full_page=True)
       for slug in ('pesquisa','planejamento','manuscrito','analises','revisao','publicacao','visao'):
        btn=page.locator('.aest-group-tabs button[data-tab="'+slug+'"]')
