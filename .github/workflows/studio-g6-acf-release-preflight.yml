@@ -1,0 +1,36 @@
+name: Studio G6 ACF Code Release Preflight
+on:
+  push:
+    branches: [coord/studio-g4-g5-20261116]
+    paths:
+      - .github/workflows/studio-g6-acf-release-preflight.yml
+      - tools/studio-g6-acf-code-release.py
+permissions:
+  contents: read
+concurrency:
+  group: studio-g6-acf-code-release-check-20261116
+  cancel-in-progress: false
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Validate deployment script and remote Python syntax
+        run: |
+          python3 - <<'PY'
+          import ast,pathlib,re
+          src=pathlib.Path('tools/studio-g6-acf-code-release.py').read_text(encoding='utf8')
+          ast.parse(src)
+          m=re.search(r'REMOTE=r"""(.*?)"""',src,re.S)
+          assert m
+          compile(m.group(1),'remote_studio_code_deploy.py','exec')
+          print('STUDIO_RELEASE_PYTHON_SYNTAX=PASS')
+          PY
+      - name: Check live SHA, 71 records, source version and staged PHP lint without changing live
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          STUDIO_DEPLOY_MODE: preflight
+        run: python3 tools/studio-g6-acf-code-release.py
