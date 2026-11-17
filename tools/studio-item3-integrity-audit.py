@@ -196,7 +196,7 @@ $out=[
  'write_flag'=>$writeFlag,'cleanup_flag'=>$cleanupFlag,
  'issues'=>$issues
 ];
-echo "STUDIO_ITEM3_RESULT=".wp_json_encode($out,JSON_UNESCAPED_SLASHES)."\\n";
+echo "STUDIO_ITEM3_RESULT=".wp_json_encode($out,JSON_UNESCAPED_SLASHES)."\n";
 '''
 bootstrap='define("WP_USE_THEMES",false);define("DISABLE_WP_CRON",true);require '+json.dumps(str(root/'wp-load.php'))+';'
 process=subprocess.run([phpbin,'-d','display_errors=stderr','-r',bootstrap+audit],
