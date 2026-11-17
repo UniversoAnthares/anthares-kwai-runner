@@ -1,0 +1,31 @@
+name: Anthares Studio G4 Missing Events ACF Live Readonly
+on:
+  push:
+    branches: [coord/studio-g4-g5-20261116]
+    paths:
+      - .github/workflows/studio-g4-events-audit.yml
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Compile Python source and SSH remote inline procedure
+        run: |
+          python3 - <<'PY'
+          import ast,re,pathlib
+          s=pathlib.Path('tools/studio-g4-events-gap-live-audit.py').read_text()
+          ast.parse(s)
+          m=re.search(r'REMOTE=r"""(.*?)"""',s,re.S)
+          assert m
+          compile(m.group(1),'studio_events_remote.py','exec')
+          print('G4_EVENTS_SOURCE_SYNTAX=PASS')
+          PY
+      - name: Count source and destination events without reading user content
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        run: python3 tools/studio-g4-events-gap-live-audit.py
