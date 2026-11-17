@@ -1,0 +1,486 @@
+{
+  "schema_version": "G5-offline-2026-11-16",
+  "status": "OFFLINE_NOT_REGISTERED",
+  "acf_version": "6.8.11-free",
+  "groups": 12,
+  "fields": 40,
+  "mappings": 52,
+  "legacy_namespace": "_anst_*",
+  "acf_namespace": "studio_*",
+  "technical_exemptions": [
+    "post_title, post_content, post_author, post_status, menu_order, ID e datas WordPress",
+    "_wp_trash_meta_time WordPress native",
+    "_anst_cleanup_active transient",
+    "_anst_trash_cleaned e anst_writes_enabled sao opcoes operacionais"
+  ],
+  "entries": [
+    {
+      "post_type": "anst_projeto",
+      "legacy_key": "_anst_start",
+      "target_field_name": "studio_start_mode",
+      "target_field_key": "field_anst01_start_mode_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_primitive",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_projeto",
+      "legacy_key": "_anst_visibility",
+      "target_field_name": "studio_privacy_state",
+      "target_field_key": "field_anst01_privacy_state_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_primitive",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_projeto",
+      "legacy_key": "_anst_topic",
+      "target_field_name": "studio_topic",
+      "target_field_key": "field_anst02_topic_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_raw_json_or_text",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_projeto",
+      "legacy_key": "_anst_premise",
+      "target_field_name": "studio_premise",
+      "target_field_key": "field_anst02_premise_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_raw_json_or_text",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_projeto",
+      "legacy_key": "_anst_logline",
+      "target_field_name": "studio_logline",
+      "target_field_key": "field_anst02_logline_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_raw_json_or_text",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_projeto",
+      "legacy_key": "_anst_storyline",
+      "target_field_name": "studio_storyline",
+      "target_field_key": "field_anst02_storyline_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_raw_json_or_text",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_projeto",
+      "legacy_key": "_anst_theme",
+      "target_field_name": "studio_theme",
+      "target_field_key": "field_anst02_theme_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_raw_json_or_text",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_projeto",
+      "legacy_key": "_anst_thesis",
+      "target_field_name": "studio_thesis",
+      "target_field_key": "field_anst02_thesis_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_raw_json_or_text",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_projeto",
+      "legacy_key": "_anst_tone",
+      "target_field_name": "studio_tone",
+      "target_field_key": "field_anst02_tone_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_raw_json_or_text",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_projeto",
+      "legacy_key": "_anst_summary",
+      "target_field_name": "studio_summary",
+      "target_field_key": "field_anst02_summary_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_raw_json_or_text",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_projeto",
+      "legacy_key": "_anst_events",
+      "target_field_name": "studio_events",
+      "target_field_key": "field_anst02_events_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_raw_json_or_text",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_projeto",
+      "legacy_key": "_anst_outline",
+      "target_field_name": "studio_outline",
+      "target_field_key": "field_anst02_outline_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_raw_json_or_text",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_projeto",
+      "legacy_key": "_anst_unlock_v1",
+      "target_field_name": "studio_unlock_legacy_json",
+      "target_field_key": "field_anst03_unlock_legacy_json_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_raw_json_or_text",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_projeto",
+      "legacy_key": "_anst_unlock_v2",
+      "target_field_name": "studio_unlock_json",
+      "target_field_key": "field_anst03_unlock_json_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_raw_json_or_text",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_projeto",
+      "legacy_key": "_anst_project_tone",
+      "target_field_name": "studio_project_tone",
+      "target_field_key": "field_anst04_project_tone_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_primitive",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_projeto",
+      "legacy_key": "_anst_board_columns",
+      "target_field_name": "studio_board_columns_json",
+      "target_field_key": "field_anst04_board_columns_json_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_raw_json_or_text",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_projeto",
+      "legacy_key": "_anst_legacy_cards_imported",
+      "target_field_name": "studio_legacy_cards_imported",
+      "target_field_key": "field_anst04_legacy_cards_imported_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_primitive",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_nota",
+      "legacy_key": "_anst_kind",
+      "target_field_name": "studio_note_kind",
+      "target_field_key": "field_anst05_note_kind_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_primitive",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_nota",
+      "legacy_key": "_anst_project",
+      "target_field_name": "studio_note_project_ref",
+      "target_field_key": "field_anst05_note_project_ref_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "remap_destination_id",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_cartao",
+      "legacy_key": "_anst_project",
+      "target_field_name": "studio_card_project_ref",
+      "target_field_key": "field_anst06_card_project_ref_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "remap_destination_id",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_cartao",
+      "legacy_key": "_anst_column",
+      "target_field_name": "studio_card_column",
+      "target_field_key": "field_anst06_card_column_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_primitive",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_cartao",
+      "legacy_key": "_anst_rank",
+      "target_field_name": "studio_card_rank",
+      "target_field_key": "field_anst06_card_rank_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_primitive",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_cartao",
+      "legacy_key": "_anst_color",
+      "target_field_name": "studio_card_color",
+      "target_field_key": "field_anst06_card_color_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_primitive",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_cartao",
+      "legacy_key": "_anst_card_notes",
+      "target_field_name": "studio_card_notes",
+      "target_field_key": "field_anst06_card_notes_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_raw_json_or_text",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_capitulo",
+      "legacy_key": "_anst_project",
+      "target_field_name": "studio_chapter_project_ref",
+      "target_field_key": "field_anst07_chapter_project_ref_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "remap_destination_id",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_capitulo",
+      "legacy_key": "_anst_delta",
+      "target_field_name": "studio_chapter_delta_json",
+      "target_field_key": "field_anst07_chapter_delta_json_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_raw_json_or_text",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_capitulo",
+      "legacy_key": "_anst_structure_map_v1",
+      "target_field_name": "studio_chapter_structure_map_json",
+      "target_field_key": "field_anst07_chapter_structure_map_json_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_raw_json_or_text",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_capitulo",
+      "legacy_key": "_anst_versions_v1",
+      "target_field_name": "studio_chapter_versions_json",
+      "target_field_key": "field_anst07_chapter_versions_json_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_raw_json_or_text",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_capitulo",
+      "legacy_key": "_anst_import_sha",
+      "target_field_name": "studio_chapter_import_sha",
+      "target_field_key": "field_anst07_chapter_import_sha_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_primitive",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_capitulo",
+      "legacy_key": "_anst_pre_encoding_repair_backup",
+      "target_field_name": "studio_chapter_pre_repair_delta",
+      "target_field_key": "field_anst07_chapter_pre_repair_delta_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_raw_json_or_text",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_capitulo",
+      "legacy_key": "_anst_pre_original_source_restore_20261113",
+      "target_field_name": "studio_chapter_legacy_emergency_delta",
+      "target_field_key": "field_anst07_chapter_legacy_emergency_delta_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_raw_json_or_text",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_projeto",
+      "legacy_key": "_anst_elements_v1",
+      "target_field_name": "studio_elements_json",
+      "target_field_key": "field_anst08_elements_json_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_raw_json_or_text",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_projeto",
+      "legacy_key": "_anst_elements_versions_v1",
+      "target_field_name": "studio_elements_versions_json",
+      "target_field_key": "field_anst08_elements_versions_json_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_raw_json_or_text",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_projeto",
+      "legacy_key": "_anst_review_v1",
+      "target_field_name": "studio_review_json",
+      "target_field_key": "field_anst13_review_json_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_raw_json_or_text",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_projeto",
+      "legacy_key": "_anst_source_id",
+      "target_field_name": "studio_source_id",
+      "target_field_key": "field_anst14_source_id_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_primitive",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_nota",
+      "legacy_key": "_anst_source_id",
+      "target_field_name": "studio_source_id",
+      "target_field_key": "field_anst14_source_id_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_primitive",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_capitulo",
+      "legacy_key": "_anst_source_id",
+      "target_field_name": "studio_source_id",
+      "target_field_key": "field_anst14_source_id_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_primitive",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_cartao",
+      "legacy_key": "_anst_source_id",
+      "target_field_name": "studio_source_id",
+      "target_field_key": "field_anst14_source_id_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_primitive",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_projeto",
+      "legacy_key": "_anst_source_type",
+      "target_field_name": "studio_source_type",
+      "target_field_key": "field_anst14_source_type_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_primitive",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_nota",
+      "legacy_key": "_anst_source_type",
+      "target_field_name": "studio_source_type",
+      "target_field_key": "field_anst14_source_type_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_primitive",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_capitulo",
+      "legacy_key": "_anst_source_type",
+      "target_field_name": "studio_source_type",
+      "target_field_key": "field_anst14_source_type_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_primitive",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_cartao",
+      "legacy_key": "_anst_source_type",
+      "target_field_name": "studio_source_type",
+      "target_field_key": "field_anst14_source_type_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_primitive",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_projeto",
+      "legacy_key": "_anst_source_sha256",
+      "target_field_name": "studio_source_sha256",
+      "target_field_key": "field_anst14_source_sha256_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_primitive",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_nota",
+      "legacy_key": "_anst_source_sha256",
+      "target_field_name": "studio_source_sha256",
+      "target_field_key": "field_anst14_source_sha256_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_primitive",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_capitulo",
+      "legacy_key": "_anst_source_sha256",
+      "target_field_name": "studio_source_sha256",
+      "target_field_key": "field_anst14_source_sha256_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_primitive",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_cartao",
+      "legacy_key": "_anst_source_sha256",
+      "target_field_name": "studio_source_sha256",
+      "target_field_key": "field_anst14_source_sha256_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "preserve_primitive",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_projeto",
+      "legacy_key": "_anst_cascade_project",
+      "target_field_name": "studio_cascade_project_ref",
+      "target_field_key": "field_anst14_cascade_project_ref_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "remap_destination_id",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_nota",
+      "legacy_key": "_anst_cascade_project",
+      "target_field_name": "studio_cascade_project_ref",
+      "target_field_key": "field_anst14_cascade_project_ref_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "remap_destination_id",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_capitulo",
+      "legacy_key": "_anst_cascade_project",
+      "target_field_name": "studio_cascade_project_ref",
+      "target_field_key": "field_anst14_cascade_project_ref_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "remap_destination_id",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_cartao",
+      "legacy_key": "_anst_cascade_project",
+      "target_field_name": "studio_cascade_project_ref",
+      "target_field_key": "field_anst14_cascade_project_ref_v1",
+      "legacy_storage": "postmeta",
+      "conversion": "remap_destination_id",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "user",
+      "legacy_key": "_anst_board_zoom_*",
+      "target_field_name": "studio_user_board_zoom_index_json",
+      "target_field_key": "field_anst16u_user_board_zoom_index_json_v1",
+      "legacy_storage": "user",
+      "conversion": "aggregate_project_zoom",
+      "status": "OFFLINE_NOT_MIGRATED"
+    },
+    {
+      "post_type": "anst_config",
+      "legacy_key": "option:anst_section_lesson_videos",
+      "target_field_name": "studio_course_lesson_links_json",
+      "target_field_key": "field_anst16c_course_lesson_links_json_v1",
+      "legacy_storage": "option",
+      "conversion": "copy_option_if_present",
+      "status": "OFFLINE_NOT_MIGRATED"
+    }
+  ]
+}
