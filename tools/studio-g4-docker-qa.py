@@ -539,6 +539,27 @@ def main():
      finally:anonymous.close()
     finally:browser.close()
    print('G4_G6_VISUAL_SANDBOX_PASS=1',flush=True)
+   # Backend acceptance uses synthetic user/project data only, outside production.
+   fixture=pathlib.Path(__file__).with_name('studio-g4-functional-acceptance.php')
+   check(fixture.is_file(),'G4_FUNCTION_FIXTURE_MISSING')
+   docker('cp',str(fixture),'anthares-g4-wp:/tmp/studio-g4-functional.php')
+   for acf in ('0','1'):
+    wp('option','update','anst_acf_runtime_enabled',acf)
+    cmd=['docker','exec','-u','www-data','-e','STUDIO_G4_SYNTHETIC_ACCEPTANCE=1',
+         'anthares-g4-wp','php','/tmp/wp-cli.phar','--path=/var/www/html','--skip-themes',
+         'eval-file','/tmp/studio-g4-functional.php']
+    test=subprocess.run(cmd,text=True,capture_output=True,timeout=150)
+    signals=[line for line in test.stdout.splitlines() if line.startswith('G4_FUNCTION_')]
+    for line in signals:print('G4_ACF_'+acf+'_'+line,flush=True)
+    if test.returncode!=0:
+     detail=(test.stderr.strip().splitlines() or ['UNKNOWN'])[-1]
+     detail=re.sub(r'[^A-Za-z0-9 _.:=/()-]','_',detail)[:150]
+     print('G4_ACF_'+acf+'_FAILURE='+detail,flush=True)
+     raise RuntimeError('G4_FUNCTION_BACKEND_FAILED_ACF_'+acf)
+    check('G4_FUNCTION_ACCEPTANCE_PASS=1' in test.stdout,'G4_FUNCTION_SUCCESS_MISSING_'+acf)
+    print('G4_BACKEND_ACCEPTANCE_ACF_'+acf+'=PASS',flush=True)
+   wp('option','update','anst_acf_runtime_enabled','0')
+   print('G4_BACKEND_WRITES_RESET=OFF',flush=True)
    archive=root/'evidence.zip'
    import zipfile
    with zipfile.ZipFile(archive,'w',compression=zipfile.ZIP_DEFLATED) as f:
