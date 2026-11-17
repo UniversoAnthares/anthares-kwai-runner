@@ -39,6 +39,15 @@ print('STUDIO_WEBROOT_THEME='+str(int((root/'wp-content/themes').is_dir())))
 print('STUDIO_LEGACY_PLUGIN_EXISTS='+str(int((root/'wp-content/plugins/anthares-estudio/anthares-estudio.php').is_file())))
 print('STUDIO_ACF_PLUGIN_EXISTS='+str(int((root/'wp-content/plugins/advanced-custom-fields/acf.php').is_file())))
 print('STUDIO_HAS_BUILTIN_ROUTER=1')
+
+for name in ['studio-g6-review-20261116','studio-g5-runtime-qa-20261116','studio-g7-domain-qa-20261116']:
+ p=private/name
+ if not (p/'.git').is_dir():continue
+ result=subprocess.run(['git','-C',str(p),'rev-parse','HEAD'],capture_output=True,text=True,timeout=6)
+ diff=subprocess.run(['git','-C',str(p),'status','--porcelain'],capture_output=True,text=True,timeout=6)
+ print('STUDIO_CHECKOUT_'+name.split('-')[1].upper()+'_HEAD='+result.stdout.strip()[:40])
+ print('STUDIO_CHECKOUT_'+name.split('-')[1].upper()+'_DIRTY_FILES='+str(len(diff.stdout.splitlines())))
+
 """
 if os.getenv('GITHUB_REF')!='refs/heads/coord/studio-g4-g5-20261116':raise RuntimeError('wrong branch')
 key,host,port,user=get_ssh_config(os.environ['GITLAB_TOKEN'])
