@@ -33,11 +33,13 @@ function g4code($r,$status,$code) {g4ok((int)$r['status']===$status,$code,'EXPEC
 $userA=get_user_by('login','g4synthetic');
 g4ok($userA instanceof WP_User,'C002','SYNTHETIC_ADMIN_MISSING');
 $uid=(int)$userA->ID;
-$external=wp_create_user('g4second_'.wp_generate_password(8,false,false),'qa-only-nonproduction','synthetic2@example.invalid');
+$seed=wp_generate_password(10,false,false);
+$external=wp_create_user('g4second_'.$seed,'qa-only-nonproduction','synthetic2_'.$seed.'@example.invalid');
 g4ok(!is_wp_error($external),'C024','SYNTHETIC_OTHER_CREATE');
 get_user_by('id',$external)->set_role('administrator');
 $anon=0;
-$outsider=wp_create_user('g4subscriber_'.wp_generate_password(8,false,false),'qa-only-nonproduction','synthetic3@example.invalid');
+$seed3=wp_generate_password(10,false,false);
+$outsider=wp_create_user('g4subscriber_'.$seed3,'qa-only-nonproduction','synthetic3_'.$seed3.'@example.invalid');
 g4ok(!is_wp_error($outsider),'C024','SYNTHETIC_SUBSCRIBER_CREATE');
 get_user_by('id',$outsider)->set_role('subscriber');
 rest_get_server();
