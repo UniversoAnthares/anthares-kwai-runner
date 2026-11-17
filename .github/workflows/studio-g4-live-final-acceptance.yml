@@ -1,0 +1,35 @@
+name: Anthares Studio G4 Live Installed WordPress Readonly Acceptance
+on:
+  push:
+    branches: [coord/studio-g4-g5-20261116]
+    paths:
+      - .github/workflows/studio-g4-live-final-acceptance.yml
+      - tools/studio-g4-live-final-acceptance.py
+permissions:
+  contents: read
+concurrency:
+  group: anthares-studio-g4-live-authenticated-readonly-20261117
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Compile both orchestration and remote Python
+        run: |
+          python3 - <<'PY'
+          import pathlib,ast,re
+          s=pathlib.Path('tools/studio-g4-live-final-acceptance.py').read_text(encoding='utf8')
+          ast.parse(s)
+          m=re.search(r'REMOTE=r"""(.*?)"""',s,re.S)
+          assert m
+          compile(m.group(1),'g4_live_accept_remote.py','exec')
+          print('G4_LIVE_PYTHON_SYNTAX=PASS')
+          PY
+      - name: Verify installed six blobs, ACF, 71 records, private page, owner and 423 write gate
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        run: python3 tools/studio-g4-live-final-acceptance.py
