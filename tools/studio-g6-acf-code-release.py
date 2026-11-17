@@ -133,8 +133,13 @@ tree_no_symlinks(live)
 stage_parent=pathlib.Path(tempfile.mkdtemp(prefix='studio-release-stage-',dir=private))
 backup=None
 try:
- stage=stage_parent/'anthares-studio'
- shutil.copytree(source/'anthares-studio',stage)
+ clean=stage_parent/'clean-source'
+ clone=subprocess.run(['git','clone','--quiet','--no-hardlinks','--local',str(source),str(clean)],capture_output=True,text=True,timeout=30)
+ require(clone.returncode==0,'CLEAN_SOURCE_CLONE_FAILED')
+ checkout=subprocess.run(['git','-C',str(clean),'checkout','--quiet','--detach',EXPECTED_HEAD],capture_output=True,text=True,timeout=15)
+ require(checkout.returncode==0,'CLEAN_SOURCE_CHECKOUT_FAILED')
+ require(not subprocess.check_output(['git','-C',str(clean),'status','--porcelain'],text=True,timeout=10).strip(),'SOURCE_CLONE_DIRTY')
+ stage=clean/'anthares-studio'
  tree_no_symlinks(stage)
  patched_plugin(stage)
  for p in [stage/'anthares-estudio.php',stage/'includes/acf/class-anst-acf-repository.php']:
