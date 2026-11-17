@@ -36,6 +36,12 @@ foreach (glob(WP_PLUGIN_DIR.'/anthares-studio/acf-json/group_anst*.json')?:[] as
     $g['active']=true;
     acf_add_local_field_group($g);
 }
+$fn=(new ReflectionFunction('anst_bootstrap'))->getFileName();
+$main=WP_PLUGIN_DIR.'/anthares-studio/anthares-estudio.php';
+WP_CLI::line('G5_CANARY_BOOTSTRAP_FROM_MAIN='.(realpath($fn)===realpath($main)?'1':'0'));
+WP_CLI::line('G5_CANARY_MAIN_INCLUDED='.(in_array(realpath($main),array_map('realpath',get_included_files()),true)?'1':'0'));
+WP_CLI::line('G5_CANARY_MAIN_HAS_ACF_CONST='.(str_contains((string)file_get_contents($main),'ANST_ACF_RUNTIME_APPROVED')?'1':'0'));
+WP_CLI::line('G5_CANARY_PLUGIN_MAIN_SHA256='.hash_file('sha256',$main));
 WP_CLI::line('G5_CANARY_APPROVED_CONST='.(defined('ANST_ACF_RUNTIME_APPROVED')?(ANST_ACF_RUNTIME_APPROVED?'1':'0'):'UNDEFINED'));
 WP_CLI::line('G5_CANARY_OPTION_READ='.get_option('anst_acf_runtime_enabled','0'));
 WP_CLI::line('G5_CANARY_ADAPTER_ENABLED='.(anst_acf_runtime_enabled()?'1':'0'));
