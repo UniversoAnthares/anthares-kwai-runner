@@ -568,6 +568,10 @@ def main():
      detail=(test.stderr.strip().splitlines() or ['UNKNOWN'])[-1]
      detail=re.sub(r'[^A-Za-z0-9 _.:=/()-]','_',detail)[:150]
      print('G4_ACF_'+acf+'_FAILURE='+detail,flush=True)
+     logs=subprocess.run(['docker','logs','--tail','28','anthares-g4-wp'],capture_output=True,text=True)
+     for line in (logs.stdout+'\n'+logs.stderr).splitlines()[-28:]:
+      if any(word in line.lower() for word in ('fatal','uncaught','exception','error','warning')):
+       print('G4_ACF_'+acf+'_PHP_DIAGNOSTIC='+re.sub(r'[^A-Za-z0-9 _:/.,()=-]','_',line)[:180],flush=True)
      raise RuntimeError('G4_FUNCTION_BACKEND_FAILED_ACF_'+acf)
     check('G4_FUNCTION_ACCEPTANCE_PASS=1' in test.stdout,'G4_FUNCTION_SUCCESS_MISSING_'+acf)
     print('G4_BACKEND_ACCEPTANCE_ACF_'+acf+'=PASS',flush=True)
