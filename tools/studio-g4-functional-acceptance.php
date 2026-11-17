@@ -104,14 +104,15 @@ for($step=0;$step<=10;$step++){
  $blank=$out['state'];
 }
 g4ok($blank['completed']===true && $blank['step']===10,'C013','UNLOCK_COMPLETED');
-g4code(g4request($uid,'POST',"/projects/$project/unlock",['state'=>$blank+['revision'=>0]]),409,'C022');
+$staleUnlock=$blank;$staleUnlock['revision']=0;
+g4code(g4request($uid,'POST',"/projects/$project/unlock",['state'=>$staleUnlock]),409,'C022');
 $chapterA=g4success(g4request($uid,'POST','/chapters',['project'=>$project,'title'=>'Capítulo um']),'C014');
 $chapterA=(int)$chapterA['id'];
 $chapterB=g4success(g4request($uid,'POST','/chapters',['project'=>$project,'title'=>'Capítulo dois']),'C014');
 $chapterB=(int)$chapterB['id'];
 g4success(g4request($uid,'POST','/chapters/reorder',['project'=>$project,'ids'=>[$chapterB,$chapterA]]),'C014');
 g4ok((int)get_post($chapterB)->menu_order===0,'C014','CHAPTER_ORDER');
-g4success(g4request($uid,'POST',"/chapters/$chapterA/structure",['model'=>'three_acts','stage'=>'setup','revision'=>0]),'C014');
+g4success(g4request($uid,'POST',"/chapters/$chapterA/structure",['model'=>'three_acts','stage'=>'ato1','revision'=>0]),'C014');
 $start=anst_chapter_data(get_post($chapterA));$oldHash=$start['contentHash'];
 $delta1=['ops'=>[['insert'=>"Olá, capítulo 1! 😄\n",'attributes'=>['bold'=>true]],['insert'=>'Itálico','attributes'=>['italic'=>true]],['insert'=>"\n"]]];
 $updated=g4success(g4request($uid,'POST',"/chapters/$chapterA",['delta'=>$delta1,'expected_hash'=>$oldHash]),'C015');
