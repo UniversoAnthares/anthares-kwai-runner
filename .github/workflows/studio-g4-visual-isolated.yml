@@ -1,0 +1,41 @@
+name: Anthares Studio G4 Authenticated Visual Isolated QA
+on:
+  push:
+    branches:
+      - coord/studio-g4-g5-20261116
+    paths:
+      - .github/workflows/studio-g4-visual-isolated.yml
+      - tools/studio-g4-visual-isolated.py
+permissions:
+  contents: read
+concurrency:
+  group: anthares-studio-g4-visual-private-20261116
+  cancel-in-progress: false
+jobs:
+  g4visual:
+    if: github.repository == 'UniversoAnthares/anthares-kwai-runner'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Static syntax validation only
+        run: |
+          python3 - <<'PY'
+          import ast,pathlib,re
+          s=pathlib.Path('tools/studio-g4-visual-isolated.py').read_text(encoding='utf8')
+          ast.parse(s)
+          m=re.search(r'GENERATE=r"""(.*?)"""',s,re.S)
+          assert m
+          compile(m.group(1),'remote_setup_generator.py','exec')
+          print('G4_VISUAL_STATIC_SYNTAX_PASS=1')
+          PY
+      - name: Prepare runner Chrome control
+        run: |
+          python3 -m pip install -q playwright
+          command -v google-chrome
+      - name: Compare original and studio UI in restored WordPress at desktop/mobile
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        run: python3 tools/studio-g4-visual-isolated.py
