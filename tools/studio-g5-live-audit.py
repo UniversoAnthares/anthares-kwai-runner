@@ -53,7 +53,7 @@ for d in sorted(private.iterdir()):
 print('G5_BACKUPS_VERIFIED='+str(len(eligible)),flush=True)
 php=r'''define('DISABLE_WP_CRON',true); require 'WPLOAD_MARKER';
 global $wpdb;
-$count=function($prefix){return (int)$wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type IN ('{$prefix}_projeto','{$prefix}_nota','{$prefix}_capitulo','{$prefix}_cartao')");};
+$count=function($prefix)use($wpdb){return (int)$wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type IN ('{$prefix}_projeto','{$prefix}_nota','{$prefix}_capitulo','{$prefix}_cartao')");};
 $state=[
  'old'=>$count('aest'),'new'=>$count('anst'),
  'writes'=>get_option('anst_writes_enabled','0'),
