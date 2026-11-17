@@ -1,0 +1,35 @@
+name: Anthares Studio G5 Existing ACF Integrity Readonly
+on:
+  push:
+    branches: [coord/studio-g4-g5-20261116]
+    paths:
+      - .github/workflows/studio-g5-acf-compare.yml
+      - tools/studio-g5-acf-compare-live.py
+permissions:
+  contents: read
+concurrency:
+  group: studio-g5-existing-acf-verify-20261117
+  cancel-in-progress: false
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Compile source and remote PHP string
+        run: |
+          python3 - <<'PY'
+          import ast,pathlib,re
+          s=pathlib.Path('tools/studio-g5-acf-compare-live.py').read_text(encoding='utf8')
+          ast.parse(s)
+          m=re.search(r'REMOTE=r"""(.*?)"""',s,re.S)
+          assert m
+          compile(m.group(1),'g5_acf_compare_remote.py','exec')
+          print('G5_COMPARE_SYNTAX=PASS')
+          PY
+      - name: Compare all 414 migrated values against historical legacy without writes
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        run: python3 tools/studio-g5-acf-compare-live.py
