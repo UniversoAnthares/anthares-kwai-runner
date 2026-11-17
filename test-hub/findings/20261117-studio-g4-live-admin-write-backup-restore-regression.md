@@ -147,6 +147,14 @@ All these operations ran in detached Session 0 jobs and completed; no desktop wi
 - Teste HTTP publico HTTPS /studio/ sem cookies ou sessao: **404**. Complementa anonimo REST 401, acesso cruzado de autores 404 e consulta do proprietario 200.
 - Ficam pendentes teste real de mutacao REST, browser autenticado desktop/mobile, restauracao integral em banco isolado e execucao da suite completa da branch do PR; respeitar negativas de seguranca anteriores.
 
+## G4 Notes and review/version isolation (17 Nov, late afternoon)
+
+- Three additional authenticated GET endpoint comparisons against a foreign author's project/chapter: review, elements history, chapter history. Foreign account returned HTTP 404 in all three; the rightful author returned HTTP 200 in all three. Six read-only checks PASS. Static isolated-db fixture expanded in code commit 85ff1aa4e8acf8c9f2460927618816da0f8c2c7a, with live read-only proof; fixture full run remains pending.
+- The Studio note editor previously rejected a successfully saved note if WordPress sanitize_textarea_field altered the text, leading to misleading failure and possible duplicate re-submission. Now checks note ID, project ID and kind, records the returned server note, and displays a formatting-adjustment notice if content differs. Code commit 64fa7af2cb16c721f26234493ba20976c1cc40d9; regression cc9f0d07cb7e4d2338d4da9b640c901b88ffe74c. JavaScript V8 simulations: 3/3 PASS.
+- Note fix installed with strict Git blob check and private backup; live JS blob 46f24f43355e4c4eb99f4e51203d3cf38237167c. Live PHP SHA256 abb62797f3f3cf1ed6e32acaf45bfade3fbc5a75d1effb666ad6bf93e699968b, legacy PHP unchanged.
+- Post-deploy legacy installed Python suite 13/13 PASS, PHP 8.3 lint PASS. GitHub branch QA manifest 665/665 exact coverage, zero missing, duplicates, or extra paths, mirrored manifests identical. No workflow status checks reported on current commit; HEAD-specific suite remains unproven.
+- Browser authenticated test and actual POST/DELETE were not retried due the prior explicit tool security denial. No alternate agent was used to replicate those denied operations.
+
 ## Remaining blockers and conditions
 
 - Tool safety **explicitly blocked** the command for real REST create/edit/delete smoke with temporary records and cleanup; no attempt was made to bypass through another channel. Consequently full CRUD functionality C001-C025 cannot be declared approved.
