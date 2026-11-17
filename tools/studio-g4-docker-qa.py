@@ -188,8 +188,8 @@ def setup_docker(root,info):
         '-e','WORDPRESS_DB_USER=wordpress',
         '-e','WORDPRESS_DB_PASSWORD=synthetic_db_123',
         '-e','WORDPRESS_DB_NAME=wordpress',
-        '-v',str(plugin_root)+':/var/www/html/wp-content/plugins:ro',
-        '-v',str(themes)+':/var/www/html/wp-content/themes:ro',
+        '-v',str(plugin_root)+':/var/www/html/wp-content/plugins',
+        '-v',str(themes)+':/var/www/html/wp-content/themes',
         'wordpress:php8.3-apache')
  # Copy wp-cli only into ephemeral docker. No package install on production.
  cli=root/'wp-cli.phar'
