@@ -102,7 +102,14 @@ def main():
         marker=None
         try:
             proc.stdin.write(setup);proc.stdin.close()
-            if not ready.wait(140):
+            if not ready.wait(80):
+                stages=[v for v in output if v.startswith(('G4_','G5_','G6_'))]
+                print('G4_SETUP_STAGES='+','.join(stages[-12:])[:300],flush=True)
+                last=(errors[-1] if errors else 'NO_STDERR')
+                last=re.sub(r'(?i)password[^\\s]*|token[^\\s]*|secret[^\\s]*','[REDACTED]',last)
+                last=re.sub(r'[^A-Za-z0-9 _.:=()\\[\\]/-]','_',last)[:180]
+                print('G4_SETUP_FAILURE_LAST='+last,flush=True)
+                print('G4_SSH_SUBPROCESS_EXIT='+str(proc.poll()),flush=True)
                 raise RuntimeError('G4_ISOLATED_HTTP_NOT_READY')
             marker=next((v.split('=',1)[1] for v in output if v.startswith('G4_STOP_FILE=')),None)
             baseurl=f'http://127.0.0.1:{port}'
