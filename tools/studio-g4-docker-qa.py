@@ -332,9 +332,9 @@ def run_rest_matrix(root):
         for line in result.stdout.splitlines():
             if line.startswith('G4_'):print(line,flush=True)
         if result.returncode:
-            last=(result.stderr.strip().splitlines() or ['NO_STDERR'])[-1]
-            safe=re.sub(r'[^A-Za-z0-9 /:()_.=-]','_',last)[:180]
-            print('G4_REST_MATRIX_ERROR_MODE='+mode+' '+safe,flush=True)
+            for n,line in enumerate((result.stderr.strip().splitlines() or ['NO_STDERR'])[-8:]):
+                safe=re.sub(r'[^A-Za-z0-9 /:()_.=-]','_',line)[:210]
+                print('G4_REST_MATRIX_ERROR_'+str(n)+'_MODE='+mode+' '+safe,flush=True)
             raise RuntimeError('G4_REST_MATRIX_FAILED_'+mode)
         check('G4_SYNTHETIC_REST_MATRIX_'+mode+'=PASS' in result.stdout,
               'G4_REST_MATRIX_SUCCESS_MARKER_MISSING_'+mode)
@@ -391,6 +391,7 @@ def main():
        if pth.is_file() and not pth.is_symlink():os.chmod(pth,0o644)
      docker('restart','anthares-g4-wp')
      import time;time.sleep(8)
+     run_rest_matrix(root)
      context=login_context(browser,1440,900)
      try:
       page=context.new_page()
@@ -413,7 +414,6 @@ def main():
        raise
       buttons=page.locator('.aest-group-tabs button')
       check(buttons.count()==7,'G6_SEVEN_GROUPS_MISSING')
-      run_rest_matrix(root)
       print('G6_NAV_VISUAL_5_AND_7=PASS',flush=True)
       page.screenshot(path=str(root/'shots/g6-five-seven-desktop.png'),full_page=True)
       for slug in ('pesquisa','planejamento','manuscrito','analises','revisao','publicacao','visao'):
