@@ -1,0 +1,35 @@
+name: Anthares Studio Item3 - Readonly 71 Pair Integrity
+on:
+  push:
+    branches:
+      - audit/studio-item3-integrity-20261116
+    paths:
+      - .github/workflows/studio-item3-integrity.yml
+permissions:
+  contents: read
+concurrency:
+  group: anthares-studio-g3-integrity-readonly-20261116
+  cancel-in-progress: false
+jobs:
+  audit:
+    if: github.repository == 'UniversoAnthares/anthares-kwai-runner' && github.ref == 'refs/heads/audit/studio-item3-integrity-20261116'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Validate both audit script syntaxes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          script=Path('tools/studio-item3-integrity-audit.py')
+          context={'__name__':'syntax_only'}
+          exec(compile(script.read_text(),str(script),'exec'),context)
+          compile(context['REMOTE'],'remote_readonly_g3.py','exec')
+          print('STUDIO_G3_SYNTAX=PASS')
+          PY
+      - name: Audit 71 copied records and relationships (READ ONLY)
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        run: python3 tools/studio-item3-integrity-audit.py
