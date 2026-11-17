@@ -1,0 +1,38 @@
+name: Anthares Studio G5 ACF Mapping Live
+on:
+  push:
+    branches: [coord/studio-g4-g5-20261116]
+    paths:
+      - .github/workflows/studio-g5-map-live.yml
+permissions:
+  contents: read
+jobs:
+  publish-map:
+    if: github.repository == 'UniversoAnthares/anthares-kwai-runner'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Check Python scripts syntax
+        run: |
+          python3 - <<'PY'
+          import pathlib,ast,re
+          s=pathlib.Path('tools/studio-g5-map-live.py').read_text()
+          ast.parse(s)
+          m=re.search(r'REMOTE=r"""(.*?)"""',s,re.S)
+          assert m
+          compile(m.group(1),'remote_g5_map.py','exec')
+          print('STUDIO_G5_MAP_SYNTAX=PASS')
+          PY
+      - name: Verify the pinned ACF mapping and live G6
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          STUDIO_G5_MAP_MODE: preflight
+        run: python3 tools/studio-g5-map-live.py
+      - name: Publish exact pinned mapping only
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          STUDIO_G5_MAP_MODE: publish
+        run: python3 tools/studio-g5-map-live.py
