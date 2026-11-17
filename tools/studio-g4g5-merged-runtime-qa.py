@@ -65,13 +65,13 @@ add_filter('pre_delete_post',static function($pre,$post,$force_delete){
  php.write_text(code,encoding='utf-8')
  for name,count in [('estudio.css',509),('estudio-dark.css',216)]:
   p=repo/'anthares-studio/assets'/name
-  text=p.read_text(encoding='utf-8')
+  text=p.read_bytes().decode('utf-8')
   fail(text.count('page-id-19344')==count,'CSS_BASELINE_CHANGED_'+name)
   text=text.replace('page-id-19344','anst-studio-page')
   if name=='estudio.css':
    fail(text.count('article#post-19344')==6,'ARTICLE_SELECTOR_COUNT_CHANGED')
    text=text.replace('article#post-19344','article')
-  p.write_text(text,encoding='utf-8')
+  p.write_bytes(text.encode('utf-8'))
  tests=repo/'anthares-studio/tests/test_isolation.py'
  t=tests.read_text(encoding='utf-8')
  remove=[
