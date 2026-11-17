@@ -1,10 +1,21 @@
 #!/usr/bin/env python3
 """One-time read-only Hostinger feasibility probe. No credentials disclosed."""
-import importlib.util
-import os,pathlib,subprocess,tempfile
-HERE=pathlib.Path(__file__).resolve().parent
-spec=importlib.util.spec_from_file_location('anthares_existing_ssh',HERE/'studio-css-live-once.py')
-base=importlib.util.module_from_spec(spec);spec.loader.exec_module(base)
+import json,os,pathlib,socket,subprocess,tempfile,urllib.request
+HOST_KEY='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA7FQ2RBq0cii+VVCqcB90JxkJRPdurdrX1RGThhKtT2'
+def get_ssh_config(token):
+    req=urllib.request.Request('https://gitlab.com/api/v4/projects/87361776/variables?per_page=100',
+        headers={'PRIVATE-TOKEN':token,'User-Agent':'anthares-studio-g4g5-readonly-probe'})
+    with urllib.request.urlopen(req,timeout=20) as response:
+        rows=json.load(response)
+    values={x.get('key'):x.get('value') for x in rows}
+    needed=('ANTHARES_QA_SSH_KEY','ANTHARES_QA_SSH_HOST','ANTHARES_QA_SSH_USER')
+    if any(not values.get(x) for x in needed):raise RuntimeError('HOSTINGER_SSH_BRIDGE_UNAVAILABLE')
+    host=values['ANTHARES_QA_SSH_HOST'];user=values['ANTHARES_QA_SSH_USER']
+    port=str(values.get('ANTHARES_QA_SSH_PORT') or '65002')
+    if user!='u566597497' or port!='65002':raise RuntimeError('HOSTINGER_TARGET_UNEXPECTED')
+    ips={r[4][0] for r in socket.getaddrinfo(host,None,family=socket.AF_INET)}
+    if ips!={'195.35.39.110'}:raise RuntimeError('HOSTINGER_ADDRESS_UNEXPECTED')
+    return values['ANTHARES_QA_SSH_KEY'],host,port,user
 REMOTE=r"""
 import os,pathlib,shutil,subprocess
 home=pathlib.Path.home()
@@ -30,10 +41,10 @@ print('STUDIO_ACF_PLUGIN_EXISTS='+str(int((root/'wp-content/plugins/advanced-cus
 print('STUDIO_HAS_BUILTIN_ROUTER=1')
 """
 if os.getenv('GITHUB_REF')!='refs/heads/coord/studio-g4-g5-20261116':raise RuntimeError('wrong branch')
-key,host,port,user=base.get_ssh_config(os.environ['GITLAB_TOKEN'])
+key,host,port,user=get_ssh_config(os.environ['GITLAB_TOKEN'])
 with tempfile.TemporaryDirectory(prefix='g4g5-probe-') as tmp:
     k=pathlib.Path(tmp)/'key';k.write_text(key);k.chmod(0o600)
-    h=pathlib.Path(tmp)/'known_hosts';h.write_text('anthares-g4g5-probe '+base.HOST_KEY+'\n')
+    h=pathlib.Path(tmp)/'known_hosts';h.write_text('anthares-g4g5-probe '+HOST_KEY+'\n')
     cmd=['ssh','-T','-i',str(k),'-p',port,'-o','IdentitiesOnly=yes','-o','BatchMode=yes',
          '-o','StrictHostKeyChecking=yes','-o','UserKnownHostsFile='+str(h),
          '-o','HostKeyAlias=anthares-g4g5-probe','-o','ConnectTimeout=10',
