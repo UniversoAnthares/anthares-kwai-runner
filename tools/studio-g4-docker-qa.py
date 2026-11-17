@@ -57,7 +57,7 @@ def run(cmd,**kwargs):
 def docker(*args):
  return run(['docker',*args],capture_output=True).stdout.strip()
 def wp(*args):
- return docker('exec','-u','www-data','anthares-g4-wp','php','/tmp/wp-cli.phar','--path=/var/www/html','--skip-plugins','--skip-themes',*map(str,args))
+ return docker('exec','-u','www-data','anthares-g4-wp','php','/tmp/wp-cli.phar','--path=/var/www/html','--skip-themes',*map(str,args))
 def safe_extract(bundle,destination):
  destination.mkdir(parents=True,exist_ok=True)
  with tarfile.open(fileobj=io.BytesIO(bundle),mode='r:gz') as t:
