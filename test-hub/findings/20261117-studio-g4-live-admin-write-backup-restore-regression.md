@@ -17,7 +17,8 @@ ORIGINAL LEGACY PHP SHA256: 13c3c79676bc25ead5a2b02caa15306cbdefbfaf6647fbf8a636
 5. The authenticated frontend account was independently verified to have administrator privileges. Nonadmin example with legacy exception had read permission and denied pilot writes.
 6. Static assets on live Studio match the GitHub PR #316 branch blob IDs: `estudio.js` 18669c8fa7f24efcacc9c040145ecc0c7fa4db03; `estudio.css` a0238eb95b78da38b427b1da566463f611fcd37c; `studio-g6-navigation.css` 35d4aa202cf0ae1b8fa362f9ef4719d1b6287b9d. Legacy original PHP SHA remained unchanged.
 7. Live `test_isolation.py` previously failed 2 tests comparing raw CSS hashes after scoped Studio CSS G4. Corrected the two expected hashes to the approved scoped assets, renamed test, preserved original test in private backup. **Python unittest discover: 13 tests run, 13 PASS** (plus staging fixture 8 PASS). PHP lint PASS. PR #316 additionally fixed stale unit assertion following shared lesson permission gate.
-8. Read-only post-activation database parity: AEST and ANST counts each: projeto 35, nota 13, capítulo 7, cartão 16 (total 71 including trash). Historical 7 Quill Delta SHA matches and 28 REST route parity remain recorded in earlier Test Hub finding.
+8. CSS scope verification on live deployment: main `estudio.css` has **509** `anst-studio-page` selectors, dark CSS has **216**, and both contain **zero** `page-id-19344` selectors. These names and counts match versioned G4 assertions.
+9. Read-only post-activation database parity: AEST and ANST counts each: projeto 35, nota 13, capítulo 7, cartão 16 (total 71 including trash). Historical 7 Quill Delta SHA matches and 28 REST route parity remain recorded in earlier Test Hub finding.
 
 ## Remaining blockers and conditions
 
