@@ -88,7 +88,8 @@ g4expect('POST','/chapters/'.$chapter.'/structure',['model'=>$model,'stage'=>$st
 g4expect('POST','/chapters/'.$chapter.'/structure',['model'=>$model,'stage'=>$stage,'revision'=>0],409,'CHAPTER_STRUCTURE_STALE');
 g4pass('C014_CHAPTER_RENAME_REORDER_STRUCTURE');
 $delta1=['ops'=>[['insert'=>"Olá, Ω e 🙂\n"],['insert'=>'Negrito','attributes'=>['bold'=>true]],['insert'=>"\n"]]];
-g4expect('POST','/chapters/'.$chapter,['delta'=>$delta1],200,'QUILL_SAVE');
+$hash=anst_chapter_data(get_post($chapter))['contentHash'];
+g4expect('POST','/chapters/'.$chapter,['delta'=>$delta1,'expected_hash'=>$hash],200,'QUILL_SAVE');
 $boot=g4expect('GET','/bootstrap',['project'=>$project],200,'BOOT_AFTER_SAVE');
 $found=array_values(array_filter($boot['chapters'],fn($x)=>(int)$x['id']===(int)$chapter));
 if(count($found)!==1||$found[0]['delta']!==$delta1)throw new RuntimeException('G4_QUILL_PERSISTENCE');
@@ -97,8 +98,14 @@ $snap=g4expect('POST','/chapters/'.$chapter.'/versions',['action'=>'snapshot'],2
 if(count($snap)<1)throw new RuntimeException('G4_SNAPSHOT_MISSING');
 $versionId=(string)$snap[0]['id'];
 $delta2=['ops'=>[['insert'=>"Segunda edição\n"]]];
-g4expect('POST','/chapters/'.$chapter,['delta'=>$delta2],200,'QUILL_CHANGE');
-g4expect('POST','/chapters/'.$chapter.'/versions',['action'=>'restore','version'=>$versionId],200,'QUILL_RESTORE');
+$first=anst_chapter_data(get_post($chapter))['contentHash'];
+g4expect('POST','/chapters/'.$chapter,['delta'=>$delta2,'expected_hash'=>$first],200,'QUILL_CHANGE');
+g4expect('POST','/chapters/'.$chapter,['delta'=>$delta1,'expected_hash'=>$first],409,'CONCURRENT_STALE_WRITER');
+if(json_decode((string)anst_meta_get($chapter,'_anst_delta',true),true)!==$delta2)throw new RuntimeException('G4_STALE_OVERWRITE_OCCURRED');
+g4expect('POST','/chapters/'.$chapter,['delta'=>$delta1],428,'CONCURRENT_VERSION_REQUIRED');
+g4pass('C022_CONCURRENT_WRITERS_CONFLICT');
+$restoreHash=anst_chapter_data(get_post($chapter))['contentHash'];
+g4expect('POST','/chapters/'.$chapter.'/versions',['action'=>'restore','version'=>$versionId,'expected_hash'=>$restoreHash],200,'QUILL_RESTORE');
 if(json_decode((string)anst_meta_get($chapter,'_anst_delta',true),true)!==$delta1)throw new RuntimeException('G4_RESTORE_QUILL_MISMATCH');
 g4pass('C017_QUILL_SNAPSHOT_AND_RESTORE');
 $review=g4expect('POST','/projects/'.$project.'/review',['revision'=>0,'action'=>'create','chapter'=>$chapter,'type'=>'dialogo','priority'=>'normal','note'=>'Revisar diálogo','quote'=>'Negrito','offset'=>1],200,'REVIEW_ADD')['review'];
