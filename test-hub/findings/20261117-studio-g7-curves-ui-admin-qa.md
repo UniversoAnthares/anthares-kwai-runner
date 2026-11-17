@@ -23,3 +23,10 @@ LEASE: test-hub/findings/20261117-studio-g7-curves-ui-admin-guard-lease.md
 - ACF em produção permanece OFF. G7 não foi implantado no WordPress e a PR #318 continua DRAFT sobre a branch G7 isolada.
 - Testes reais com mutação REST e acesso à aba autenticada permanecem bloqueados pelas verificações de segurança já registradas no G4; nenhuma rota alternativa foi utilizada.
 - Requisitos B05–B30 permanecem abertos onde não há prova de implementação integral; comercial/publicação exige contratos e consentimentos específicos.
+
+## B15 chronology extension
+- Estrutura > Cronologia uses G7 event/scene/beat records, places them by authored presentation_order, and renders authored story_time strings verbatim. Missing order/time values are shown explicitly rather than inferred.
+- V8 simulated render tests: **8/8 PASS**, including non-numeric times, XSS escape, absent scores, pagination, ACF error fallback.
+- Isolated host QA against commit `3d5878474b8ca3fa166acc09cc5e2e21d4cabc58`: **63/63 Python unit tests PASS**, PHP8.3 lint 2/2 PASS, manifest 676/676 PASS and QA orchestrator 11/11 PASS. Source checkout removed in exit trap.
+- Documentation-only subsequent commit `87f993e52f8d74983d63d58fd833550ecf6014dc` records implementation; no runtime change after the successful isolated test.
+
