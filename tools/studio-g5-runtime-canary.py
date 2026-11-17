@@ -36,6 +36,9 @@ foreach (glob(WP_PLUGIN_DIR.'/anthares-studio/acf-json/group_anst*.json')?:[] as
     $g['active']=true;
     acf_add_local_field_group($g);
 }
+WP_CLI::line('G5_CANARY_APPROVED_CONST='.(defined('ANST_ACF_RUNTIME_APPROVED')?(ANST_ACF_RUNTIME_APPROVED?'1':'0'):'UNDEFINED'));
+WP_CLI::line('G5_CANARY_OPTION_READ='.get_option('anst_acf_runtime_enabled','0'));
+WP_CLI::line('G5_CANARY_ADAPTER_ENABLED='.(anst_acf_runtime_enabled()?'1':'0'));
 if (!anst_acf_runtime_enabled())WP_CLI::error('G5_CANARY_NOT_ENABLED');
 if (count(acf_get_local_field_groups())<12)WP_CLI::error('G5_ACF_GROUP_REGISTRATION_FAILED');
 $bad=0;$tested=0;$delta=0;
