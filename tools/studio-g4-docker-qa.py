@@ -360,6 +360,22 @@ def main():
    info=retrieve_code(root)
    patch_integrated(root/'dev/anthares-studio',root/'live/anthares-studio')
    plugin,newid=setup_docker(root,info)
+   if os.getenv('G4_REST_FAST')=='1':
+    staged=plugin/'anthares-studio'
+    subprocess.run(['sudo','chown','-R',str(os.getuid())+':'+str(os.getgid()),str(plugin)],check=True)
+    shutil.rmtree(staged)
+    shutil.copytree(root/'dev/anthares-studio',staged)
+    for current,folders,files in os.walk(staged):
+     os.chmod(current,0o755)
+     for folder in folders:os.chmod(pathlib.Path(current)/folder,0o755)
+     for filename in files:
+      pth=pathlib.Path(current)/filename
+      if pth.is_file() and not pth.is_symlink():os.chmod(pth,0o644)
+    docker('restart','anthares-g4-wp')
+    import time;time.sleep(6)
+    run_rest_matrix(root)
+    print('G4_REST_FAST_PROVEN=1',flush=True)
+    return
    with sync_playwright() as p:
     browser=p.chromium.launch(headless=True,executable_path='/usr/bin/google-chrome',
       args=['--no-sandbox','--disable-gpu','--disable-background-networking'])
