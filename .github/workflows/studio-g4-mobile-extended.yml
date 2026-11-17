@@ -1,0 +1,45 @@
+name: Anthares Studio G4 Mobile Modal Drag Scroll Acceptance
+on:
+  push:
+    branches: [coord/studio-g4-g5-20261116]
+    paths:
+      - .github/workflows/studio-g4-mobile-extended.yml
+      - tools/studio-g4-mobile-extended.py
+permissions:
+  contents: read
+concurrency:
+  group: studio-g4-mobile-extended-qa-20261117
+  cancel-in-progress: false
+jobs:
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Verify Python syntaxes
+        run: |
+          python3 - <<'PY'
+          import ast,pathlib
+          for p in ('tools/studio-g4-mobile-extended.py','tools/studio-g4-docker-qa.py','tools/studio-g4-browser-final.py'):
+            ast.parse(pathlib.Path(p).read_text(encoding='utf8'))
+          print('G4_MOBILE_QA_SYNTAX=PASS')
+          PY
+      - name: Install synthetic browser prerequisites
+        run: |
+          python3 -m pip install -q playwright
+          command -v docker
+          command -v google-chrome
+      - name: Exercise modal persistence, card drag and route scroll in synthetic mobile viewport
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          G4_MOBILE_EVIDENCE_DIR: /tmp/studio-g4-mobile-evidence
+        run: python3 tools/studio-g4-mobile-extended.py
+      - name: Archive synthetic-only evidence
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: anthares-g4-mobile-modal-drag-scroll
+          path: /tmp/studio-g4-mobile-evidence/g4-mobile-modal-drag-scroll.png
+          retention-days: 3
