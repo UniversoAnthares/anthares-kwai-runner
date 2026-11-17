@@ -119,6 +119,10 @@ add_filter('pre_delete_post',static function($pre,$post,$force_delete){
 },10,3);"""
  check(s.count(anchor)==1,'G6_TRASH_GUARD_BASE_CHANGED')
  s=s.replace(anchor,anchor+'\n'+guard)
+ approval="// A ativação do repositório ACF exige também anst_acf_runtime_enabled=1; OFF mantém o legado.\nif (!defined('ANST_ACF_RUNTIME_APPROVED')) { define('ANST_ACF_RUNTIME_APPROVED', true); }\n"
+ header="if (!defined('ABSPATH')) { exit; }\n"
+ check(s.count(header)==1,'APPROVAL_INSERTION_ANCHOR_CHANGED')
+ s=s.replace(header,header+approval)
  php.write_bytes(s.encode())
  for name,count in [('estudio.css',509),('estudio-dark.css',216)]:
   path=dev/'assets'/name
@@ -156,7 +160,7 @@ add_filter('pre_delete_post',static function($pre,$post,$force_delete){
  check(t.count(name)==1,'G6_TEST_BASE_CHANGED')
  tests.write_text(t.replace(name,test))
  expected={
-  'anthares-estudio.php':'0415a16c83a2e0b75dcab5ddd8a7f17511cf07eb',
+  'anthares-estudio.php':'16f5c01457085e73fcde291717ba46ebdbdb2801',
   'assets/estudio.css':'a0238eb95b78da38b427b1da566463f611fcd37c',
   'assets/estudio-dark.css':'1afedf2d97abcbd8ccdbf78251bcf1f4c68fe6d9',
   'tests/test_isolation.py':'b3902ff5102bcb6fa6b94203985cc374406b1a82'
