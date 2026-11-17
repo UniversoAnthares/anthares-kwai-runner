@@ -141,6 +141,43 @@ add_filter('pre_delete_post',static function($pre,$post,$force_delete){
    check(new.count(b'article#post-19344')==6,'G6_ARTICLE_SCOPE_CHANGED')
    new=new.replace(b'article#post-19344',b'article')
   path.write_bytes(new)
+ # G4 contract discovery: unlock completion writes _anst_events, which requires its own ACF field.
+ group=dev/'acf-json/group_anst02_v1.json'
+ obj=json.loads(group.read_text(encoding='utf8'))
+ check(len(obj['fields'])==9,'G4_ACF_02_OLD_COUNT_CHANGED')
+ idx=next(i for i,x in enumerate(obj['fields']) if x['name']=='studio_summary')
+ field={**obj['fields'][idx],'key':'field_anst02_events_v1','label':'events','name':'studio_events'}
+ obj['fields'].insert(idx+1,field)
+ obj['modified']=1794920700
+ group.write_text(json.dumps(obj,ensure_ascii=False,indent=2)+'\n',encoding='utf8')
+ manifest=dev/'docs/acf-core-migration-map.json'
+ ledger=json.loads(manifest.read_text(encoding='utf8'))
+ check(ledger['fields']==39 and ledger['mappings']==51 and len(ledger['entries'])==51,'G4_ACF_MAP_OLD_COUNT_CHANGED')
+ ix=next(i for i,x in enumerate(ledger['entries']) if x['legacy_key']=='_anst_summary' and x['post_type']=='anst_projeto')
+ ledger['entries'].insert(ix+1,{'post_type':'anst_projeto','legacy_key':'_anst_events',
+   'target_field_name':'studio_events','target_field_key':'field_anst02_events_v1',
+   'legacy_storage':'postmeta','conversion':'preserve_raw_json_or_text','status':'OFFLINE_NOT_MIGRATED'})
+ ledger['fields']=40
+ ledger['mappings']=52
+ manifest.write_text(json.dumps(ledger,ensure_ascii=False,indent=2)+'\n',encoding='utf8')
+ for name,changes in [
+   ('includes/acf/class-anst-acf-repository.php',[
+      ("(int)($json['fields'] ?? 0) !== 39 || count($json['entries'] ?? []) !== 51",
+       "(int)($json['fields'] ?? 0) !== 40 || count($json['entries'] ?? []) !== 52")]),
+   ('includes/acf/class-anst-acf-migrator.php',[
+      ('count($this->fields) !== 39','count($this->fields) !== 40'),
+      ('count($this->mappings) !== 51','count($this->mappings) !== 52')]),
+   ('tests/test_acf_contract.py',[
+      ('_anst_tone _anst_summary _anst_outline','_anst_tone _anst_summary _anst_events _anst_outline'),
+      ('len(self.fields),39','len(self.fields),40'),
+      ("self.ledger['fields'],39","self.ledger['fields'],40")])
+ ]:
+  target=dev/name
+  data=target.read_text(encoding='utf8')
+  for old,new in changes:
+   check(data.count(old)==1,'G4_ACF_CONTRACT_PATCH_CHANGED_'+name)
+   data=data.replace(old,new)
+  target.write_text(data,encoding='utf8')
  tests=dev/'tests/test_isolation.py'
  t=tests.read_text()
  for line in [
@@ -171,7 +208,12 @@ add_filter('pre_delete_post',static function($pre,$post,$force_delete){
   'anthares-estudio.php':'5f5ba7189e14cee11b1bffc8d850152c48351a44',
   'assets/estudio.css':'a0238eb95b78da38b427b1da566463f611fcd37c',
   'assets/estudio-dark.css':'1afedf2d97abcbd8ccdbf78251bcf1f4c68fe6d9',
-  'tests/test_isolation.py':'b3902ff5102bcb6fa6b94203985cc374406b1a82'
+  'tests/test_isolation.py':'b3902ff5102bcb6fa6b94203985cc374406b1a82',
+  'docs/acf-core-migration-map.json':'e4eed3976171510c2d4146eee04c38ed6ae2fc4f',
+  'acf-json/group_anst02_v1.json':'e52490e072f6cb14e8f270f62962e178e39c8e77',
+  'includes/acf/class-anst-acf-repository.php':'52075b6d0ce8906058ea24579c190a305e2f7ce6',
+  'includes/acf/class-anst-acf-migrator.php':'286697cc7f2f9afcbcafcd8a52147aa9273f8602',
+  'tests/test_acf_contract.py':'ec360933fada2050f1a83adbd48dd3f33937c309'
  }
  for name,sha in expected.items():
   check(git_sha((dev/name).read_bytes())==sha,'G6_INTEGRATION_HASH_MISMATCH_'+name)
