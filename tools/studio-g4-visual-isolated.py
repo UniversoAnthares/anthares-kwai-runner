@@ -46,11 +46,20 @@ require __DIR__.'/index.php';
 ROUTER
 $PHP -S 127.0.0.1:PORT -t "$T/wp" "$T/wp/router.php" > "$T/web.log" 2>&1 &
 WEB_PID=$!
-for i in $(seq 1 40);do
+for i in $(seq 1 12);do
  if curl -fsS --max-time 2 'http://127.0.0.1:PORT/wp-login.php' >/dev/null 2>&1;then break;fi
  sleep 1
 done
-curl -fsS --max-time 3 'http://127.0.0.1:PORT/wp-login.php' >/dev/null || exit 27
+if ! curl -fsS --max-time 3 'http://127.0.0.1:PORT/wp-login.php' >/dev/null 2>&1;then
+ echo 'G4_HTTP_START_FAILED=1'
+ echo "G4_HTTP_LOG_BYTES=$(wc -c < "$T/web.log")"
+ curl -sS -o /dev/null --max-time 3 -w 'G4_HTTP_CODE=%{http_code}\n' 'http://127.0.0.1:PORT/wp-login.php' || :
+ if kill -0 "$WEB_PID" 2>/dev/null;then echo 'G4_WEB_PROCESS_ALIVE=1';else echo 'G4_WEB_PROCESS_ALIVE=0';fi
+ if grep -qi 'Failed to listen' "$T/web.log";then echo 'G4_FAILED_TO_LISTEN=1';fi
+ if grep -qi 'Fatal error' "$T/web.log";then echo 'G4_PHP_FATAL=1';fi
+ if grep -qi 'Permission denied' "$T/web.log";then echo 'G4_LISTEN_PERMISSION_DENIED=1';fi
+ exit 27
+fi
 echo 'G4_SERVER_READY=1'
 echo "G4_STOP_FILE=$T/STOP"
 for i in $(seq 1 240);do
