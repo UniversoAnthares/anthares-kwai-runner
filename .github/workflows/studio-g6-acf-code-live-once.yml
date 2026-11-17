@@ -1,0 +1,48 @@
+name: Anthares Studio G6 and ACF Code Scoped Release
+on:
+  push:
+    branches:
+      - coord/studio-g4-g5-20261116
+    paths:
+      - .github/workflows/studio-g6-acf-code-live-once.yml
+permissions:
+  contents: read
+concurrency:
+  group: anthares-studio-g6-acf-scoped-release-20261116
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.repository == 'UniversoAnthares/anthares-kwai-runner' && github.ref == 'refs/heads/coord/studio-g4-g5-20261116'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Validate both Python scripts without making changes
+        run: |
+          python3 - <<'PY'
+          import pathlib,ast,re
+          path=pathlib.Path('tools/studio-g6-acf-code-release.py')
+          s=path.read_text(encoding='utf8')
+          ast.parse(s)
+          match=re.search(r'REMOTE=r"""(.*?)"""',s,re.S)
+          assert match
+          compile(match.group(1),'release_remote.py','exec')
+          print('STUDIO_RELEASE_SYNTAX=PASS')
+          PY
+      - name: Recheck source hashes, 71 records, lock flags and lint on Hostinger
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          STUDIO_DEPLOY_MODE: preflight
+        run: python3 tools/studio-g6-acf-code-release.py
+      - name: Deploy only code of new Studio with private backup and automatic rollback
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          STUDIO_DEPLOY_MODE: deploy
+        run: python3 tools/studio-g6-acf-code-release.py
+      - name: Verify public G6 stylesheet served by target site
+        run: |
+          code=$(curl -sS -L --max-time 22 -o /dev/null -w '%{http_code}' 'https://anthares.us/wp-content/plugins/anthares-studio/assets/studio-g6-navigation.css?studio_g6_release=20261116')
+          echo "STUDIO_G6_HTTP_STATUS=$code"
+          test "$code" = "200"
