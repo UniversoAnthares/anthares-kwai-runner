@@ -250,7 +250,7 @@ def setup_docker(root,info):
  newid=int(wp('post','create','--post_type=page','--post_name=studio',
                 '--post_title=Estudio Novo QA','--post_status=private',
                 '--post_content=[anthares_studio]','--porcelain'))
- wp('db','query',f'UPDATE wp_posts SET ID=19344 WHERE ID={oldid}')
+ wp('eval',"global $wpdb; $wpdb->query('UPDATE ' . $wpdb->posts . ' SET ID=19344 WHERE ID="+str(oldid)+"');")
  print('G4_OLD_PAGE_ID=19344 NEW_PAGE_ID='+str(newid),flush=True)
  wp('option','update','anst_writes_enabled','0')
  wp('option','update','anst_trash_cleanup_enabled','0')
