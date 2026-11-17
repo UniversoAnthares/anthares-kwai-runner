@@ -1,0 +1,50 @@
+name: Anthares Studio G4 G6 Docker Visual QA
+on:
+  push:
+    branches:
+      - coord/studio-g4-g5-20261116
+    paths:
+      - .github/workflows/studio-g4-docker-visual.yml
+      - tools/studio-g4-docker-qa.py
+permissions:
+  contents: read
+concurrency:
+  group: anthares-studio-g4-docker-visual-20261116
+  cancel-in-progress: false
+jobs:
+  visual:
+    if: github.repository == 'UniversoAnthares/anthares-kwai-runner'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Validate Python without contacting production
+        run: |
+          python3 - <<'PY'
+          import ast,pathlib,re
+          s=pathlib.Path('tools/studio-g4-docker-qa.py').read_text(encoding='utf8')
+          ast.parse(s)
+          m=re.search(r'REMOTE=r"""(.*?)"""',s,re.S)
+          assert m
+          compile(m.group(1),'remote_code_archive.py','exec')
+          print('G4_DOCKER_PYTHON_SYNTAX=PASS')
+          PY
+      - name: Prepare isolated Docker and Playwright control
+        run: |
+          command -v docker
+          command -v google-chrome
+          python3 -m pip install -q playwright
+      - name: Compare 0/1/N, desktop/mobile and light/dark, then G6 navigation
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          G4_EVIDENCE_DIR: /tmp/anthares-g4-evidence
+        run: python3 tools/studio-g4-docker-qa.py
+      - name: Preserve synthetic-only screenshots
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: anthares-studio-g4-g6-synthetic-visual
+          path: /tmp/anthares-g4-evidence/g4-g6-screenshots.zip
+          retention-days: 3
