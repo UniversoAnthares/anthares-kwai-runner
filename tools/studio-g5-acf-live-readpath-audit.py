@@ -26,7 +26,8 @@ if((string)get_option('anst_acf_runtime_enabled','0')!=='0')throw new Exception(
 if((string)get_option('anst_writes_enabled','0')!=='0')throw new Exception('WRITE_GATE_UNEXPECTED');
 if((string)get_option('anst_trash_cleanup_enabled','0')!=='0')throw new Exception('TRASH_GATE_UNEXPECTED');
 define('ANST_ACF_RUNTIME_APPROVED',true);
-add_filter('pre_option_anst_acf_runtime_enabled',static fn()=>'1');
+$previewOption=static fn()=>'1';
+add_filter('pre_option_anst_acf_runtime_enabled',$previewOption);
 if(!anst_acf_runtime_enabled())throw new Exception('ACF_PREVIEW_NOT_ENABLED');
 $groups=glob('GROUPS_HERE')?:[];
 if(count($groups)!==12)throw new Exception('GROUP_COUNT_CHANGED');
@@ -74,6 +75,7 @@ foreach($projects as $row){
  $zooms++;
 }
 if($zooms!==5)throw new Exception('ACF_ZOOM_COUNT_MISMATCH');
+remove_filter('pre_option_anst_acf_runtime_enabled',$previewOption);
 if((string)get_option('anst_acf_runtime_enabled','0')!=='0')throw new Exception('OPTION_WAS_MODIFIED');
 if((string)get_option('anst_writes_enabled','0')!=='0')throw new Exception('WRITE_FLAG_WAS_MODIFIED');
 $posts=(int)$wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type IN ('anst_projeto','anst_nota','anst_capitulo','anst_cartao')");
