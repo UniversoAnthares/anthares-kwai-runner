@@ -181,6 +181,16 @@ def setup_docker(root,info):
  shutil.copytree(root/'legacy/anthares-estudio',plugin_root/'anthares-estudio')
  shutil.copytree(root/'live/anthares-studio',plugin_root/'anthares-studio')
  shutil.copytree(root/'acf/advanced-custom-fields',plugin_root/'advanced-custom-fields')
+ # Hostinger may store private plugin files with 0700/0600 permissions.
+ # Make ONLY the disposable, synthetic container copies web-readable.
+ for sandbox_plugin in plugin_root.iterdir():
+  for current,folders,files in os.walk(sandbox_plugin):
+   os.chmod(current,0o755)
+   for folder in folders:os.chmod(pathlib.Path(current)/folder,0o755)
+   for file in files:
+    p=pathlib.Path(current)/file
+    if p.is_file() and not p.is_symlink():os.chmod(p,0o644)
+ print('G4_SANDBOX_PLUGIN_READABLE=1',flush=True)
  themes=root/'themes'
  docker('run','-d','--name','anthares-g4-wp','--network','anthares-g4-net',
         '-p','127.0.0.1:19080:80',
@@ -220,6 +230,8 @@ def setup_docker(root,info):
    print('G4_PLUGIN_ACTIVE='+plugin_name,flush=True)
   except subprocess.CalledProcessError as e:
    print('G4_PLUGIN_ACTIVATION_FAILED='+plugin_name,flush=True)
+   print('G4_SANDBOX_PLUGIN_MAIN_EXISTS='+str(int((plugin_root/'anthares-studio/anthares-estudio.php').is_file())),flush=True)
+   print('G4_SANDBOX_PLUGIN_LIST='+wp('plugin','list','--field=name').replace('\n',',')[:300],flush=True)
    errors=(e.stderr or e.stdout or 'UNCLASSIFIED').splitlines()
    for line in errors[-8:]:
     clean=re.sub(r'[^A-Za-z0-9 _:/,().-]','_',line)[:175]
