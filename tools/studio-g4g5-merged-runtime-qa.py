@@ -33,29 +33,29 @@ try:
  fail(p.returncode==0,'G6_CHECKOUT_FAILED')
  php=repo/'anthares-studio/anthares-estudio.php'
  code=php.read_text(encoding='utf-8')
- bodyOld="""add_filter('body_class', function($classes){
+ bodyOld='''add_filter('body_class', function($classes){
   if(is_page('studio') && (!is_user_logged_in() || !anst_can_use()))$classes[]='aest-access-gate';
   return $classes;
-});"""
- bodyNew="""add_filter('body_class', function($classes){
+});'''
+ bodyNew='''add_filter('body_class', function($classes){
  if (is_page('studio')) {
   // Identidade visual estável e exclusiva do novo Studio.
   $classes[] = 'anst-studio-page';
   if (!is_user_logged_in() || !anst_can_use()) $classes[] = 'aest-access-gate';
  }
  return $classes;
-});"""
+});'''
  fail(code.count(bodyOld)==1,'G6_BODY_OLD_SCOPE_MISMATCH')
  code=code.replace(bodyOld,bodyNew)
  anchor="function anst_trash_cleanup_enabled(){return (string)get_option('anst_trash_cleanup_enabled','0')==='1';}"
- guard="""
+ guard='''
 /** Preserva itens ANST da lixeira quando WordPress executa limpeza nativa. */
 add_filter('pre_delete_post',static function($pre,$post,$force_delete){
  if($pre!==null)return $pre;
  if(!anst_trash_cleanup_enabled()&&doing_action('wp_scheduled_delete')&&
     $post instanceof WP_Post&&in_array($post->post_type,anst_trash_types(),true))return false;
  return $pre;
-},10,3);"""
+},10,3);'''
  fail(code.count(anchor)==1 and "add_filter('pre_delete_post'" not in code,'TRASH_GUARD_SOURCE_CHANGED')
  code=code.replace(anchor,anchor+'\n'+guard)
  php.write_text(code,encoding='utf-8')
@@ -77,7 +77,7 @@ add_filter('pre_delete_post',static function($pre,$post,$force_delete){
   fail(t.count(snippet)==1,'HASH_TEST_SOURCE_CHANGED')
   t=t.replace(snippet,'')
  old='    def test_all_visual_assets_remain_identical(self):'
- new="""    def test_new_studio_only_page_scoping(self):
+ new='''    def test_new_studio_only_page_scoping(self):
         self.assertIn("$classes[] = 'anst-studio-page';", PHP)
         for name, count in [('assets/estudio.css', 509), ('assets/estudio-dark.css', 216)]:
             content=(ROOT/name).read_text(encoding='utf8')
@@ -92,7 +92,7 @@ add_filter('pre_delete_post',static function($pre,$post,$force_delete){
         self.assertIn("add_filter('pre_delete_post'",PHP)
         self.assertIn("add_filter('wp_untrash_post_status'",PHP)
 
-    def test_unchanged_vendor_and_backups_remain_identical(self):"""
+    def test_unchanged_vendor_and_backups_remain_identical(self):'''
  fail(t.count(old)==1,'TEST_CASE_SOURCE_CHANGED')
  tests.write_text(t.replace(old,new),encoding='utf-8')
  for rel,sha in expected.items():
