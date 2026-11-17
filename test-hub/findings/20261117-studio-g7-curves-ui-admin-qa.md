@@ -30,3 +30,11 @@ LEASE: test-hub/findings/20261117-studio-g7-curves-ui-admin-guard-lease.md
 - Isolated host QA against commit `3d5878474b8ca3fa166acc09cc5e2e21d4cabc58`: **63/63 Python unit tests PASS**, PHP8.3 lint 2/2 PASS, manifest 676/676 PASS and QA orchestrator 11/11 PASS. Source checkout removed in exit trap.
 - Documentation-only subsequent commit `87f993e52f8d74983d63d58fd833550ecf6014dc` records implementation; no runtime change after the successful isolated test.
 
+
+## B16 private TXT manuscript export
+- Added browser-only TXT export from current private project chapters, sorted in reader order and text-extracted from Quill Delta `insert` strings. No internal marks, post meta or private embedded media URLs are exported.
+- Guards reject export during unsaved/busy editor state, missing chapters or result count >=250 (possible REST truncation). UTF-8 BOM and sanitized filenames.
+- V8 JS simulations of 9 cases PASS: chapter order, Unicode, attributes excluded, embed placeholder, filename safety, Blob URL download, busy save, failed save, pagination guard.
+- Isolated Hostinger branch test at `a375c20edbb5ee83bb8f9cd3c33c81271806cc66`: **64/64 Python unittest PASS**, PHP lint 2/2, QA manifest 676/676, QA orchestrator 11 PASS. Subsequent documentation-only commit `18b77f08b24c4f73f648e079eeffba8e1f53b1f0` leaves runtime code unchanged.
+- No Studio production plugin or user data changed. The new feature remains in draft PR #318 for later G4/G5 integration and authenticated browser validation.
+
