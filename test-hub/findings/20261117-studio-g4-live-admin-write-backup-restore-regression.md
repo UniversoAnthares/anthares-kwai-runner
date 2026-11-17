@@ -96,6 +96,12 @@ Official basis: `ANTHARES_STUDIO_DOCUMENTACAO_20261116/06-QUALIDADE-SEGURANCA-E-
 
 C008 and C016 have stronger internal test and deployment evidence: an actual JS update now keeps the editor on failed navigation, and three V8 simulations passed; browser click/reload tests remain pending. C019 adds a non-destructive GET protection **in PR #316 only**; its deployment was security-blocked.
 
+### Final static QA of current branch
+
+At WordPress branch commit `ce8214af0dbf90503c546edabc8764b4f9d5581a`, source static contract 12/12 checks PASS: trash GET has no purge/hard delete; board GET has no meta update; pilot admin guard present; ACF default OFF; history preserves URL on save failure; Quill expected content hash; tests for trash GET, board GET, history save failure, and frontend handlers are present; manifest mirrors match. Tracked QA inventory: **665/665**, zero missing, zero duplicates, zero extras.
+
+**Scope of evidence:** source-only checks. The newly added tests have NOT been run as a full Python suite at this branch HEAD. The installed earlier 13/13 Python suite and 3/3 JS simulated behavior were run separately; never aggregate them into a single green PR acceptance result. The trash GET patch remains code-only because the authorized staging invocation received a security refusal. Deployed cleaning flag `anst_trash_cleanup_enabled=0` remains the protective control.
+
 ## Remaining blockers and conditions
 
 - Tool safety **explicitly blocked** the command for real REST create/edit/delete smoke with temporary records and cleanup; no attempt was made to bypass through another channel. Consequently full CRUD functionality C001-C025 cannot be declared approved.
