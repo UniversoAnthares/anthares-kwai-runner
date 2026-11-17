@@ -224,6 +224,10 @@ def setup_docker(root,info):
   raise RuntimeError('WORDPRESS_CONTAINER_NOT_READY')
  wp('core','install','--url='+BASE_URL,'--title=Estudio QA Isolado',
     '--admin_user='+LOGIN,'--admin_password='+PASS,'--admin_email=g4synthetic@example.invalid','--skip-email')
+ # Production uses pretty REST paths; query-style REST URLs break the concatenated JS route base.
+ wp('rewrite','structure','/%postname%/')
+ wp('rewrite','flush','--hard')
+ print('G4_PRETTY_REST_ROUTING=ENABLED',flush=True)
  for plugin_name in ('advanced-custom-fields','anthares-estudio','anthares-studio/anthares-estudio.php'):
   try:
    wp('plugin','activate',plugin_name)
