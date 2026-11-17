@@ -31,6 +31,9 @@ groups=list((plugin/'acf-json').glob('group_anst*.json'))
 check(len(groups)==12,'LIVE_ACF_GROUPS_MISSING')
 for group in groups:check(json.loads(group.read_text()).get('active') is False,'ACF_GROUP_ACTIVE_UNEXPECTED')
 print('G5_LIVE_MANIFEST_PRESENT='+str(int((plugin/'docs/acf-core-migration-map.json').is_file())),flush=True)
+if (plugin/'docs/acf-core-migration-map.json').is_file():
+ check(gblob(plugin/'docs/acf-core-migration-map.json')==expected,'LIVE_MANIFEST_SHA_CHANGED')
+ print('G5_LIVE_MANIFEST_HASH=PASS',flush=True)
 print('G5_SOURCE_MANIFEST_SHA='+expected,flush=True)
 print('G5_LIVE_OFFLINE_GROUPS='+str(len(groups)),flush=True)
 print('G5_BACKUP_CANDIDATES_BEGIN=1',flush=True)
@@ -64,6 +67,11 @@ $state=[
 echo 'G5_STATE='.wp_json_encode($state)."\n";'''
 php=php.replace('WPLOAD_MARKER',str(web/'wp-load.php'))
 p=subprocess.run(['/opt/alt/php83/usr/bin/php','-r',php],capture_output=True,text=True,timeout=45)
+if p.returncode!=0:
+ tail=(p.stderr.strip().splitlines() or ['UNKNOWN'])[-1]
+ clean=''.join(c if c.isalnum() or c in ' _:/.,()=\'-' else '_' for c in tail)[:170]
+ print('G5_PHP_ERROR_CODE='+str(p.returncode),flush=True)
+ print('G5_PHP_ERROR_LAST='+clean,flush=True)
 check(p.returncode==0,'WORDPRESS_BOOTSTRAP_ERROR')
 raw=next((s.split('=',1)[1] for s in p.stdout.splitlines() if s.startswith('G5_STATE=')),None)
 check(raw is not None,'MISSING_WP_OUTPUT')
