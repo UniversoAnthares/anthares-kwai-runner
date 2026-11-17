@@ -87,29 +87,44 @@ WP_CLI::line('G5_BOOTSTRAP_MODE='.$mode);
  require(data.get('G5_BOOTSTRAP_MODE')==mode,'BOOTSTRAP_WRONG_MODE')
  require(len(data.get('G5_BOOTSTRAP_DIGEST',''))==64,'BOOTSTRAP_DIGEST_MISSING')
  return data['G5_BOOTSTRAP_DIGEST']
-def option_read():
- p=subprocess.run(wp+['option','get','anst_acf_runtime_enabled'],text=True,capture_output=True,timeout=45)
+def option_read(emergency=False):
+ args=wp[:]
+ if emergency:args.append('--skip-plugins')
+ p=subprocess.run(args+['eval',"WP_CLI::line('G5_OPTION='.get_option('anst_acf_runtime_enabled','__ABSENT__'));"],
+                  text=True,capture_output=True,timeout=45)
  require(p.returncode==0,'ACF_OPTION_READ_FAILED')
- return p.stdout.strip()
+ value=next((v.split('=',1)[1] for v in p.stdout.splitlines() if v.startswith('G5_OPTION=')),None)
+ require(value in ('0','1','__ABSENT__'),'ACF_OPTION_VALUE_UNEXPECTED')
+ return value
 def write_option(value,emergency=False):
  args=wp[:]
  if emergency:args.append('--skip-plugins')
- r=subprocess.run(args+['option','update','anst_acf_runtime_enabled',value,'--autoload=no'],
+ r=subprocess.run(args+['option','update','anst_acf_runtime_enabled',value],
                   text=True,capture_output=True,timeout=55)
  require(r.returncode==0,'ACF_OPTION_UPDATE_FAILED_'+value)
+def restore_option(original):
+ args=wp+['--skip-plugins']
+ if original=='__ABSENT__':
+  cmd=args+['option','delete','anst_acf_runtime_enabled']
+ else:
+  cmd=args+['option','update','anst_acf_runtime_enabled',original]
+ r=subprocess.run(cmd,text=True,capture_output=True,timeout=55)
+ require(r.returncode==0,'ACF_OPTION_ROLLBACK_COMMAND_FAILED')
+ require(option_read(emergency=True)==original,'ACF_OPTION_ROLLBACK_MISMATCH')
 lock_path=private/'.studio-g5-runtime-activation.lock'
 with open(lock_path,'a+') as handle:
  try:fcntl.flock(handle.fileno(),fcntl.LOCK_EX|fcntl.LOCK_NB)
  except BlockingIOError:raise RuntimeError('ACF_ACTIVATION_BUSY')
  safe_check()
  verify_backup()
- require(option_read()=='0','ACF_RUNTIME_OPTION_ALREADY_CHANGED')
+ original=option_read()
+ require(original in ('0','__ABSENT__'),'ACF_RUNTIME_OPTION_ALREADY_CHANGED')
  migrate_dry()
  before=bootstrap('OFF')
  backup=private/('studio-g5-option-rollback-'+datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ'))
  require(not backup.exists(),'OPTION_BACKUP_PATH_EXISTS')
  backup.mkdir(mode=0o700)
- (backup/'state.txt').write_text('ACF_OPTION_BEFORE=0\nLEGACY_71=71\nACF_71=71\nSOURCE_SHA='+SOURCE_FINGERPRINT+'\n')
+ (backup/'state.txt').write_text('ACF_OPTION_BEFORE='+original+'\nLEGACY_71=71\nACF_71=71\nSOURCE_SHA='+SOURCE_FINGERPRINT+'\n')
  os.chmod(backup/'state.txt',0o600)
  activated=False
  try:
@@ -130,10 +145,9 @@ with open(lock_path,'a+') as handle:
   print('G5_OPTION_BACKUP_NAME='+backup.name,flush=True)
   print('G5_ACF_PRODUCTION_ACTIVATION_PROVEN=1',flush=True)
  except Exception as e:
-  if activated and option_read()=='1':
-   write_option('0',emergency=True)
-  require(option_read()=='0','ACF_RUNTIME_ROLLBACK_FAILED')
-  print('G5_RUNTIME_ACTIVATION_ROLLBACK=COMPLETE',flush=True)
+  if activated:
+   restore_option(original)
+   print('G5_RUNTIME_ACTIVATION_ROLLBACK=COMPLETE',flush=True)
   raise
 """
 def main():
