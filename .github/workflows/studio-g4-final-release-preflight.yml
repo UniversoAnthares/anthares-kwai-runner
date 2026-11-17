@@ -1,0 +1,37 @@
+name: Anthares Studio G4 Final Scoped Release Preflight
+on:
+  push:
+    branches: [coord/studio-g4-g5-20261116]
+    paths:
+      - .github/workflows/studio-g4-final-release-preflight.yml
+      - tools/studio-g4-final-scoped-release.py
+permissions:
+  contents: read
+concurrency:
+  group: anthares-studio-g4-final-release-preflight
+  cancel-in-progress: false
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Static syntax and checked Git blobs
+        run: |
+          python3 - <<'PY'
+          import ast,pathlib,re
+          s=pathlib.Path('tools/studio-g4-final-scoped-release.py').read_text()
+          ast.parse(s)
+          m=re.search(r'REMOTE=r"""(.*?)"""',s,re.S)
+          assert m
+          compile(m.group(1),'release_remote.py','exec')
+          print('G4_RELEASE_SCRIPT_SYNTAX=PASS')
+          PY
+          node --check tools/studio-g4-approved/assets/estudio.js
+      - name: Verify live current hashes, 71 records, ACF state and private rollback readiness
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          G4_RELEASE_MODE: preflight
+        run: python3 tools/studio-g4-final-scoped-release.py
