@@ -288,6 +288,8 @@ def render_pair(context,root,stage,theme,viewport,phase,newid):
    page.wait_for_timeout(350)
    v=record(page)
    check(v['text']>30,'G4_EMPTY_APP_'+slug)
+   if stage!='zero':
+    check('Projeto Sintetico' in page.locator('#anthares-estudio-root').inner_text(),'G4_PROJECT_INVISIBLE_'+stage+'_'+slug)
    if phase=='live' and slug=='studio':
     check('anst-studio-page' in v['body'],'G4_NEW_SCOPE_MISSING')
    check(v['sidebar'] in ('none','absent'),'G4_WIDGET_SIDEBAR_VISIBLE_'+slug)
@@ -332,7 +334,7 @@ def main():
      for state in ('zero','one','many'):
       if state!='zero':
        for kind in ('aest_projeto','anst_projeto'):
-        wp('post','create','--post_type='+kind,'--post_status=publish',
+        wp('post','create','--post_type='+kind,'--post_author=1','--post_status=publish',
            '--post_title=Projeto Sintetico '+state+' '+kind,'--porcelain')
       for width,height,label in ((1440,900,'desktop'),(390,844,'mobile')):
        context=login_context(browser,width,height)
