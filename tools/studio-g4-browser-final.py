@@ -8,6 +8,12 @@ g4=importlib.util.module_from_spec(spec);spec.loader.exec_module(g4)
 def valid(ok,code):
  if not ok:raise RuntimeError(code)
 def api(page,method,path,body=None):
+ try:page.wait_for_function("window.AntharesEstudio?.rest",timeout=20000)
+ except Exception:
+  print('G4_BROWSER_CONFIG_MISSING_URL='+str(page.url.split('?')[0]),flush=True)
+  print('G4_BROWSER_ROOT_PRESENT='+str(page.locator('#anthares-estudio-root').count()),flush=True)
+  print('G4_BROWSER_BODY_CLASS='+str(page.locator('body').get_attribute('class'))[:150],flush=True)
+  raise
  out=page.evaluate("""async (a)=>{
  const u=window.AntharesEstudio.rest+a.path;
  const res=await fetch(u,{method:a.method,headers:{'Content-Type':'application/json','X-WP-Nonce':window.AntharesEstudio.nonce},
