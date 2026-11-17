@@ -1,0 +1,35 @@
+name: Anthares Studio G5 G6 Isolated Runtime QA
+on:
+  push:
+    branches: [coord/studio-g4-g5-20261116]
+    paths:
+      - .github/workflows/studio-g5g6-isolated.yml
+permissions:
+  contents: read
+concurrency:
+  group: anthares-studio-g5g6-isolated-20261116
+  cancel-in-progress: false
+jobs:
+  integration:
+    if: github.repository == 'UniversoAnthares/anthares-kwai-runner'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Compile local/remote QA without running it
+        run: |
+          python3 - <<'PY'
+          import ast,re,pathlib
+          s=pathlib.Path('tools/studio-g5g6-isolated-qa.py').read_text(encoding='utf8')
+          ast.parse(s)
+          m=re.search(r'REMOTE=r"""(.*?)"""',s,re.S)
+          assert m
+          compile(m.group(1),'remote_g5_qa.py','exec')
+          print('G5_QA_SYNTAX=PASS')
+          PY
+      - name: Validate G5 migrations, ACF ON/OFF, REST and G6 static navigation in isolated WP
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        run: python3 tools/studio-g5g6-isolated-qa.py
