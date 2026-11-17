@@ -19,9 +19,12 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           p=Path('tools/studio-g4g5-host-probe.py')
-          c={'__name__':'test_not_main'}
-          exec(compile(p.read_text(),str(p),'exec'),c)
-          compile(c['REMOTE'],'remote_g4g5_probe.py','exec')
+          import ast,re
+          source=p.read_text(encoding='utf-8')
+          ast.parse(source,filename=str(p))
+          remote=re.search(r'REMOTE=r"""(.*?)"""',source,re.S)
+          assert remote
+          compile(remote.group(1),'remote_g4g5_probe.py','exec')
           print('STUDIO_PROBE_SYNTAX_PASS=1')
           PY
       - name: Inspect Hostinger dependencies read-only
