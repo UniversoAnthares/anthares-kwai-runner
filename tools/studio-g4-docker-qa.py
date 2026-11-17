@@ -204,8 +204,17 @@ add_filter('pre_delete_post',static function($pre,$post,$force_delete){
     def test_unchanged_vendor_and_backups_remain_identical(self):"""
  check(t.count(name)==1,'G6_TEST_BASE_CHANGED')
  tests.write_text(t.replace(name,test))
+ # Reconcile byte-for-byte the final approved G4 files from the same private CI repo.
+ approved={"anthares-estudio.php":"8a9becf2da9da692bfecaa508591f9fb33f30780","assets/estudio.js":"18669c8fa7f24efcacc9c040145ecc0c7fa4db03","acf-json/group_anst02_v1.json":"e52490e072f6cb14e8f270f62962e178e39c8e77","docs/acf-core-migration-map.json":"e4eed3976171510c2d4146eee04c38ed6ae2fc4f","includes/acf/class-anst-acf-repository.php":"52075b6d0ce8906058ea24579c190a305e2f7ce6","includes/acf/class-anst-acf-migrator.php":"286697cc7f2f9afcbcafcd8a52147aa9273f8602","tests/test_acf_contract.py":"ec360933fada2050f1a83adbd48dd3f33937c309"}
+ for rel,sha in approved.items():
+  source=HERE/'studio-g4-approved'/rel
+  check(source.is_file() and git_sha(source.read_bytes())==sha,'G4_MIRROR_BLOB_DRIFT_'+rel)
+  target=dev/rel
+  target.parent.mkdir(parents=True,exist_ok=True)
+  shutil.copyfile(source,target)
+ print('G4_APPROVED_SOURCE_FILES='+str(len(approved)),flush=True)
  expected={
-  'anthares-estudio.php':'5f5ba7189e14cee11b1bffc8d850152c48351a44',
+  'anthares-estudio.php':'8a9becf2da9da692bfecaa508591f9fb33f30780',
   'assets/estudio.css':'a0238eb95b78da38b427b1da566463f611fcd37c',
   'assets/estudio-dark.css':'1afedf2d97abcbd8ccdbf78251bcf1f4c68fe6d9',
   'tests/test_isolation.py':'b3902ff5102bcb6fa6b94203985cc374406b1a82',
