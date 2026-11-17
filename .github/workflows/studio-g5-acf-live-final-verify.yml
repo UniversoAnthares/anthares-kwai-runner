@@ -1,0 +1,47 @@
+name: Anthares Studio G5 ACF Live Final Idempotent Verification
+on:
+  push:
+    branches:
+      - coord/studio-g4-g5-20261116
+    paths:
+      - .github/workflows/studio-g5-acf-live-final-verify.yml
+permissions:
+  contents: read
+concurrency:
+  group: anthares-studio-g5-final-verification-20261116
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.repository == 'UniversoAnthares/anthares-kwai-runner'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Compile read-only/transactional verifier
+        run: |
+          python3 - <<'PY'
+          import ast,pathlib,re
+          s=pathlib.Path('tools/studio-g5-acf-live-cli.py').read_text(encoding='utf8')
+          ast.parse(s)
+          m=re.search(r'REMOTE=r"""(.*?)"""',s,re.S)
+          assert m
+          compile(m.group(1),'remote_acf_verify.py','exec')
+          print('G5_FINAL_SYNTAX=PASS')
+          PY
+      - name: Verify ACF values 414/414 and live content without writes
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          STUDIO_G5_MODE: verify
+        run: python3 tools/studio-g5-acf-live-cli.py
+      - name: Confirm idempotency of applied migration under database transaction
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          STUDIO_G5_MODE: apply
+        run: python3 tools/studio-g5-acf-live-cli.py
+      - name: Final read-only verification of 414 migrated values and unchanged locks
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          STUDIO_G5_MODE: verify
+        run: python3 tools/studio-g5-acf-live-cli.py
