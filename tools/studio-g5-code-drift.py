@@ -13,29 +13,29 @@ def blob(s):return hashlib.sha1(b'blob '+str(len(s)).encode()+b'\0'+s).hexdigest
 def need(b,label):
  if not b:raise RuntimeError(label)
 expected=source.read_text(encoding='utf8')
-old="""add_filter('body_class', function($classes){
+old='''add_filter('body_class', function($classes){
  if(is_page('studio') && (!is_user_logged_in() || !anst_can_use()))$classes[]='aest-access-gate';
  return $classes;
-});"""
-new="""add_filter('body_class', function($classes){
+});'''
+new='''add_filter('body_class', function($classes){
  if (is_page('studio')) {
   // Identidade visual estável e exclusiva do novo Studio.
   $classes[] = 'anst-studio-page';
   if (!is_user_logged_in() || !anst_can_use()) $classes[] = 'aest-access-gate';
  }
  return $classes;
-});"""
+});'''
 need(expected.count(old)==1,'SOURCE_BODY_CHANGED')
 expected=expected.replace(old,new)
 anchor="function anst_trash_cleanup_enabled(){return (string)get_option('anst_trash_cleanup_enabled','0')==='1';}"
-guard="""
+guard='''
 /** Preserva itens ANST da lixeira quando WordPress executa limpeza nativa. */
 add_filter('pre_delete_post',static function($pre,$post,$force_delete){
  if($pre!==null)return $pre;
  if(!anst_trash_cleanup_enabled()&&doing_action('wp_scheduled_delete')&&
     $post instanceof WP_Post&&in_array($post->post_type,anst_trash_types(),true))return false;
  return $pre;
-},10,3);"""
+},10,3);'''
 need(expected.count(anchor)==1,'SOURCE_GUARD_CHANGED')
 expected=expected.replace(anchor,anchor+'\n'+guard)
 need(blob(expected.encode())=='0415a16c83a2e0b75dcab5ddd8a7f17511cf07eb','INTEGRATED_SOURCE_UNEXPECTED')
