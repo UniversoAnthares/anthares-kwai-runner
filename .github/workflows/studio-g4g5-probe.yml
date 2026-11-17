@@ -1,0 +1,30 @@
+name: Studio G4 G5 Host Read-Only Feasibility
+on:
+  push:
+    branches: [coord/studio-g4-g5-20261116]
+    paths:
+      - .github/workflows/studio-g4g5-probe.yml
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Check probe and remote Python syntax
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tools/studio-g4g5-host-probe.py')
+          c={'__name__':'test_not_main'}
+          exec(compile(p.read_text(),str(p),'exec'),c)
+          compile(c['REMOTE'],'remote_g4g5_probe.py','exec')
+          print('STUDIO_PROBE_SYNTAX_PASS=1')
+          PY
+      - name: Inspect Hostinger dependencies read-only
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        run: python3 tools/studio-g4g5-host-probe.py
