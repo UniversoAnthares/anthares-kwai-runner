@@ -50,6 +50,15 @@ g4expect('POST','/cards/'.$card,['color'=>'yellow','notes'=>'Anotações Unicode
 g4expect('POST','/cards/reorder',['project'=>$project,'items'=>[['id'=>$card,'column'=>$initialColumn,'rank'=>0]]],200,'CARD_REORDER');
 g4expect('POST','/projects/'.$project.'/zoom',['zoom'=>120],200,'BOARD_ZOOM');
 if((int)anst_user_meta_get($owner,'_anst_board_zoom_'.$project,true)!==120)throw new RuntimeException('G4_ZOOM_ROUNDTRIP');
+$legacyMixed='col_Ab12CdE3';
+$mixedCols=anst_board_columns_read($project);
+$mixedCols[]=['id'=>$legacyMixed,'name'=>'Coluna histórica'];
+anst_meta_update($project,'_anst_board_columns',wp_slash(wp_json_encode($mixedCols,JSON_UNESCAPED_UNICODE)));
+g4expect('POST','/projects/'.$project.'/columns/rename',['column'=>$legacyMixed,'name'=>'Histórica renomeada'],200,'MIXED_ID_RENAME');
+$mixedCard=g4expect('POST','/cards',['project'=>$project,'column'=>$legacyMixed,'text'=>'Cartão em coluna histórica'],200,'MIXED_ID_CARD')['id'];
+g4expect('POST','/cards/reorder',['project'=>$project,'items'=>[['id'=>$mixedCard,'column'=>$legacyMixed,'rank'=>1]]],200,'MIXED_ID_REORDER');
+if((string)anst_meta_get($mixedCard,'_anst_column',true)!==$legacyMixed)throw new RuntimeException('G4_HISTORIC_COLUMN_ID_LOST');
+echo 'G4_C_COLUMN_MIXED_ID_COMPAT=PASS'.PHP_EOL;
 g4pass('C011_CARD_COLUMN_COLOR_DRAG_ORDER_ZOOM');
 $folder=g4expect('POST','/projects/'.$project.'/elements',['revision'=>0,'action'=>'folder_add','name'=>'Personagens'],200,'FOLDER_CREATE')['elements'];
 $folderId=(string)$folder['folders'][0]['id'];
