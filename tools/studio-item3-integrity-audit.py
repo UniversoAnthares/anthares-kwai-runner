@@ -84,7 +84,7 @@ foreach($new as $id=>$p) {
  $map[$oid]=$id;$seenTargets[$id]=true;$provenance[$oid]=$sourceHashes[0];
 }
 $metaMatch=0;$fieldsMatch=0;$deltaRawMatches=0;$deltaValid=0;$deltaCount=0;
-$projectRefCount=0;$invalidRef=0;$zoomSource=0;$zoomTarget=0;
+$projectRefCount=0;$invalidRef=0;$zoomSource=0;$zoomTarget=0;$globalIdeas=0;
 $changeCount=0;$sourceState=hash_init('sha256');
 $rawFields=['post_status','post_author','post_title','post_content','post_excerpt','post_name','menu_order','comment_status','ping_status','post_password','post_mime_type','post_date','post_date_gmt','post_modified','post_modified_gmt'];
 foreach($old as $oid=>$p) {
@@ -156,10 +156,17 @@ foreach($old as $oid=>$p) {
   $destref=st_raw($nm[$target],'_anst_project');
   if(count($ref)===1){
    $refId=(int)$ref[0];$targetProject=$map[$refId]??0;
-   if(!$targetProject||!isset($old[$refId])||$old[$refId]['post_type']!=='aest_projeto')$logIssue('CHILD_PROJECT_SOURCE_INVALID');
-   if(count($destref)!==1||(int)$destref[0]!==$targetProject)$logIssue('CHILD_PROJECT_TARGET_INVALID');
-   if(isset($old[$refId])&&(int)$p['post_author']!==(int)$old[$refId]['post_author'])$logIssue('CROSS_OWNER_CHILD_PROJECT');
-   if(isset($new[$targetProject])&&(int)$n['post_author']!==(int)$new[$targetProject]['post_author'])$logIssue('CROSS_OWNER_TARGET');
+   if($refId===0){
+    // Notes created without a project belong to the global Ideas Bank.
+    if($p['post_type']!=='aest_nota')$logIssue('ZERO_PROJECT_NON_NOTE');
+    if(count($destref)!==1||(int)$destref[0]!==0)$logIssue('GLOBAL_IDEA_PROJECT_MISMATCH');
+    if($p['post_type']==='aest_nota')$globalIdeas++;
+   }else{
+    if(!$targetProject||!isset($old[$refId])||$old[$refId]['post_type']!=='aest_projeto')$logIssue('CHILD_PROJECT_SOURCE_INVALID');
+    if(count($destref)!==1||(int)$destref[0]!==$targetProject)$logIssue('CHILD_PROJECT_TARGET_INVALID');
+    if(isset($old[$refId])&&(int)$p['post_author']!==(int)$old[$refId]['post_author'])$logIssue('CROSS_OWNER_CHILD_PROJECT');
+    if(isset($new[$targetProject])&&(int)$n['post_author']!==(int)$new[$targetProject]['post_author'])$logIssue('CROSS_OWNER_TARGET');
+   }
   }else{
    if($p['post_status']==='publish')$logIssue('ACTIVE_CHILD_WITHOUT_PROJECT');
   }
@@ -191,7 +198,7 @@ $out=[
  'posts_fields_match'=>$fieldsMatch,'posts_meta_match'=>$metaMatch,
  'delta_count'=>$deltaCount,'delta_raw_match'=>$deltaRawMatches,'delta_valid'=>$deltaValid,
  'project_reference_count'=>$projectRefCount,'orphan_references'=>$invalidRef,
- 'user_zoom_source'=>$zoomSource,'user_zoom_target'=>$zoomTarget,
+ 'user_zoom_source'=>$zoomSource,'user_zoom_target'=>$zoomTarget,'global_idea_count'=>$globalIdeas,
  'source_fingerprint'=>$sourceFingerprint,'source_stable'=>$stable,
  'write_flag'=>$writeFlag,'cleanup_flag'=>$cleanupFlag,
  'issues'=>$issues
@@ -211,6 +218,7 @@ result=json.loads(line)
 print('STUDIO_ITEM3_RESULT='+json.dumps(result,sort_keys=True,ensure_ascii=True),flush=True)
 require(result['source_count']==71 and result['target_count']==71,'COUNTS_NOT_71')
 require(result['mapped']==71,'MAPPING_INCOMPLETE')
+require(result['global_idea_count']==8,'GLOBAL_IDEA_COUNT_UNEXPECTED')
 require(result['old_status'].get('publish')==40 and result['old_status'].get('trash')==31,'SOURCE_STATUS_MISMATCH')
 require(result['new_status'].get('publish')==40 and result['new_status'].get('trash')==31,'TARGET_STATUS_MISMATCH')
 require(result['delta_count']==7 and result['delta_raw_match']==7 and result['delta_valid']==7,'QUILL_NOT_EXACT')
