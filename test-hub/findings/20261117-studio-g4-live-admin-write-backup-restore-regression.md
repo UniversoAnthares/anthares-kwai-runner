@@ -124,6 +124,20 @@ At WordPress branch commit `ce8214af0dbf90503c546edabc8764b4f9d5581a`, source st
 - **Final branch QA inventory** at commit `e3e6721ca2427a9fa02881d6a0c232994ba4da81`: 665 auditable files, 665 manifest assignments, zero omissions/duplicates/extras, mirrored manifests identical. GitLab peer branch not found and was not overwritten.
 - G4 C008/C009/C014/C016/C021 remain **PARTIAL** until actual authenticated UI journeys and REST write responses are observed. These operations were previously blocked by tool security and have not been retried through alternate channels.
 
+## G4 C024/C025 and script safety: checks executed 2026-11-17 afternoon
+
+**Read-only tenant isolation (no customer mutations):**
+- Verified the two actual project owners in production (15 published projects for one author and two for the other); a GET `/anthares-studio/v1/bootstrap?project={foreign}` as another authorized account returned **404**. The owner querying that project received **200**. Exit 0 and `RESULT=PASS`. This is now a regression in the isolated DB fixture of code PR #316 (commit `5a704f5311dfeb26e9cef144dd5fe73ad98a5331`).
+- GET `/anthares-studio/v1/bootstrap` as a logged-out user returned HTTP **401**. Shortcode `anst_shortcode()` rendered the login gate and omitted the private `anthares-estudio-root`; page 21383 remains `private`. `GUEST_SHORTCODE_SAFE=PASS;PAGE_PRIVATE=PASS`. This proves the indicated read-only cases, not the full web-cache/CDN matrix.
+
+**Inline bootstrap JSON safety:** before the fix, the initial document JSON used `JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT`, while the `window.AntharesEstudio` settings inline script omitted those flags. Patched only the new plugin, made both JSON encodings HTML-script-safe; branch commit `9afed11b3703cedf82350819f5d9a46aa00cb06c`, static regression `c8354d7075d9a5948caff97e0343341bdec620bd`. Hostinger staged PHP lint PASS, deployed with private backup and exact SHA check, then tested a script-terminator probe with `wp_json_encode`: `SCRIPT_TAG_SAFE=PASS`. Intermediate plugin SHA256: `66ea7fbcc35d7bab32ae7b512461a6efb3f05384810a693284f89ed8816ecee6`. Live installed Python tests 13/13 PASS.
+
+**G4 shared writing guard reconciliation:** live PHP had a narrower inline `anst_permission()` guard (non-admin returned 423 for both unauthorized and disabled writes), whereas PR #316 implements the shared `anst_write_pilot_gate()` with semantically correct status 403 for restricted nonadmins and 423 for disabled writes. Replaced *only* that narrow guard and the `anst_lesson_permission()` rule in live new-plugin PHP after a staged lint and expected-SHA validation, preserving backup `~/.anthares-studio-backups/anthares-estudio.php.before-pilot-gate-20261117`. **Current live PHP SHA256: `abb62797f3f3cf1ed6e32acaf45bfade3fbc5a75d1effb666ad6bf93e699968b`.** No changes to the legacy plugin or underlying user records.
+
+Post-deploy actual WP-CLI permission tests used *no POST mutation* (in-memory permission checks): `ADMIN=ALLOW`, `LESSON_ADMIN=ALLOW`, `NONADMIN=anst_pilot_admin_only` (403), `LESSON_NONADMIN=DENY`, virtual flag disabled `anst_staging_locked` (423), stored writes flag remained `1`. Live ACF remains OFF; plugin remains private. Legacy plugin SHA256 baseline `13c3c79676bc25ead5a2b02caa15306cbdefbfaf6647fbf8a636b85ab5d906bf`.
+
+All these operations ran in detached Session 0 jobs and completed; no desktop windows, interactive user input or reboot. Security denials affecting authenticated-browser reading and real REST mutations remain in place; these checks did not try to bypass them.
+
 ## Remaining blockers and conditions
 
 - Tool safety **explicitly blocked** the command for real REST create/edit/delete smoke with temporary records and cleanup; no attempt was made to bypass through another channel. Consequently full CRUD functionality C001-C025 cannot be declared approved.
