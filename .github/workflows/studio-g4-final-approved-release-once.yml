@@ -1,0 +1,62 @@
+name: Anthares Studio G4 Final Approved Production Scoped Release
+on:
+  push:
+    branches:
+      - coord/studio-g4-g5-20261116
+    paths:
+      - .github/workflows/studio-g4-final-approved-release-once.yml
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: anthares-studio-g4-final-production-release-20261117
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.repository == 'UniversoAnthares/anthares-kwai-runner' && github.ref == 'refs/heads/coord/studio-g4-g5-20261116'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Require completed and successful G4 REST, real browser and visual acceptance
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for run_id in 44101893739 44102893637 44103793482; do
+            evidence=$(curl -fsS --max-time 15 -H "Accept: application/vnd.github+json" -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$run_id")
+            echo "$evidence" | jq -e --argjson run_id "$run_id" '.id==$run_id and .status=="completed" and .conclusion=="success"' >/dev/null
+            echo "G4_ACCEPTANCE_RUN_PASS=$run_id"
+          done
+      - name: Compile scoped release scripts
+        run: |
+          python3 - <<'PY'
+          import pathlib,ast,re
+          s=pathlib.Path('tools/studio-g4-final-scoped-release.py').read_text(encoding='utf8')
+          ast.parse(s)
+          m=re.search(r'REMOTE=r"""(.*?)"""',s,re.S)
+          assert m
+          compile(m.group(1),'g4_release_remote.py','exec')
+          print('G4_FINAL_RELEASE_SYNTAX_PASS=1')
+          PY
+      - name: Check live 71/71, ACF ON, plugin hashes, legacy hash and exact six patches
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          G4_RELEASE_MODE: preflight
+        run: python3 tools/studio-g4-final-scoped-release.py
+      - name: Publish six approved files with private backup and automatic rollback, keep writes OFF
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          G4_RELEASE_MODE: deploy
+        run: python3 tools/studio-g4-final-scoped-release.py
+      - name: Verify external Studio and original endpoints
+        run: |
+          set -euo pipefail
+          get_status(){ curl -sS -L --max-time 25 -o /dev/null -w '%{http_code}' "$1"; }
+          test "$(get_status 'https://anthares.us/wp-content/plugins/anthares-studio/assets/studio-g6-navigation.css?g4_release=20261117')" = "200"
+          test "$(get_status 'https://anthares.us/wp-content/plugins/anthares-studio/assets/estudio.js?g4_release=20261117')" = "200"
+          test "$(get_status 'https://anthares.us/estudio/')" = "200"
+          test "$(get_status 'https://anthares.us/wp-json/anthares-studio/v1/bootstrap')" = "401"
+          echo 'G4_EXTERNAL_HTTP_SMOKE=PASS'
