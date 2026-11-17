@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/studio-g4-docker-visual.yml
       - tools/studio-g4-docker-qa.py
+      - tools/studio-g4-functional-acceptance.php
 permissions:
   contents: read
 concurrency:
