@@ -123,6 +123,14 @@ add_filter('pre_delete_post',static function($pre,$post,$force_delete){
  header="if (!defined('ABSPATH')) { exit; }\n"
  check(s.count(header)==1,'APPROVAL_INSERTION_ANCHOR_CHANGED')
  s=s.replace(header,header+approval)
+ for old,new in [
+  ("$column=sanitize_key((string)$req->get_param('column'));","$column=sanitize_text_field((string)$req->get_param('column'));"),
+  ("$col=sanitize_key((string)$req->get_param('column'));","$col=sanitize_text_field((string)$req->get_param('column'));"),
+  ("anst_meta_update((int)$item['id'],'_anst_column',sanitize_key($item['column']));","anst_meta_update((int)$item['id'],'_anst_column',sanitize_text_field((string)$item['column']));"),
+  ("$cols[]=['id'=>'col_'.wp_generate_password(8,false,false),'name'=>$name];","$cols[]=['id'=>'col_'.strtolower(wp_generate_password(8,false,false)),'name'=>$name];"),
+ ]:
+  check(s.count(old)==1,'G4_COLUMNS_PATCH_PRECONDITION_CHANGED')
+  s=s.replace(old,new)
  php.write_bytes(s.encode())
  for name,count in [('estudio.css',509),('estudio-dark.css',216)]:
   path=dev/'assets'/name
@@ -160,7 +168,7 @@ add_filter('pre_delete_post',static function($pre,$post,$force_delete){
  check(t.count(name)==1,'G6_TEST_BASE_CHANGED')
  tests.write_text(t.replace(name,test))
  expected={
-  'anthares-estudio.php':'16f5c01457085e73fcde291717ba46ebdbdb2801',
+  'anthares-estudio.php':'5f5ba7189e14cee11b1bffc8d850152c48351a44',
   'assets/estudio.css':'a0238eb95b78da38b427b1da566463f611fcd37c',
   'assets/estudio-dark.css':'1afedf2d97abcbd8ccdbf78251bcf1f4c68fe6d9',
   'tests/test_isolation.py':'b3902ff5102bcb6fa6b94203985cc374406b1a82'
