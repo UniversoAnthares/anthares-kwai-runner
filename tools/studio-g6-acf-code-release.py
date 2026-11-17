@@ -81,29 +81,29 @@ def tree_no_symlinks(dir):
 def patched_plugin(stage):
  php=stage/'anthares-estudio.php'
  content=php.read_bytes().decode('utf8')
- before="""add_filter('body_class', function($classes){
+ before='''add_filter('body_class', function($classes){
  if(is_page('studio') && (!is_user_logged_in() || !anst_can_use()))$classes[]='aest-access-gate';
  return $classes;
-});"""
- after="""add_filter('body_class', function($classes){
+});'''
+ after='''add_filter('body_class', function($classes){
  if (is_page('studio')) {
   // Identidade visual estável e exclusiva do novo Studio.
   $classes[] = 'anst-studio-page';
   if (!is_user_logged_in() || !anst_can_use()) $classes[] = 'aest-access-gate';
  }
  return $classes;
-});"""
+});'''
  require(content.count(before)==1,'G6_BASE_BODY_FILTER_UNEXPECTED')
  content=content.replace(before,after)
  anchor="function anst_trash_cleanup_enabled(){return (string)get_option('anst_trash_cleanup_enabled','0')==='1';}"
- guard="""
+ guard='''
 /** Preserva itens ANST da lixeira quando WordPress executa limpeza nativa. */
 add_filter('pre_delete_post',static function($pre,$post,$force_delete){
  if($pre!==null)return $pre;
  if(!anst_trash_cleanup_enabled()&&doing_action('wp_scheduled_delete')&&
     $post instanceof WP_Post&&in_array($post->post_type,anst_trash_types(),true))return false;
  return $pre;
-},10,3);"""
+},10,3);'''
  require(content.count(anchor)==1,'G6_BASE_TRASH_GUARD_CHANGED')
  content=content.replace(anchor,anchor+'\n'+guard)
  php.write_bytes(content.encode('utf8'))
