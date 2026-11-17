@@ -62,7 +62,14 @@ def main():
      context=g4.login_context(browser,1440,900)
      try:
       tabA=context.new_page()
-      tabA.goto(f'{g4.BASE_URL}/?page_id={newid}',wait_until='domcontentloaded')
+      page_response=tabA.goto(f'{g4.BASE_URL}/?page_id={newid}',wait_until='domcontentloaded')
+      print('G4_BROWSER_FIRST_PAGE_HTTP='+str(page_response.status if page_response else 'NO_RESPONSE'),flush=True)
+      if not tabA.locator('#anthares-estudio-root').count():
+       print('G4_BROWSER_DOCUMENT_TITLE='+str(tabA.title())[:80],flush=True)
+       container_log=subprocess.run(['docker','logs','--tail','18','anthares-g4-wp'],capture_output=True,text=True)
+       for line in (container_log.stdout+'\n'+container_log.stderr).splitlines()[-18:]:
+        if any(x in line.lower() for x in ('fatal','error','warning','uncaught')):
+         print('G4_BROWSER_WP_DIAGNOSTIC='+re.sub(r'[^A-Za-z0-9 _:/.,()=-]','_',line)[:180],flush=True)
       project=int(require_api(tabA,'POST','projects',{'mode':'manuscrito','title':'G4 Browsers QA'},200,'CREATE_PROJECT')['id'])
       chapter=int(require_api(tabA,'POST','chapters',{'project':project,'title':'Capítulo Sintético'},200,'CREATE_CHAPTER')['id'])
       print('G4_C009_SYNTHETIC_PROJECT_CHAPTER_CREATED=PASS',flush=True)
