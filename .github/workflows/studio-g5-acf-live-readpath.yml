@@ -1,0 +1,37 @@
+name: Anthares Studio G5 Live ACF Read Path Preview
+on:
+  push:
+    branches:
+      - coord/studio-g4-g5-20261116
+    paths:
+      - .github/workflows/studio-g5-acf-live-readpath.yml
+      - tools/studio-g5-acf-live-readpath-audit.py
+permissions:
+  contents: read
+concurrency:
+  group: anthares-studio-g5-readpath-20261116
+  cancel-in-progress: false
+jobs:
+  readpath:
+    if: github.repository == 'UniversoAnthares/anthares-kwai-runner'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Check SSH audit and embedded PHP runner syntax
+        run: |
+          python3 - <<'PY'
+          import ast,pathlib,re
+          code=pathlib.Path('tools/studio-g5-acf-live-readpath-audit.py').read_text(encoding='utf8')
+          ast.parse(code)
+          m=re.search(r'REMOTE=r"""(.*?)"""',code,re.S)
+          assert m
+          compile(m.group(1),'remote_g5_acf_preview.py','exec')
+          print('G5_READPATH_SYNTAX_PASS=1')
+          PY
+      - name: Compare live ACF get_field parity across two owners, API and 7 Quill Delta, no DB writes
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        run: python3 tools/studio-g5-acf-live-readpath-audit.py
