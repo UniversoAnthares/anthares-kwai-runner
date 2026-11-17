@@ -59,7 +59,8 @@ for i in $(seq 1 240);do
 done
 echo 'G4_SERVER_FINISHED=1'
 '''
-for x,y in [('JOB',JOB),('PORT',PORT),('USERNAME',USERNAME),('EMAIL',EMAIL),('PASSWORD',PASSWORD)]:
+job,port,username,email,password=JSON_ARGS
+for x,y in [('JOB',job),('PORT',port),('USERNAME',shlex.quote(username)),('EMAIL',shlex.quote(email)),('PASSWORD',shlex.quote(password))]:
  script=script.replace(x,y)
  add=add.replace(x,y)
 print(script+add)
@@ -80,11 +81,7 @@ def main():
         ssh=['ssh','-T','-i',str(k),'-p',sshport,'-o','BatchMode=yes','-o','IdentitiesOnly=yes',
              '-o','StrictHostKeyChecking=yes','-o','UserKnownHostsFile='+str(known),
              '-o','HostKeyAlias=anthares-studio-g4visual','-o','ConnectTimeout=10',user+'@'+host]
-        substitutions={'JOB':job,'PORT':str(port),'USERNAME':shlex.quote(username),
-                       'EMAIL':shlex.quote(username+'@example.invalid'),'PASSWORD':shlex.quote(password)}
-        gen=GENERATE
-        for a,b in substitutions.items():
-            gen=gen.replace(a,repr(b))
+        gen=GENERATE.replace('JSON_ARGS',repr([job,str(port),username,username+'@example.invalid',password]))
         generator=subprocess.run(ssh+['/opt/alt/python311/bin/python3.11 -'],
                                 input=gen,text=True,capture_output=True,timeout=35)
         if generator.returncode:
