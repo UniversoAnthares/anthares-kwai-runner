@@ -257,6 +257,11 @@ def main():
             label=(match.group(1) if match else ('SSH_AUTH_FAILED' if 'Permission denied' in process.stderr else 'REMOTE_RUNTIME_ERROR'))
             label=re.sub(r'[^A-Za-z0-9 _:-]','_',label)[:140]
             print('STUDIO_ITEM3_REMOTE_DIAGNOSTIC='+label,flush=True)
+            # Restrict diagnostic to the final interpreter/SSH error line and redact likely secret words.
+            final=str(tail)
+            final=re.sub(r'(?i)(token|password|privatekey|secret|credential)\S*','[REDACTED]',final)
+            final=re.sub(r'[^A-Za-z0-9 _.:=(),\-\[\]]','_',final)[:180]
+            print('STUDIO_ITEM3_REMOTE_ERROR_LAST='+final,flush=True)
         require(process.returncode==0,'REMOTE_INTEGRITY_AUDIT_FAILED')
         require('STUDIO_ITEM3_INTEGRITY_PROVEN=1' in process.stdout,'INTEGRITY_SUCCESS_SIGNAL_MISSING')
 
