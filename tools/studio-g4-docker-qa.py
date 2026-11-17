@@ -343,8 +343,17 @@ def main():
      print('G4_VISUAL_BASELINE_PASS=1',flush=True)
      # Replace only the ephemeral container-mounted new Studio. PHP worker is restarted.
      staged=plugin/'anthares-studio'
+     # The WordPress container may have changed ownership of its writable volume.
+     # Restore ownership only inside this job's private temporary plugin directory.
+     subprocess.run(['sudo','chown','-R',str(os.getuid())+':'+str(os.getgid()),str(staged)],check=True)
      shutil.rmtree(staged)
      shutil.copytree(root/'dev/anthares-studio',staged)
+     for current,folders,files in os.walk(staged):
+      os.chmod(current,0o755)
+      for folder in folders:os.chmod(pathlib.Path(current)/folder,0o755)
+      for filename in files:
+       pth=pathlib.Path(current)/filename
+       if pth.is_file() and not pth.is_symlink():os.chmod(pth,0o644)
      docker('restart','anthares-g4-wp')
      import time;time.sleep(8)
      context=login_context(browser,1440,900)
