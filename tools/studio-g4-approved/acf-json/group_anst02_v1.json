@@ -1,0 +1,205 @@
+{
+  "key": "group_anst02_v1",
+  "title": "Anthares Studio - ANST02 Conceito",
+  "fields": [
+    {
+      "key": "field_anst02_topic_v1",
+      "label": "topic",
+      "name": "studio_topic",
+      "type": "textarea",
+      "instructions": "Schema G5 offline: dados antigos preservados ate homologacao",
+      "required": 0,
+      "conditional_logic": 0,
+      "wrapper": {
+        "width": "",
+        "class": "",
+        "id": ""
+      },
+      "default_value": "",
+      "new_lines": "",
+      "rows": 4,
+      "maxlength": 0
+    },
+    {
+      "key": "field_anst02_premise_v1",
+      "label": "premise",
+      "name": "studio_premise",
+      "type": "textarea",
+      "instructions": "Schema G5 offline: dados antigos preservados ate homologacao",
+      "required": 0,
+      "conditional_logic": 0,
+      "wrapper": {
+        "width": "",
+        "class": "",
+        "id": ""
+      },
+      "default_value": "",
+      "new_lines": "",
+      "rows": 4,
+      "maxlength": 0
+    },
+    {
+      "key": "field_anst02_logline_v1",
+      "label": "logline",
+      "name": "studio_logline",
+      "type": "textarea",
+      "instructions": "Schema G5 offline: dados antigos preservados ate homologacao",
+      "required": 0,
+      "conditional_logic": 0,
+      "wrapper": {
+        "width": "",
+        "class": "",
+        "id": ""
+      },
+      "default_value": "",
+      "new_lines": "",
+      "rows": 4,
+      "maxlength": 0
+    },
+    {
+      "key": "field_anst02_storyline_v1",
+      "label": "storyline",
+      "name": "studio_storyline",
+      "type": "textarea",
+      "instructions": "Schema G5 offline: dados antigos preservados ate homologacao",
+      "required": 0,
+      "conditional_logic": 0,
+      "wrapper": {
+        "width": "",
+        "class": "",
+        "id": ""
+      },
+      "default_value": "",
+      "new_lines": "",
+      "rows": 4,
+      "maxlength": 0
+    },
+    {
+      "key": "field_anst02_theme_v1",
+      "label": "theme",
+      "name": "studio_theme",
+      "type": "textarea",
+      "instructions": "Schema G5 offline: dados antigos preservados ate homologacao",
+      "required": 0,
+      "conditional_logic": 0,
+      "wrapper": {
+        "width": "",
+        "class": "",
+        "id": ""
+      },
+      "default_value": "",
+      "new_lines": "",
+      "rows": 4,
+      "maxlength": 0
+    },
+    {
+      "key": "field_anst02_thesis_v1",
+      "label": "thesis",
+      "name": "studio_thesis",
+      "type": "textarea",
+      "instructions": "Schema G5 offline: dados antigos preservados ate homologacao",
+      "required": 0,
+      "conditional_logic": 0,
+      "wrapper": {
+        "width": "",
+        "class": "",
+        "id": ""
+      },
+      "default_value": "",
+      "new_lines": "",
+      "rows": 4,
+      "maxlength": 0
+    },
+    {
+      "key": "field_anst02_tone_v1",
+      "label": "tone",
+      "name": "studio_tone",
+      "type": "textarea",
+      "instructions": "Schema G5 offline: dados antigos preservados ate homologacao",
+      "required": 0,
+      "conditional_logic": 0,
+      "wrapper": {
+        "width": "",
+        "class": "",
+        "id": ""
+      },
+      "default_value": "",
+      "new_lines": "",
+      "rows": 4,
+      "maxlength": 0
+    },
+    {
+      "key": "field_anst02_summary_v1",
+      "label": "summary",
+      "name": "studio_summary",
+      "type": "textarea",
+      "instructions": "Schema G5 offline: dados antigos preservados ate homologacao",
+      "required": 0,
+      "conditional_logic": 0,
+      "wrapper": {
+        "width": "",
+        "class": "",
+        "id": ""
+      },
+      "default_value": "",
+      "new_lines": "",
+      "rows": 4,
+      "maxlength": 0
+    },
+    {
+      "key": "field_anst02_events_v1",
+      "label": "events",
+      "name": "studio_events",
+      "type": "textarea",
+      "instructions": "Schema G5 offline: dados antigos preservados ate homologacao",
+      "required": 0,
+      "conditional_logic": 0,
+      "wrapper": {
+        "width": "",
+        "class": "",
+        "id": ""
+      },
+      "default_value": "",
+      "new_lines": "",
+      "rows": 4,
+      "maxlength": 0
+    },
+    {
+      "key": "field_anst02_outline_v1",
+      "label": "outline",
+      "name": "studio_outline",
+      "type": "textarea",
+      "instructions": "Schema G5 offline: dados antigos preservados ate homologacao",
+      "required": 0,
+      "conditional_logic": 0,
+      "wrapper": {
+        "width": "",
+        "class": "",
+        "id": ""
+      },
+      "default_value": "",
+      "new_lines": "",
+      "rows": 4,
+      "maxlength": 0
+    }
+  ],
+  "location": [
+    [
+      {
+        "param": "post_type",
+        "operator": "==",
+        "value": "anst_projeto"
+      }
+    ]
+  ],
+  "menu_order": 1,
+  "position": "normal",
+  "style": "default",
+  "label_placement": "top",
+  "instruction_placement": "label",
+  "hide_on_screen": [],
+  "active": false,
+  "description": "G5 OFFLINE; aguarda homologacao G4, sem registro no runtime.",
+  "show_in_rest": 0,
+  "modified": 1794920700
+}
