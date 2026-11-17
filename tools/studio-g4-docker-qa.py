@@ -332,7 +332,7 @@ def run_rest_matrix(root):
         for line in result.stdout.splitlines():
             if line.startswith('G4_'):print(line,flush=True)
         if result.returncode:
-            for n,line in enumerate((result.stderr.strip().splitlines() or ['NO_STDERR'])[-8:]):
+            for n,line in enumerate((result.stderr.strip().splitlines() or ['NO_STDERR'])[:9]):
                 safe=re.sub(r'[^A-Za-z0-9 /:()_.=-]','_',line)[:210]
                 print('G4_REST_MATRIX_ERROR_'+str(n)+'_MODE='+mode+' '+safe,flush=True)
             raise RuntimeError('G4_REST_MATRIX_FAILED_'+mode)
