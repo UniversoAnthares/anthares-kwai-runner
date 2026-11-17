@@ -20,6 +20,8 @@ ORIGINAL LEGACY PHP SHA256: 13c3c79676bc25ead5a2b02caa15306cbdefbfaf6647fbf8a636
 8. CSS scope verification on live deployment: main `estudio.css` has **509** `anst-studio-page` selectors, dark CSS has **216**, and both contain **zero** `page-id-19344` selectors. These names and counts match versioned G4 assertions.
 9. Read-only post-activation database parity: AEST and ANST counts each: projeto 35, nota 13, capítulo 7, cartão 16 (total 71 including trash). Historical 7 Quill Delta SHA matches and 28 REST route parity remain recorded in earlier Test Hub finding.
 
+- Static route audit of the versioned G6 JavaScript identified **45** call sites: 44 normalized direct call sites match registered PHP REST methods/paths; the dynamic import destination chooses `chapters/import` or `chapters/{id}/reimport`, both registered. Added `test_core_rest_frontend_parity` to existing `test_g6_fixed_navigation.py` in draft PR #316, commit `358c3219f9d8e37f56759ef290c0c9499b2247f0`; asserted literal references checked. Execution of this new branch test remains pending.
+
 ## Remaining blockers and conditions
 
 - Tool safety **explicitly blocked** the command for real REST create/edit/delete smoke with temporary records and cleanup; no attempt was made to bypass through another channel. Consequently full CRUD functionality C001-C025 cannot be declared approved.
