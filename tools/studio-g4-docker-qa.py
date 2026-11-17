@@ -316,6 +316,31 @@ def render_pair(context,root,stage,theme,viewport,phase,newid):
   return vals
  finally:page.close()
 
+def run_rest_matrix(root):
+    fixture=HERE/'studio-g4-c001-c025-runtime-fixture.php'
+    check(fixture.is_file(),'G4_REST_FIXTURE_MISSING')
+    docker('cp',str(fixture),'anthares-g4-wp:/tmp/studio-g4-c001-c025-runtime-fixture.php')
+    lint=docker('exec','anthares-g4-wp','php','-l','/tmp/studio-g4-c001-c025-runtime-fixture.php')
+    check('No syntax errors' in lint,'G4_REST_FIXTURE_PHP_LINT')
+    for mode in ('OFF','ON'):
+        wp('option','update','anst_writes_enabled','0')
+        wp('option','update','anst_acf_runtime_enabled','0' if mode=='OFF' else '1')
+        command=['docker','exec','-e','G4_FIXTURE_MODE='+mode,'-u','www-data',
+                 'anthares-g4-wp','php','/tmp/wp-cli.phar','--path=/var/www/html',
+                 '--skip-themes','eval-file','/tmp/studio-g4-c001-c025-runtime-fixture.php']
+        result=subprocess.run(command,capture_output=True,text=True,timeout=95)
+        for line in result.stdout.splitlines():
+            if line.startswith('G4_'):print(line,flush=True)
+        if result.returncode:
+            last=(result.stderr.strip().splitlines() or ['NO_STDERR'])[-1]
+            safe=re.sub(r'[^A-Za-z0-9 /:()_.=-]','_',last)[:180]
+            print('G4_REST_MATRIX_ERROR_MODE='+mode+' '+safe,flush=True)
+            raise RuntimeError('G4_REST_MATRIX_FAILED_'+mode)
+        check('G4_SYNTHETIC_REST_MATRIX_'+mode+'=PASS' in result.stdout,
+              'G4_REST_MATRIX_SUCCESS_MARKER_MISSING_'+mode)
+    check(wp('option','get','anst_writes_enabled').strip()=='0','G4_SANDBOX_WRITES_LEFT_OPEN')
+    print('G4_REST_MATRIX_BOTH_ACF_MODES_PASS=1',flush=True)
+
 def login_context(browser,width,height):
  context=browser.new_context(viewport={'width':width,'height':height},device_scale_factor=1)
  p=context.new_page()
@@ -388,7 +413,8 @@ def main():
        raise
       buttons=page.locator('.aest-group-tabs button')
       check(buttons.count()==7,'G6_SEVEN_GROUPS_MISSING')
-      print('G6_NAV_VISUAL_5_AND_7=PASS',flush=True)
+      run_rest_matrix(root)
+     print('G6_NAV_VISUAL_5_AND_7=PASS',flush=True)
       page.screenshot(path=str(root/'shots/g6-five-seven-desktop.png'),full_page=True)
       for slug in ('pesquisa','planejamento','manuscrito','analises','revisao','publicacao','visao'):
        btn=page.locator('.aest-group-tabs button[data-tab="'+slug+'"]')
