@@ -253,13 +253,8 @@ def main():
         if process.returncode!=0:
             import re
             tail=(process.stderr.strip().splitlines() or ['UNKNOWN_REMOTE_ERROR'])[-1]
-            m=re.search(r'^(?:RuntimeError|ValueError|TypeError|SyntaxError|NameError|IndentationError|AssertionError):\\s*(.{1,180})
-        require('STUDIO_ITEM3_INTEGRITY_PROVEN=1' in process.stdout,'INTEGRITY_SUCCESS_SIGNAL_MISSING')
-
-if __name__=='__main__':
-    main()
-,tail)
-            label=(m.group(1) if m else ('SSH_AUTH_FAILED' if 'Permission denied' in process.stderr else 'REMOTE_RUNTIME_ERROR'))
+            match=re.search(r'^(?:RuntimeError|ValueError|TypeError|SyntaxError|NameError|IndentationError|AssertionError):\s*(.{1,180})$',tail)
+            label=(match.group(1) if match else ('SSH_AUTH_FAILED' if 'Permission denied' in process.stderr else 'REMOTE_RUNTIME_ERROR'))
             label=re.sub(r'[^A-Za-z0-9 _:-]','_',label)[:140]
             print('STUDIO_ITEM3_REMOTE_DIAGNOSTIC='+label,flush=True)
         require(process.returncode==0,'REMOTE_INTEGRITY_AUDIT_FAILED')
