@@ -21,6 +21,9 @@ def fail(cond,code):
 def git_sha(path):
  data=path.read_bytes()
  return hashlib.sha1(b'blob '+str(len(data)).encode()+b'\x00'+data).hexdigest()
+def leftstrip_one_continuation(value):
+ lines=value.split('\n')
+ return '\n'.join([lines[0]]+[(part[1:] if part.startswith(' ') else part) for part in lines[1:]])
 head=subprocess.check_output(['git','-C',str(source),'rev-parse','HEAD'],text=True,timeout=10).strip()
 fail(head==sha0,'G6_SOURCE_HEAD_CHANGED')
 T=pathlib.Path(tempfile.mkdtemp(prefix='studio-g4-g5-g6-integrated-',dir=private))
@@ -45,6 +48,8 @@ try:
  }
  return $classes;
 });'''
+ bodyOld=leftstrip_one_continuation(bodyOld)
+ bodyNew=leftstrip_one_continuation(bodyNew)
  fail(code.count(bodyOld)==1,'G6_BODY_OLD_SCOPE_MISMATCH')
  code=code.replace(bodyOld,bodyNew)
  anchor="function anst_trash_cleanup_enabled(){return (string)get_option('anst_trash_cleanup_enabled','0')==='1';}"
@@ -56,6 +61,7 @@ add_filter('pre_delete_post',static function($pre,$post,$force_delete){
     $post instanceof WP_Post&&in_array($post->post_type,anst_trash_types(),true))return false;
  return $pre;
 },10,3);'''
+ guard=leftstrip_one_continuation(guard)
  fail(code.count(anchor)==1 and "add_filter('pre_delete_post'" not in code,'TRASH_GUARD_SOURCE_CHANGED')
  code=code.replace(anchor,anchor+'\n'+guard)
  php.write_text(code,encoding='utf-8')
@@ -93,6 +99,7 @@ add_filter('pre_delete_post',static function($pre,$post,$force_delete){
         self.assertIn("add_filter('wp_untrash_post_status'",PHP)
 
     def test_unchanged_vendor_and_backups_remain_identical(self):'''
+ new=leftstrip_one_continuation(new)
  fail(t.count(old)==1,'TEST_CASE_SOURCE_CHANGED')
  tests.write_text(t.replace(old,new),encoding='utf-8')
  for rel,sha in expected.items():
