@@ -214,7 +214,17 @@ def setup_docker(root,info):
   raise RuntimeError('WORDPRESS_CONTAINER_NOT_READY')
  wp('core','install','--url='+BASE_URL,'--title=Estudio QA Isolado',
     '--admin_user='+LOGIN,'--admin_password='+PASS,'--admin_email=g4synthetic@example.invalid','--skip-email')
- wp('plugin','activate','anthares-estudio','anthares-studio','advanced-custom-fields')
+ for plugin_name in ('advanced-custom-fields','anthares-estudio','anthares-studio'):
+  try:
+   wp('plugin','activate',plugin_name)
+   print('G4_PLUGIN_ACTIVE='+plugin_name,flush=True)
+  except subprocess.CalledProcessError as e:
+   print('G4_PLUGIN_ACTIVATION_FAILED='+plugin_name,flush=True)
+   errors=(e.stderr or e.stdout or 'UNCLASSIFIED').splitlines()
+   for line in errors[-8:]:
+    clean=re.sub(r'[^A-Za-z0-9 _:/,().-]','_',line)[:175]
+    print('G4_PLUGIN_DIAGNOSTIC='+clean,flush=True)
+   raise
  active=info.get('stylesheet','')
  if active:
   try:
@@ -358,6 +368,7 @@ def main():
    subprocess.run(['docker','rm','-f','anthares-g4-wp'],capture_output=True)
    subprocess.run(['docker','rm','-f','anthares-g4-db'],capture_output=True)
    subprocess.run(['docker','network','rm','anthares-g4-net'],capture_output=True)
+   subprocess.run(['sudo','chown','-R',str(os.getuid())+':'+str(os.getgid()),str(root)],capture_output=True)
    print('G4_DOCKER_CLEANUP=PASS',flush=True)
 
 if __name__=='__main__':
