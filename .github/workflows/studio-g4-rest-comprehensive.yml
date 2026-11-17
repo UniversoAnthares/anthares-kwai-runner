@@ -1,0 +1,38 @@
+name: Anthares Studio G4 REST Comprehensive Synthetic QA
+on:
+  push:
+    branches: [coord/studio-g4-g5-20261116]
+    paths:
+      - .github/workflows/studio-g4-rest-comprehensive.yml
+      - tools/studio-g4-c001-c025-runtime-fixture.php
+permissions:
+  contents: read
+concurrency:
+  group: anthares-studio-g4-rest-comprehensive-20261117
+  cancel-in-progress: false
+jobs:
+  runtime:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Verify Python and browser simulator setup
+        run: |
+          python3 - <<'PY'
+          import ast,pathlib,re
+          s=pathlib.Path('tools/studio-g4-docker-qa.py').read_text()
+          ast.parse(s)
+          m=re.search(r'REMOTE=r"""(.*?)"""',s,re.S)
+          assert m
+          compile(m.group(1),'g4_code_source.py','exec')
+          print('G4_FAST_SOURCE_SYNTAX_PASS=1')
+          PY
+      - name: Install Playwright runtime
+        run: python3 -m pip install -q playwright
+      - name: Test G4 full REST matrix with ACF OFF and ACF ON in disposable Docker
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          G4_REST_FAST: '1'
+        run: python3 tools/studio-g4-docker-qa.py
