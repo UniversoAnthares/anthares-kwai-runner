@@ -1,0 +1,47 @@
+name: Anthares Studio G4 Browser Autosave and Concurrency QA
+on:
+  push:
+    branches: [coord/studio-g4-g5-20261116]
+    paths:
+      - .github/workflows/studio-g4-browser-final.yml
+      - tools/studio-g4-browser-final.py
+      - tools/studio-g4-docker-qa.py
+      - tools/studio-g4-approved/**
+permissions:
+  contents: read
+concurrency:
+  group: anthares-studio-g4-browser-final-20261117
+  cancel-in-progress: false
+jobs:
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Static compile
+        run: |
+          python3 - <<'PY'
+          import ast,pathlib
+          for path in ('tools/studio-g4-browser-final.py','tools/studio-g4-docker-qa.py'):
+            ast.parse(pathlib.Path(path).read_text())
+          print('G4_BROWSER_CODE_SYNTAX=PASS')
+          PY
+      - name: Browser and Docker prerequisites
+        run: |
+          python3 -m pip install -q playwright
+          command -v docker
+          command -v google-chrome
+      - name: Isolated real Quill browser autosave, two tabs conflict, 500 recovery and mobile
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          G4_BROWSER_EVIDENCE_DIR: /tmp/anthares-g4-browser-evidence
+        run: python3 tools/studio-g4-browser-final.py
+      - name: Preserve synthetic screenshots only
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: anthares-g4-quill-browser-synthetic
+          path: /tmp/anthares-g4-browser-evidence/g4-browser-synthetic.zip
+          retention-days: 3
