@@ -72,6 +72,18 @@ Official basis: `ANTHARES_STUDIO_DOCUMENTACAO_20261116/06-QUALIDADE-SEGURANCA-E-
 
 **Current deployed source:** Studio PHP SHA256 `daee8f582e8bf0a459451d330361431182bfbffd5d42a5d56d88e7ced6fdeff9`; original PHP hash above. `anst_writes_enabled=1`, `anst_acf_runtime_enabled=0`. Private code and SQL backups retained; G5 ACF activation, full PR integration, G7 UI and complete G4 still await their gates.
 
+## Additional implementation: preserve text on failed navigation
+
+**Defect:** the old `openRouteFromLocation()` awaited `saveChapter()` without inspecting the `false` return, then reset `chapterId` and rendered another screen. A failed `saveUnlock()` could propagate to its catch, which switched the view to Inicio, potentially discarding visible unsaved fields. In `navigate()`, the failed planning save also propagated to the outer handler. This affected G4 C008/C016/C022.
+
+**Code:** patched the new Studio JavaScript to stop navigation on failed chapter save or planning save, preserve the current editor and restore the URL fragment with `window.history.replaceState()`. The old `/estudio` code and routes remain unchanged.
+
+**Validation:** V8 in-memory tests using the actual versioned JavaScript passed **3/3** (chapter save failure during browser navigation, planning save failure during browser navigation, planning save failure during menu click). Full new file syntax compiled successfully in V8. Branch JS Git blob `40fb188fdd0654ce59c60472b5159b0b8678852c`.
+
+**Deployment:** updated only `anthares-studio/assets/estudio.js` on the Hostinger. Pre-deploy original blob `18669c8fa7f24efcacc9c040145ecc0c7fa4db03` was backed up to `~/.anthares-studio-backups/estudio.js.before-navigation-safety-20261117`. A private staged file was patched and required to match the exact reviewed Git blob before atomic promotion. Post-deploy returned `G4_SAFETY_JS_DEPLOY_PASS`, exact blob `40fb188fdd0654ce59c60472b5159b0b8678852c`, a refreshed file mtime, 13/13 live tests PASS, PHP lint PASS; legacy main PHP SHA unchanged. All commands ran as hidden detached Session 0 jobs.
+
+**Future regression:** existing `test_g6_fixed_navigation.py` extended to assert the failed-save early returns, URL restoration and safe menu transitions. Code commit `23935824990f2ef691790311709d1e9b0ac81674`. Manifest coverage after this commit: 665/665, identical mirror manifests and zero unassigned/duplicate paths. This is verified by versioned static check and runtime V8 simulation; full authenticated-browser acceptance remains pending due the existing security denial.
+
 ## Remaining blockers and conditions
 
 - Tool safety **explicitly blocked** the command for real REST create/edit/delete smoke with temporary records and cleanup; no attempt was made to bypass through another channel. Consequently full CRUD functionality C001-C025 cannot be declared approved.
