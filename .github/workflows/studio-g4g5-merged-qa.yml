@@ -1,0 +1,36 @@
+name: Anthares Studio G4 G5 G6 Integrated Byte Exact QA
+on:
+  push:
+    branches: [coord/studio-g4-g5-20261116]
+    paths:
+      - .github/workflows/studio-g4g5-merged-qa.yml
+      - tools/studio-g4g5-merged-runtime-qa.py
+permissions:
+  contents: read
+concurrency:
+  group: studio-g4g5-merged-byteexact-20261116
+  cancel-in-progress: false
+jobs:
+  isolated:
+    if: github.repository == 'UniversoAnthares/anthares-kwai-runner'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Validate Python host/remote syntax
+        run: |
+          python3 - <<'PY'
+          import ast,re,pathlib
+          s=pathlib.Path('tools/studio-g4g5-merged-runtime-qa.py').read_text(encoding='utf8')
+          ast.parse(s)
+          m=re.search(r'REMOTE=r"""(.*?)"""',s,re.S)
+          assert m
+          compile(m.group(1),'remote_studio_integration.py','exec')
+          print('INTEGRATION_QA_SYNTAX=PASS')
+          PY
+      - name: Verify GitHub blob hashes, PHPUnit/Python and G5 MariaDB ACF OFF/ON
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        run: python3 tools/studio-g4g5-merged-runtime-qa.py
