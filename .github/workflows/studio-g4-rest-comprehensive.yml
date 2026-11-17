@@ -5,6 +5,7 @@ on:
     paths:
       - .github/workflows/studio-g4-rest-comprehensive.yml
       - tools/studio-g4-c001-c025-runtime-fixture.php
+      - tools/studio-g4-docker-qa.py
 permissions:
   contents: read
 concurrency:
