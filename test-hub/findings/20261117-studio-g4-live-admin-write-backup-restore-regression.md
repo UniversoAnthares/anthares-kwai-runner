@@ -138,6 +138,15 @@ Post-deploy actual WP-CLI permission tests used *no POST mutation* (in-memory pe
 
 All these operations ran in detached Session 0 jobs and completed; no desktop windows, interactive user input or reboot. Security denials affecting authenticated-browser reading and real REST mutations remain in place; these checks did not try to bypass them.
 
+## QA post-deploy em 17/11/2026
+
+- Acesso: administrador autorizado; usuario sem manage_options recebe anst_pilot_admin_only (HTTP 403); com escrita virtualmente desativada, anst_staging_locked (HTTP 423). Aula tambem exige administracao.
+- A primeira execucao do teste instalado detectou uma assercao obsoleta da antiga permissao de aula; feita copia privada, corrigida a assercao e repetida a suite: **13/13 PASS**.
+- SHA256 do teste instalado: 727a6970a75c25cef17384f62a5342c351faa514311dca220a31e36faa39fc16.
+- PHP8.3 lint PASS; plugin Studio PHP SHA256 abb62797f3f3cf1ed6e32acaf45bfade3fbc5a75d1effb666ad6bf93e699968b; JS Git blob 96c05ac61fa8f345a613d74fb170f99e59ba7f35.
+- Teste HTTP publico HTTPS /studio/ sem cookies ou sessao: **404**. Complementa anonimo REST 401, acesso cruzado de autores 404 e consulta do proprietario 200.
+- Ficam pendentes teste real de mutacao REST, browser autenticado desktop/mobile, restauracao integral em banco isolado e execucao da suite completa da branch do PR; respeitar negativas de seguranca anteriores.
+
 ## Remaining blockers and conditions
 
 - Tool safety **explicitly blocked** the command for real REST create/edit/delete smoke with temporary records and cleanup; no attempt was made to bypass through another channel. Consequently full CRUD functionality C001-C025 cannot be declared approved.
