@@ -91,7 +91,7 @@ if MODE=='dryrun':
  require(before['SOURCE_FINGERPRINT']==again['SOURCE_FINGERPRINT'],'SOURCE_DRIFT_IN_READONLY')
  print('STUDIO_G5_LIVE_DRYRUN_PROVEN=1',flush=True)
 elif MODE=='apply':
- require(before['ACF_TARGET_EXISTING'] in ('0','412'),'PREEXISTING_ACF_INCONSISTENT')
+ require(before['ACF_TARGET_EXISTING'] in ('0','414'),'PREEXISTING_ACF_INCONSISTENT')
  helper=tempfile.NamedTemporaryFile(prefix='.anst-g5-cli-',suffix='.php',dir=str(private),delete=False)
  try:
   helper.write(b"<?php if(!defined('ANST_ALLOW_ACF_WRITE')) define('ANST_ALLOW_ACF_WRITE',true);\n")
@@ -112,14 +112,14 @@ elif MODE=='apply':
   if os.path.isfile(helper.name):os.unlink(helper.name)
  post=dry()
  require(post['SOURCE_FINGERPRINT']==before['SOURCE_FINGERPRINT'],'LEGACY_META_CHANGED')
- require(post['ACF_TARGET_EXISTING']=='412','ACF_TARGET_POSTCOUNT_BAD')
+ require(post['ACF_TARGET_EXISTING']=='414','ACF_TARGET_POSTCOUNT_BAD')
  state()
  require(hashlib.sha256(legacy.read_bytes()).hexdigest()=='13c3c79676bc25ead5a2b02caa15306cbdefbfaf6647fbf8a636b85ab5d906bf','LEGACY_CHANGED_AFTER_MIGRATION')
  print('STUDIO_G5_MIGRATION_APPLY_PROVEN=1',flush=True)
  print('STUDIO_G5_LEGACY_DATA_UNCHANGED=1',flush=True)
  print('STUDIO_G5_RUNTIME_STILL_OFF=1',flush=True)
 elif MODE=='verify':
- require(before['ACF_TARGET_EXISTING']=='412','ACF_TARGETS_NOT_ALL_PRESENT')
+ require(before['ACF_TARGET_EXISTING']=='414','ACF_TARGETS_NOT_ALL_PRESENT')
  print('STUDIO_G5_READONLY_VERIFY_PROVEN=1',flush=True)
 """
 def main():
