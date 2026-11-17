@@ -214,7 +214,7 @@ def setup_docker(root,info):
   raise RuntimeError('WORDPRESS_CONTAINER_NOT_READY')
  wp('core','install','--url='+BASE_URL,'--title=Estudio QA Isolado',
     '--admin_user='+LOGIN,'--admin_password='+PASS,'--admin_email=g4synthetic@example.invalid','--skip-email')
- for plugin_name in ('advanced-custom-fields','anthares-estudio','anthares-studio'):
+ for plugin_name in ('advanced-custom-fields','anthares-estudio','anthares-studio/anthares-estudio.php'):
   try:
    wp('plugin','activate',plugin_name)
    print('G4_PLUGIN_ACTIVE='+plugin_name,flush=True)
