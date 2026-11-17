@@ -22,6 +22,8 @@ ORIGINAL LEGACY PHP SHA256: 13c3c79676bc25ead5a2b02caa15306cbdefbfaf6647fbf8a636
 
 - Static route audit of the versioned G6 JavaScript identified **45** call sites: 44 normalized direct call sites match registered PHP REST methods/paths; the dynamic import destination chooses `chapters/import` or `chapters/{id}/reimport`, both registered. Added `test_core_rest_frontend_parity` to existing `test_g6_fixed_navigation.py` in draft PR #316, commit `358c3219f9d8e37f56759ef290c0c9499b2247f0`; asserted literal references checked. Execution of this new branch test remains pending.
 
+- Stronger runtime parity: read-only Python comparison on Hostinger of actual legacy and new CSS bytes after reversible page-scope normalization returned `LIVE_LIGHT_CSS_IDENTICAL=PASS LIVE_DARK_CSS_IDENTICAL=PASS`, exit code 0. Two independent versioned file comparisons returned the same result. Exact baseline hash verification test added to `test_isolation.py` in draft code PR #316, commit `9f280e364b510596d72ab9ef6795c4dfd7dab36d`.
+
 ## Remaining blockers and conditions
 
 - Tool safety **explicitly blocked** the command for real REST create/edit/delete smoke with temporary records and cleanup; no attempt was made to bypass through another channel. Consequently full CRUD functionality C001-C025 cannot be declared approved.
