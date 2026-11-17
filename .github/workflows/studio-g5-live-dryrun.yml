@@ -1,0 +1,35 @@
+name: Anthares Studio G5 Live ACF Dry Run
+on:
+  push:
+    branches: [coord/studio-g4-g5-20261116]
+    paths:
+      - .github/workflows/studio-g5-live-dryrun.yml
+      - tools/studio-g5-live-dryrun.py
+permissions:
+  contents: read
+concurrency:
+  group: anthares-studio-g5-live-dryrun-20261117
+  cancel-in-progress: false
+jobs:
+  dryrun:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Verify remote source code syntax
+        run: |
+          python3 - <<'PY'
+          import ast,pathlib,re
+          s=pathlib.Path('tools/studio-g5-live-dryrun.py').read_text()
+          ast.parse(s)
+          m=re.search(r'REMOTE=r"""(.*?)"""',s,re.S)
+          assert m
+          compile(m.group(1),'g5_remote_dry.py','exec')
+          print('G5_DRY_PYTHON_SYNTAX=PASS')
+          PY
+      - name: Simulate ACF mapping of 71 ANST posts (READ ONLY)
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        run: python3 tools/studio-g5-live-dryrun.py
