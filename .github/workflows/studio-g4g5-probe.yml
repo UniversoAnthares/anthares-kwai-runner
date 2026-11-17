@@ -4,6 +4,7 @@ on:
     branches: [coord/studio-g4-g5-20261116]
     paths:
       - .github/workflows/studio-g4g5-probe.yml
+      - tools/studio-g4g5-host-probe.py
 permissions:
   contents: read
 jobs:
