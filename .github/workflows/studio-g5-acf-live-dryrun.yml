@@ -1,0 +1,38 @@
+name: Anthares Studio G5 ACF Live Dry Run
+on:
+  push:
+    branches:
+      - coord/studio-g4-g5-20261116
+    paths:
+      - .github/workflows/studio-g5-acf-live-dryrun.yml
+      - tools/studio-g5-acf-live-cli.py
+permissions:
+  contents: read
+concurrency:
+  group: anthares-studio-g5-live-dryrun-20261116
+  cancel-in-progress: false
+jobs:
+  dryrun:
+    if: github.repository == 'UniversoAnthares/anthares-kwai-runner'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Static syntax validation
+        run: |
+          python3 - <<'PY'
+          import ast,re,pathlib
+          s=pathlib.Path('tools/studio-g5-acf-live-cli.py').read_text(encoding='utf8')
+          ast.parse(s)
+          m=re.search(r'REMOTE=r"""(.*?)"""',s,re.S)
+          assert m
+          compile(m.group(1),'remote_acf_migrate.py','exec')
+          print('STUDIO_G5_LIVE_SYNTAX=PASS')
+          PY
+      - name: Read-only ACF schema and live dry-run, double-check 71 records and source fingerprint
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          STUDIO_G5_MODE: dryrun
+        run: python3 tools/studio-g5-acf-live-cli.py
