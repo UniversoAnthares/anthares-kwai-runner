@@ -204,7 +204,14 @@ def setup_docker(root,info):
    wp('core','version')
    break
   except subprocess.CalledProcessError:time.sleep(2)
- else:raise RuntimeError('WORDPRESS_CONTAINER_NOT_READY')
+ else:
+  state=subprocess.run(['docker','inspect','--format={{.State.Status}}','anthares-g4-wp'],capture_output=True,text=True)
+  logs=subprocess.run(['docker','logs','--tail','12','anthares-g4-wp'],capture_output=True,text=True)
+  print('G4_WP_CONTAINER_STATUS='+state.stdout.strip(),flush=True)
+  for line in (logs.stdout+'\n'+logs.stderr).splitlines()[-12:]:
+   line=''.join(c if c.isalnum() or c in ' _:/.,()-' else '_' for c in line)[:150]
+   print('G4_WP_CONTAINER_EVENT='+line,flush=True)
+  raise RuntimeError('WORDPRESS_CONTAINER_NOT_READY')
  wp('core','install','--url='+BASE_URL,'--title=Estudio QA Isolado',
     '--admin_user='+LOGIN,'--admin_password='+PASS,'--admin_email=g4synthetic@example.invalid','--skip-email')
  wp('plugin','activate','anthares-estudio','anthares-studio','advanced-custom-fields')
