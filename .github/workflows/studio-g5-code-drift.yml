@@ -1,0 +1,32 @@
+name: Anthares Studio G5 Readonly Live Code Drift
+on:
+  push:
+    branches: [coord/studio-g4-g5-20261116]
+    paths:
+      - .github/workflows/studio-g5-code-drift.yml
+      - tools/studio-g5-code-drift.py
+permissions:
+  contents: read
+jobs:
+  diff:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Syntax check
+        run: |
+          python3 - <<'PY'
+          import ast,pathlib,re
+          s=pathlib.Path('tools/studio-g5-code-drift.py').read_text()
+          ast.parse(s)
+          m=re.search(r'REMOTE=r"""(.*?)"""',s,re.S)
+          assert m
+          compile(m.group(1),'diff_remote.py','exec')
+          print('G5_DIFF_SYNTAX=PASS')
+          PY
+      - name: Find drift between approved PHP and active PHP without changing data
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        run: python3 tools/studio-g5-code-drift.py
