@@ -30,11 +30,21 @@ Todas as opções de escrita ficam **desligadas** por padrão:
 
 ## Limitadores e pendências
 - SQLite deste módulo é **single-writer**; hospedá-lo em diretório privado do executor externo com backup. Se houver múltiplos executores, substituir por banco transacional compartilhado (por exemplo Neon), com fencing.
-- O módulo ainda não foi implantado no WordPress, no Brevo nem em executor de produção. Não existe cron ou fluxo massivo ativo.
+- O código foi instalado em **staging privado na Hostinger**, fora do document root e sem agendamento, na revisão `de215c4b0f32dc241d5e58572f056eaeeda30f48`. A autenticação Brevo do serviço e o deploy produtivo seguem pendentes; não existe cron ou fluxo massivo ativo.
 - Falha ou timeout depois de iniciar uma requisição ao provedor gera `RECONCILE_REQUIRED`. Não repetir cegamente.
 - O dado `approved` é uma referência a aprovação do titular. A interface administrativa futura deverá autenticar e auditar essa aprovação; preencher uma string manualmente não equivale a aceitação.
 - O conteúdo editorial da campanha e a lista histórica de pastores permanecem fora desta etapa; nenhum cadastro real foi importado.
 - Monitorar quota/créditos diretamente na conta Brevo antes de planejar lotes; a referência histórica a 300 e-mails/dia pode não representar o plano atual.
+
+
+## Homologação de staging privado — 18/11/2026
+- Ambiente existente Hostinger possui Python 3.11 em caminho alternativo; o `python3` padrão é 3.6.8. Não alterar o Python global, nem PHP, nem o WordPress.
+- Código instalado fora do `public_html`, release imutável fixada pelo SHA acima e três Git blob SHA conferidos contra o GitHub; permissões de diretório privadas.
+- A suíte foi executada na Hostinger com o Python 3.11: `23 tests ... OK` e confirmação de retorno SSH 0. Testes usam transporte fictício, sem chamadas ao Brevo.
+- Banco piloto SQLite criado em pasta privada com permissão 0700, `campaign_rows=0` e chaves de envio desativadas. Nenhum contato/importação/envio/scheduler foi criado.
+- Na instalação WordPress existente, `WP Mail SMTP` está ativo e a opção `sendinblue` contém chave com formato válido; a autenticação de marketing na API permanece **não verificada**. Tentativa de teste programático com a chave existente foi bloqueada por controle de segurança e não deve ser contornada.
+- Próximo passo autorizado: credencial **dedicada** configurada pelo titular no cofre/ambiente do executor por fluxo legítimo, autenticação read-only homologada, UI com autenticação para aprovação de listas, e sincronização de opt-outs/bounces. Nenhum segredo deve migrar do plugin WP Mail SMTP por extração automatizada.
+- O envio real da campanha dos pastores depende de aprovação explícita de conteúdo final e destinatários, separadamente; o texto anterior foi rejeitado pelo titular.
 
 ## Documentação oficial
 - https://developers.brevo.com/reference/create-email-campaign
