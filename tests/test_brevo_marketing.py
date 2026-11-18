@@ -25,6 +25,8 @@ class FakeBrevo:
             return {"id": 42}
         if method == "GET" and path.startswith("/emailCampaigns/"):
             return self.remote
+        if method == "GET" and path == "/account":
+            return {"email": "sender@example.org"}
         if method == "GET" and path.startswith("/contacts/lists"):
             return {"lists": []}
         return {}
@@ -44,6 +46,27 @@ class MarketingContractTests(unittest.TestCase):
     def setUp(self):
         self.fake = FakeBrevo()
         self.client = BrevoMarketing(transport=self.fake)
+
+    def test_readonly_readiness_exposes_no_secrets(self):
+        with patch.dict(os.environ, {
+            "BREVO_DRAFT_WRITE_ENABLED": "0",
+            "BREVO_LIVE_SEND_ENABLED": "0",
+        }):
+            report = self.client.readiness()
+        self.assertTrue(report["api_authenticated"])
+        self.assertTrue(report["lists_endpoint_accessible"])
+        self.assertFalse(report["live_send_enabled"])
+        self.assertNotIn("api_key", report)
+        self.assertTrue(all(method == "GET" for method, _, _ in self.fake.calls))
+
+    def test_readonly_campaign_queries_validate_filters(self):
+        self.client.campaigns("draft", 10, 0)
+        self.assertEqual(self.fake.calls[-1][1],
+                         "/emailCampaigns?status=draft&limit=10&offset=0")
+        with self.assertRaises(ValueError):
+            self.client.campaigns("sendNow")
+        with self.assertRaises(ValueError):
+            self.client.campaigns("draft", limit=1000)
 
     def test_campaign_payload_is_marketing_not_smtp(self):
         p = spec().payload()
