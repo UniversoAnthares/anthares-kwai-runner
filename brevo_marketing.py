@@ -142,6 +142,36 @@ class BrevoMarketing:
     def list_details(self, list_id: int) -> Any:
         return self._request("GET", f"/contacts/lists/{_positive_id(list_id, 'list_id')}")
 
+    def audience_snapshot(self, list_id: int) -> dict:
+        """Digest the eligible list membership before approval and before dispatch.
+
+        Pagination reads are capped for a conservative fail-closed behavior. Never
+        record recipient addresses in logs or approval artifacts.
+        """
+        list_id = _positive_id(list_id, "list_id")
+        addresses = set()
+        offset = 0
+        while offset <= 20_000:
+            result = self._request(
+                "GET", f"/contacts/lists/{list_id}/contacts?limit=500&offset={offset}")
+            contacts = result.get("contacts")
+            if not isinstance(contacts, list) or len(contacts) > 500:
+                raise RuntimeError("invalid Brevo contacts-list response")
+            for contact in contacts:
+                if not isinstance(contact, dict) or "email" not in contact:
+                    raise RuntimeError("invalid Brevo contact record")
+                if contact.get("emailBlacklisted") is not True:
+                    addresses.add(_email(contact["email"]))
+            if len(contacts) < 500:
+                break
+            offset += 500
+        else:
+            raise RuntimeError("audience too large for safe validation")
+        if not addresses:
+            raise PermissionError("recipient audience is empty")
+        digest = hashlib.sha256("\\n".join(sorted(addresses)).encode("utf-8")).hexdigest()
+        return {"digest": digest, "count": len(addresses)}
+
     def campaign_details(self, campaign_id: int) -> Any:
         return self._request("GET", f"/emailCampaigns/{_positive_id(campaign_id, 'campaign_id')}")
 
@@ -178,7 +208,8 @@ class BrevoMarketing:
     def send_now(self, campaign_id: int, *, approved_campaign_id: int,
                  approved_list_id: int, actual_list_id: int,
                  campaign_approval_ref: str, recipient_approval_ref: str,
-                 expected_subject: str, expected_html_sha256: str) -> None:
+                 expected_subject: str, expected_html_sha256: str,
+                 approved_audience_digest: str) -> None:
         """Explicit triple gate; never infer permission from a contact/list existing."""
         if not _enabled("BREVO_LIVE_SEND_ENABLED"):
             raise PermissionError("campaign dispatch disabled")
@@ -200,7 +231,12 @@ class BrevoMarketing:
             raise PermissionError("remote HTML differs from approved campaign")
         remote_ids = info.get("recipients", {}).get("lists", [])
         # Provider's report representation may have list names/IDs in objects.
-        ids = {int(x.get("id", 0)) if isinstance(x, dict) else int(x) for x in remote_ids}
+        ids = {int(x.get("listId", -1)) if isinstance(x, dict) else int(x) for x in remote_ids}
         if ids != {_positive_id(actual_list_id, "actual_list_id")}:
             raise PermissionError("remote recipient list differs; reconcile before sending")
+        if not re.fullmatch(r"[0-9a-f]{64}", approved_audience_digest):
+            raise PermissionError("approved audience fingerprint is required")
+        current = self.audience_snapshot(actual_list_id)
+        if current["digest"] != approved_audience_digest:
+            raise PermissionError("recipient audience changed after approval")
         self._request("POST", f"/emailCampaigns/{cid}/sendNow")
