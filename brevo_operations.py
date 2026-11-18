@@ -93,12 +93,17 @@ class SuppressionLedger:
 
 def pull_brevo_suppressions(client: BrevoMarketing, ledger: SuppressionLedger,
                             max_contacts: int = 50000) -> dict:
-    """Scan the account before updating the local ledger; never apply half a scan."""
+    """Reconcile global blacklist and per-list opt-outs before writing any state.
+
+    Brevo's account-wide contact endpoint may return null/omitted unsubscribe
+    metadata. Confirm that metadata through the list-scoped endpoint instead.
+    """
     size = 500
     offset = 0
     collected: dict[str, str] = {}
-    missing = 0
     expected = None
+    unresolved: dict[str, set[int]] = {}
+    list_ids: set[int] = set()
     while True:
         response = client._request("GET", f"/contacts?limit={size}&offset={offset}")
         contacts = response.get("contacts")
@@ -115,27 +120,75 @@ def pull_brevo_suppressions(client: BrevoMarketing, ledger: SuppressionLedger,
                 raise RuntimeError("invalid Brevo contact record")
             email = contact.get("email")
             if not email:
-                continue  # SMS-only account contacts are outside email mailing.
+                continue
             normalized = _email(email)
-            status = contact.get("emailBlacklisted")
-            if not isinstance(status, bool):
+            if not isinstance(contact.get("emailBlacklisted"), bool):
                 raise RuntimeError("missing global email blacklist status")
-            unsubs = contact.get("listUnsubscribed")
-            if unsubs is None:
-                missing += 1  # optional property: query list at send-time
-                unsubs = []
-            if not isinstance(unsubs, list):
-                raise RuntimeError("invalid unsubscribe status")
-            if status:
+            memberships = contact.get("listIds") or []
+            if not isinstance(memberships, list):
+                raise RuntimeError("invalid list memberships")
+            ids = {_positive_id(item, "listId") for item in memberships}
+            list_ids.update(ids)
+            unsubscribed = contact.get("listUnsubscribed")
+            if unsubscribed is None and ids:
+                unresolved[normalized] = set(ids)
+            elif unsubscribed is not None:
+                if not isinstance(unsubscribed, list):
+                    raise RuntimeError("invalid unsubscribe status")
+                if unsubscribed:
+                    collected[normalized] = "brevo_list_unsubscribed"
+            if contact["emailBlacklisted"]:
                 collected[normalized] = "brevo_global_blacklist"
-            elif unsubs:
-                collected.setdefault(normalized, "brevo_list_unsubscribed")
         offset += len(contacts)
         if offset >= expected:
             break
-        if len(contacts) == 0:
+        if not contacts:
             raise RuntimeError("premature end of contact scan")
-    return ledger.save_snapshot(collected, offset, missing)
+
+    if len(list_ids) > 100:
+        raise RuntimeError("too many contact lists for one safe reconciliation")
+    # List-specific GET responses are authoritative for unsubscribe membership.
+    for list_id in sorted(list_ids):
+        list_offset = 0
+        list_expected = None
+        while True:
+            result = client._request(
+                "GET", f"/contacts/lists/{list_id}/contacts?limit={size}&offset={list_offset}")
+            members = result.get("contacts")
+            count = result.get("count")
+            if (not isinstance(members, list) or not isinstance(count, int)
+                    or count < 0 or count > max_contacts or len(members) > size):
+                raise RuntimeError("invalid Brevo list scan")
+            if list_expected is None:
+                list_expected = count
+            if count != list_expected or list_offset + len(members) > max_contacts:
+                raise RuntimeError("contact list changed during reconciliation")
+            for member in members:
+                if not isinstance(member, dict) or not member.get("email"):
+                    raise RuntimeError("invalid list member")
+                address = _email(member["email"])
+                ids = member.get("listIds") or []
+                if list_id not in ids or not isinstance(member.get("emailBlacklisted"), bool):
+                    raise RuntimeError("list member status is inconsistent")
+                unsubscribed = member.get("listUnsubscribed")
+                if not isinstance(unsubscribed, list):
+                    raise RuntimeError("list opt-out status is unavailable")
+                if member["emailBlacklisted"]:
+                    collected[address] = "brevo_global_blacklist"
+                elif list_id in unsubscribed:
+                    collected.setdefault(address, "brevo_list_unsubscribed")
+                if address in unresolved:
+                    unresolved[address].discard(list_id)
+                    if not unresolved[address]:
+                        del unresolved[address]
+            list_offset += len(members)
+            if list_offset >= list_expected:
+                break
+            if not members:
+                raise RuntimeError("premature end of list scan")
+    if unresolved:
+        raise RuntimeError("one or more unsubscribe states could not be verified")
+    return ledger.save_snapshot(collected, offset, 0)
 
 
 def safe_campaign_report(client: BrevoMarketing, campaign_id: int) -> dict:
@@ -162,7 +215,8 @@ def safe_status(client: BrevoMarketing, ledger: SuppressionLedger) -> dict:
     if not all(isinstance(x, dict) for x in (account, lists, drafts)):
         raise RuntimeError("invalid Brevo account response")
     allowed_lists = [
-        {"id": int(row["id"]), "known_subscribers": int(row.get("totalSubscribers", 0))}
+        {"id": int(row["id"]), "known_subscribers": int(row["uniqueSubscribers"]) if
+         isinstance(row.get("uniqueSubscribers"), int) else None}
         for row in lists.get("lists", [])
         if isinstance(row, dict) and "id" in row
     ]
