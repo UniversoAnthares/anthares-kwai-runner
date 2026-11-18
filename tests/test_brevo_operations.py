@@ -29,6 +29,7 @@ class FakeBrevo:
              "listUnsubscribed": [], "listIds": [2]},
         ]
         self.malformed = False
+        self.global_unsubscribe_missing = False
 
     def __call__(self, method, path, body):
         self.calls.append((method, path))
@@ -39,11 +40,17 @@ class FakeBrevo:
             rows = self.contacts[offset:offset + 500]
             if self.malformed and rows:
                 rows = [{**rows[0], "emailBlacklisted": "false"}] + rows[1:]
+            if self.global_unsubscribe_missing:
+                rows = [{**row, "listUnsubscribed": None} for row in rows]
             return {"count": len(self.contacts), "contacts": rows}
+        if path.startswith("/contacts/lists/2/contacts?"):
+            offset = int(path.split("offset=")[1])
+            rows = [r for r in self.contacts if 2 in r.get("listIds", [])]
+            return {"count": len(rows), "contacts": rows[offset:offset + 500]}
         if path == "/account":
             return {"email": "secret@example.org"}
         if path.startswith("/contacts/lists"):
-            return {"count": 1, "lists": [{"id": 2, "totalSubscribers": 3}]}
+            return {"count": 1, "lists": [{"id": 2, "totalSubscribers": 0, "uniqueSubscribers": 3}]}
         if path.startswith("/emailCampaigns?"):
             return {"count": 0, "campaigns": []}
         if path.startswith("/emailCampaigns/"):
@@ -79,9 +86,11 @@ class OperatorTests(unittest.TestCase):
         with self.assertRaises(PermissionError):
             self.ledger.fresh_lookup()
 
-    def test_unavailable_unsubscribe_metadata_prevents_live_lookup(self):
+    def test_missing_list_scoped_unsubscribe_data_fails_closed(self):
         self.transport.contacts[0].pop("listUnsubscribed")
-        pull_brevo_suppressions(self.client, self.ledger)
+        with self.assertRaises(RuntimeError):
+            pull_brevo_suppressions(self.client, self.ledger)
+        self.assertEqual(self.ledger.count(), 0)
         with self.assertRaises(PermissionError):
             self.ledger.fresh_lookup()
 
@@ -110,10 +119,11 @@ class OperatorTests(unittest.TestCase):
         with sqlite3.connect(self.db) as db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM brevo_sync_runs").fetchone()[0], 0)
 
-    def test_optional_unsubscribe_field_reported(self):
-        self.transport.contacts[2].pop("listUnsubscribed")
+    def test_missing_global_field_resolved_by_list_scan(self):
+        self.transport.global_unsubscribe_missing = True
         result = pull_brevo_suppressions(self.client, self.ledger)
-        self.assertEqual(result["missing_list_status"], 1)
+        self.assertEqual(result["missing_list_status"], 0)
+        self.assertEqual(result["suppressed_seen"], 2)
 
     def test_report_has_aggregates_only(self):
         result = safe_campaign_report(self.client, 123)
@@ -125,6 +135,7 @@ class OperatorTests(unittest.TestCase):
     def test_status_summarizes_without_contacts(self):
         result = safe_status(self.client, self.ledger)
         self.assertEqual(result["lists"][0]["id"], 2)
+        self.assertEqual(result["lists"][0]["known_subscribers"], 3)
         self.assertEqual(result["mailing"], "approval_required")
         self.assertFalse(result["sending_enabled"])
         self.assertNotIn("secret@example.org", json.dumps(result))
