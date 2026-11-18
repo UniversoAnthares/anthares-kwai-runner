@@ -30,7 +30,7 @@ Todas as opções de escrita ficam **desligadas** por padrão:
 
 ## Limitadores e pendências
 - SQLite deste módulo é **single-writer**; hospedá-lo em diretório privado do executor externo com backup. Se houver múltiplos executores, substituir por banco transacional compartilhado (por exemplo Neon), com fencing.
-- O código foi instalado em **staging privado na Hostinger**, fora do document root e sem agendamento, na revisão `de215c4b0f32dc241d5e58572f056eaeeda30f48`. A autenticação Brevo do serviço e o deploy produtivo seguem pendentes; não existe cron ou fluxo massivo ativo.
+- O código está instalado em **staging privado na Hostinger**, fora do document root e sem agendamento, na revisão `fc562b6360da45c060b27c1a06bd4ec1ef42ace2`. **Autenticação read-only do serviço comprovada** nas rotas `/account`, `/contacts/lists` e `/emailCampaigns`; o deploy produtivo e o fluxo massivo seguem pendentes.
 - Falha ou timeout depois de iniciar uma requisição ao provedor gera `RECONCILE_REQUIRED`. Não repetir cegamente.
 - O dado `approved` é uma referência a aprovação do titular. A interface administrativa futura deverá autenticar e auditar essa aprovação; preencher uma string manualmente não equivale a aceitação.
 - O conteúdo editorial da campanha e a lista histórica de pastores permanecem fora desta etapa; nenhum cadastro real foi importado.
@@ -45,6 +45,14 @@ Todas as opções de escrita ficam **desligadas** por padrão:
 - Na instalação WordPress existente, `WP Mail SMTP` está ativo e a opção `sendinblue` contém chave com formato válido; a autenticação de marketing na API permanece **não verificada**. Tentativa de teste programático com a chave existente foi bloqueada por controle de segurança e não deve ser contornada.
 - Próximo passo autorizado: credencial **dedicada** configurada pelo titular no cofre/ambiente do executor por fluxo legítimo, autenticação read-only homologada, UI com autenticação para aprovação de listas, e sincronização de opt-outs/bounces. Nenhum segredo deve migrar do plugin WP Mail SMTP por extração automatizada.
 - O envio real da campanha dos pastores depende de aprovação explícita de conteúdo final e destinatários, separadamente; o texto anterior foi rejeitado pelo titular.
+
+## Autenticação real comprovada — 18/11/2026
+- O titular criou a chave **Anthares Mailing** e a salvou em arquivo privado na Hostinger. A chave fica exclusivamente no servidor, com permissão 0600; não foi adicionada ao GitHub, ao WordPress nem aos logs.
+- `brevo_readonly_check.py` permite repetir a consulta sem divulgar segredo, credenciais, destinatários ou dados da conta. O comando é sempre somente leitura e falha se alguma variável `BREVO_*_ENABLED=1` autorizar escrita.
+- Teste real no servidor com código `fc562b6360da45c060b27c1a06bd4ec1ef42ace2`: `authenticated=true`, `account=ok`, `lists=ok`, `campaigns=ok`, `sending=disabled`; exit SSH 0.
+- GitHub Actions: **29/29 testes Brevo** e **9/9 regressões**, execução [44373686748](https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/44373686748). Hostinger: 29 testes Brevo passaram.
+- Execução manual segura (somente com autorização e sem habilitar escrita): usar o Python 3.11 do Hostinger para invocar `brevo_readonly_check.py --key-file <caminho-privado-do-servidor>`. Nunca exibir conteúdo da chave.
+- A interface administrativa autenticada, a reconciliação de descadastramento/bounce, a aprovação da lista elegível e o envio real continuam pendentes. Nenhuma mensagem foi enviada nesta homologação.
 
 ## Documentação oficial
 - https://developers.brevo.com/reference/create-email-campaign
