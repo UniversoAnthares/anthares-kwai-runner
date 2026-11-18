@@ -208,6 +208,23 @@ def safe_campaign_report(client: BrevoMarketing, campaign_id: int) -> dict:
             "statistics": numbers, "test_sent": bool(report.get("testSent"))}
 
 
+def safe_campaign_index(client: BrevoMarketing, status: str = "draft") -> dict:
+    """Metadata-only campaign index for a private administrator."""
+    if status not in {"draft", "sent", "scheduled", "archive"}:
+        raise ValueError("unsupported campaign status")
+    result = client.campaigns(status=status, limit=100, offset=0)
+    if not isinstance(result, dict) or not isinstance(result.get("campaigns"), list):
+        raise RuntimeError("campaign list unavailable")
+    campaigns = []
+    for row in result["campaigns"]:
+        if not isinstance(row, dict) or not isinstance(row.get("id"), int):
+            raise RuntimeError("campaign metadata unavailable")
+        campaigns.append({"id": row["id"], "status": row.get("status", "unknown")})
+    return {"total": result.get("count"), "campaigns": campaigns,
+            "truncated": isinstance(result.get("count"), int)
+            and result["count"] > len(campaigns)}
+
+
 def safe_status(client: BrevoMarketing, ledger: SuppressionLedger) -> dict:
     account = client.account_info()
     lists = client.lists(limit=50)
@@ -235,6 +252,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("status")
     sub.add_parser("sync-suppressions")
+    index_parser = sub.add_parser("campaign-index")
+    index_parser.add_argument("--status", choices=["draft", "sent", "scheduled", "archive"],
+                              default="draft")
     report_parser = sub.add_parser("campaign-report")
     report_parser.add_argument("--campaign-id", required=True, type=int)
     args = parser.parse_args(argv)
@@ -251,6 +271,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             result = safe_status(client, ledger)
         elif args.command == "sync-suppressions":
             result = pull_brevo_suppressions(client, ledger)
+        elif args.command == "campaign-index":
+            result = safe_campaign_index(client, args.status)
         else:
             result = safe_campaign_report(client, args.campaign_id)
     except BrevoAPIError as e:
