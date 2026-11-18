@@ -32,6 +32,8 @@ class CampaignLedger:
                 state TEXT NOT NULL,
                 campaign_approval_ref TEXT,
                 recipients_approval_ref TEXT,
+                approved_audience_digest TEXT,
+                approved_audience_count INTEGER,
                 updated_at TEXT NOT NULL
             )""")
 
@@ -115,10 +117,9 @@ class CampaignLedger:
 
     def record_approval(self, local_id: str, kind: str, reference: str) -> None:
         """Reference must identify an explicit out-of-band owner approval."""
-        if kind not in {"campaign", "recipients"} or not reference.strip():
+        if kind != "campaign" or not reference.strip():
             raise ValueError("approval kind/reference invalid")
-        field = ("campaign_approval_ref" if kind == "campaign"
-                 else "recipients_approval_ref")
+        field = "campaign_approval_ref"
         with self._db() as c:
             c.execute("BEGIN IMMEDIATE")
             cur = c.execute(f"""UPDATE brevo_campaigns SET {field}=?, updated_at=?
@@ -129,6 +130,28 @@ class CampaignLedger:
                 raise PermissionError("approval is only possible for a remote draft")
             c.commit()
 
+    def record_recipients_approval(self, local_id: str, reference: str,
+                                   client: BrevoMarketing) -> dict:
+        """Store the exact eligible audience that an operator explicitly approved."""
+        if not reference.strip():
+            raise ValueError("recipient approval reference is required")
+        row = self.get(local_id)
+        if row["state"] != "REMOTE_DRAFT":
+            raise PermissionError("recipient approval requires remote draft")
+        audience = client.audience_snapshot(row["list_id"])
+        with self._db() as c:
+            c.execute("BEGIN IMMEDIATE")
+            cur = c.execute("""UPDATE brevo_campaigns SET recipients_approval_ref=?,
+                approved_audience_digest=?, approved_audience_count=?, updated_at=?
+                WHERE local_id=? AND state='REMOTE_DRAFT'""",
+                (reference.strip(), audience["digest"], audience["count"],
+                 _now(), local_id))
+            if cur.rowcount != 1:
+                c.rollback()
+                raise PermissionError("approval state changed")
+            c.commit()
+        return {"count": audience["count"], "digest": audience["digest"]}
+
     def dispatch(self, local_id: str, client: BrevoMarketing) -> None:
         """One attempt. An uncertain provider response is never blindly replayed."""
         with self._db() as c:
@@ -138,7 +161,7 @@ class CampaignLedger:
             if not row or row["state"] != "REMOTE_DRAFT":
                 c.rollback()
                 raise PermissionError("campaign must be an unsent remote draft")
-            if not row["campaign_approval_ref"] or not row["recipients_approval_ref"]:
+            if not row["campaign_approval_ref"] or not row["recipients_approval_ref"] or not row["approved_audience_digest"]:
                 c.rollback()
                 raise PermissionError("campaign and audience require separate approvals")
             # Fail before mutating the ledger when the global gate is disabled.
@@ -159,6 +182,7 @@ class CampaignLedger:
                 recipient_approval_ref=snapshot["recipients_approval_ref"],
                 expected_subject=snapshot["subject"],
                 expected_html_sha256=snapshot["html_sha256"],
+                approved_audience_digest=snapshot["approved_audience_digest"],
             )
         except Exception:
             self._set_state(local_id, "RECONCILE_REQUIRED", from_state="DISPATCHING")
