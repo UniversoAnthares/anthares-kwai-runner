@@ -9,7 +9,7 @@ import argparse
 import json
 import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any, Optional
 
 from brevo_marketing import BrevoMarketing, BrevoAPIError, _email, _positive_id
@@ -54,6 +54,22 @@ class SuppressionLedger:
     def count(self) -> int:
         with self._connect() as conn:
             return conn.execute("SELECT COUNT(*) FROM brevo_suppressions").fetchone()[0]
+
+    def fresh_lookup(self, max_age_minutes: int = 60):
+        """Require a recent complete Brevo scan for every live campaign dispatch."""
+        with self._connect() as conn:
+            row = conn.execute("""SELECT checked_at, missing_list_status
+                FROM brevo_sync_runs ORDER BY id DESC LIMIT 1""").fetchone()
+        if row is None or row[1] != 0:
+            raise PermissionError("Brevo suppression sync is incomplete")
+        try:
+            timestamp = datetime.fromisoformat(row[0])
+        except (ValueError, TypeError):
+            raise PermissionError("invalid suppression checkpoint") from None
+        age = datetime.now(timezone.utc) - timestamp
+        if not timedelta(0) <= age <= timedelta(minutes=max_age_minutes):
+            raise PermissionError("Brevo suppression sync is stale")
+        return self.is_suppressed
 
     def save_snapshot(self, suppressed: dict[str, str], checked: int,
                       missing_list_status: int) -> dict:
