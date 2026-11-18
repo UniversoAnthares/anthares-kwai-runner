@@ -110,6 +110,30 @@ class BrevoMarketing:
             # Never log provider response or secret-bearing request headers.
             raise BrevoAPIError(exc.code) from None
 
+    def account_info(self) -> Any:
+        """Read account metadata without exposing contacts or secrets."""
+        return self._request("GET", "/account")
+
+    def campaigns(self, status: str = "draft", limit: int = 20, offset: int = 0) -> Any:
+        """Inspect marketing campaigns; never send or modify them."""
+        if status not in {"draft", "sent", "scheduled", "archive"}:
+            raise ValueError("unsupported campaign status")
+        if not 1 <= limit <= 100 or offset < 0:
+            raise ValueError("invalid pagination")
+        return self._request("GET", f"/emailCampaigns?status={status}&limit={limit}&offset={offset}")
+
+    def readiness(self) -> dict:
+        """Read-only test of Brevo connectivity; no recipient addresses returned."""
+        account = self.account_info()
+        collections = self.lists(limit=1)
+        return {
+            "api_authenticated": bool(account),
+            "account_email_configured": bool(account.get("email")),
+            "lists_endpoint_accessible": isinstance(collections, dict),
+            "draft_write_enabled": _enabled("BREVO_DRAFT_WRITE_ENABLED"),
+            "live_send_enabled": _enabled("BREVO_LIVE_SEND_ENABLED"),
+        }
+
     def lists(self, limit: int = 50, offset: int = 0) -> Any:
         if not 1 <= limit <= 50 or offset < 0:
             raise ValueError("invalid pagination")
