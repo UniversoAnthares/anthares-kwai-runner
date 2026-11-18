@@ -85,8 +85,10 @@ class BrevoMarketing:
     """HTTP client with an injectable transport for offline contract tests."""
 
     def __init__(self, api_key: Optional[str] = None,
-                 transport: Optional[Callable[[str, str, Optional[dict]], Any]] = None):
+                 transport: Optional[Callable[[str, str, Optional[dict]], Any]] = None,
+                 suppression_lookup: Optional[Callable[[str], bool]] = None):
         self.transport = transport
+        self.suppression_lookup = suppression_lookup
         self.api_key = api_key or os.environ.get("BREVO_API_KEY", "")
         if not self.api_key and transport is None:
             raise RuntimeError("BREVO_API_KEY missing (leave campaign disabled)")
@@ -168,7 +170,10 @@ class BrevoMarketing:
                 if list_id not in contact.get("listIds", []):
                     raise RuntimeError("contact no longer belongs to approved list")
                 if not contact["emailBlacklisted"] and list_id not in unsubscribed:
-                    addresses.add(_email(contact["email"]))
+                    normalized = _email(contact["email"])
+                    if self.suppression_lookup and self.suppression_lookup(normalized):
+                        raise PermissionError("locally suppressed recipient still in remote list")
+                    addresses.add(normalized)
             if len(contacts) < 500:
                 break
             offset += 500
@@ -246,6 +251,8 @@ class BrevoMarketing:
         ids = {int(x.get("listId", -1)) if isinstance(x, dict) else int(x) for x in remote_ids}
         if ids != {_positive_id(actual_list_id, "actual_list_id")}:
             raise PermissionError("remote recipient list differs; reconcile before sending")
+        if self.suppression_lookup is None:
+            raise PermissionError("current global suppression lookup is required for live dispatch")
         if not re.fullmatch(r"[0-9a-f]{64}", approved_audience_digest):
             raise PermissionError("approved audience fingerprint is required")
         current = self.audience_snapshot(actual_list_id)
