@@ -54,6 +54,16 @@ Todas as opções de escrita ficam **desligadas** por padrão:
 - Execução manual segura (somente com autorização e sem habilitar escrita): usar o Python 3.11 do Hostinger para invocar `brevo_readonly_check.py --key-file <caminho-privado-do-servidor>`. Nunca exibir conteúdo da chave.
 - A interface administrativa autenticada, a reconciliação de descadastramento/bounce, a aprovação da lista elegível e o envio real continuam pendentes. Nenhuma mensagem foi enviada nesta homologação.
 
+## Operações homologadas e bloqueio externo — 18/11/2026
+- **CLI administrativo privado na Hostinger**: `brevo_operations.py` oferece `status`, `sync-suppressions`, `campaign-index` e `campaign-report`. Operações externas de consulta usam apenas GET. O acesso é pelo SSH já autenticado; nenhum painel público foi exposto.
+- **Relatório real**: 1 lista, 1 assinante único, 0 campanhas em rascunho, 0 supressões locais; 1 contato examinado com estado de descadastramento comprovado.
+- **Persistência**: bloqueios e cancelamentos já identificados ficam retidos na base SQLite privada; um registro bloqueado impede validação de audiência, e é exigida reconciliação recente e completa antes de qualquer envio.
+- **Código de produção candidato**: a versão privada instalada é `658c1f522a6b441516e772257d16f680f40cec24`; hashes conferidos. A verificação CI passou com 42 testes Brevo e 9 de regressão, em [GitHub Actions](https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/44378937748). 42 testes Brevo também passaram na Hostinger.
+- **Bloqueio de provedor**: POST `/emailCampaigns` para único rascunho técnico retornou **HTTP 405**. Consulta posterior mostrou zero campanhas criadas. GET `/webhooks?type=marketing` retornou **403**. Requer esclarecer permissões da chave/conta com Brevo. Sem rascunho remoto não houve ensaio de entrega.
+- **Segurança**: envio e importação continuam desativados. Nenhum contato histórico foi importado. `crontab` não foi encontrado no ambiente de hospedagem, logo nenhuma sincronização recorrente está ativa.
+- **Pendências materiais**: acesso de criação de campanhas, webhooks ou outro mecanismo confiável de atualização, fluxo de aprovação autenticado e auditável, agendador, lista qualificada com base e registros de autorização, e teste real de entrega.
+- **Registro técnico**: `test-hub/findings/20261118-brevo-mailing-operator-partial-auth-block.md`.
+
 ## Documentação oficial
 - https://developers.brevo.com/reference/create-email-campaign
 - https://developers.brevo.com/reference/send-email-campaign-now
