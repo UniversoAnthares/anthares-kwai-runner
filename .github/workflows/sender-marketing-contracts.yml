@@ -1,0 +1,38 @@
+name: Sender marketing contracts (offline)
+
+on:
+  push:
+    branches:
+      - 'feat/sender-marketing-gated-*'
+    paths:
+      - 'sender_marketing.py'
+      - 'sender_campaign_ledger.py'
+      - 'tests/test_sender*.py'
+      - '.github/workflows/sender-marketing-contracts.yml'
+  pull_request:
+    paths:
+      - 'sender_marketing.py'
+      - 'sender_campaign_ledger.py'
+      - 'tests/test_sender*.py'
+      - '.github/workflows/sender-marketing-contracts.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  sender-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      SENDER_API_TOKEN: ''
+      SENDER_DRAFT_WRITE_ENABLED: '0'
+      SENDER_LIVE_SEND_ENABLED: '0'
+      BREVO_LIVE_SEND_ENABLED: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Python syntax
+        run: python3 -m py_compile sender_marketing.py sender_campaign_ledger.py
+      - name: Sender marketing provider contracts
+        run: python3 -m unittest discover -s tests -p 'test_sender*.py' -v
+      - name: Existing Anthares email regression contracts
+        run: python3 -m unittest discover -s tests -p 'test_email*.py' -v
