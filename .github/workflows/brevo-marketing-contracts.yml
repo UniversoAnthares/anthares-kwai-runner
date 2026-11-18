@@ -7,7 +7,8 @@ on:
     paths:
       - 'brevo_marketing.py'
       - 'brevo_campaign_ledger.py'
-      - 'tests/test_brevo_marketing.py'
+      - 'brevo_readonly_check.py'
+      - 'tests/test_brevo*.py'
       - '.github/workflows/brevo-marketing-contracts.yml'
   pull_request:
     paths:
@@ -32,8 +33,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check Python syntax
-        run: python3 -m py_compile brevo_marketing.py brevo_campaign_ledger.py
+        run: python3 -m py_compile brevo_marketing.py brevo_campaign_ledger.py brevo_readonly_check.py
       - name: Offline Brevo marketing contract tests
-        run: python3 -m unittest discover -s tests -p 'test_brevo_marketing.py' -v
+        run: python3 -m unittest discover -s tests -p 'test_brevo*.py' -v
       - name: Existing email regression tests
         run: python3 -m unittest discover -s tests -p 'test_email*.py' -v
