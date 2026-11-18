@@ -12,7 +12,8 @@ class FakeBrevo:
     def __init__(self, fail=False):
         self.calls = []
         self.fail = fail
-        self.remote = {"status": "draft", "subject": "Material de estudo", "recipients": {"lists": [15]},
+        self.audience = [{"email": "p1@example.org", "emailBlacklisted": False}, {"email": "p2@example.org", "emailBlacklisted": True}]
+        self.remote = {"status": "draft", "subject": "Material de estudo", "recipients": {"lists": [{"listId": 15}]},
                        "htmlContent": "<p>Mensagem {{ unsubscribe }}</p>"}
 
     def __call__(self, method, path, data):
@@ -27,6 +28,8 @@ class FakeBrevo:
             return self.remote
         if method == "GET" and path == "/account":
             return {"email": "sender@example.org"}
+        if method == "GET" and "/contacts?" in path and path.startswith("/contacts/lists/"):
+            return {"contacts": self.audience}
         if method == "GET" and path.startswith("/contacts/lists"):
             return {"lists": []}
         return {}
@@ -67,6 +70,28 @@ class MarketingContractTests(unittest.TestCase):
             self.client.campaigns("sendNow")
         with self.assertRaises(ValueError):
             self.client.campaigns("draft", limit=1000)
+
+    def test_audience_fingerprint_is_stable_and_excludes_blocked(self):
+        approved = self.client.audience_snapshot(15)
+        self.assertEqual(approved["count"], 1)
+        self.fake.audience.append({"email": "new@example.org", "emailBlacklisted": False})
+        modified = self.client.audience_snapshot(15)
+        self.assertEqual(modified["count"], 2)
+        self.assertNotEqual(approved["digest"], modified["digest"])
+
+    def test_audience_changes_block_dispatch_even_with_same_list_id(self):
+        approved = self.client.audience_snapshot(15)
+        args = dict(approved_campaign_id=123, approved_list_id=15,
+                    actual_list_id=15, campaign_approval_ref="owner-1",
+                    recipient_approval_ref="owner-2",
+                    expected_subject=spec().subject,
+                    expected_html_sha256=__import__("hashlib").sha256(spec().html.encode()).hexdigest(),
+                    approved_audience_digest=approved["digest"])
+        self.fake.audience = [{"email": "replacement@example.org", "emailBlacklisted": False}]
+        with patch.dict(os.environ, {"BREVO_LIVE_SEND_ENABLED": "1"}):
+            with self.assertRaises(PermissionError):
+                self.client.send_now(123, **args)
+        self.assertFalse(any("sendNow" in path for _, path, _ in self.fake.calls))
 
     def test_campaign_payload_is_marketing_not_smtp(self):
         p = spec().payload()
@@ -117,7 +142,8 @@ class MarketingContractTests(unittest.TestCase):
                     actual_list_id=15, campaign_approval_ref="owner-1",
                     recipient_approval_ref="owner-2",
                     expected_subject=spec().subject,
-                    expected_html_sha256=__import__("hashlib").sha256(spec().html.encode()).hexdigest())
+                    expected_html_sha256=__import__("hashlib").sha256(spec().html.encode()).hexdigest(),
+                    approved_audience_digest="0"*64)
         with patch.dict(os.environ, {"BREVO_LIVE_SEND_ENABLED": "0"}):
             with self.assertRaises(PermissionError):
                 self.client.send_now(123, **args)
@@ -128,7 +154,8 @@ class MarketingContractTests(unittest.TestCase):
                     actual_list_id=15, campaign_approval_ref="owner-1",
                     recipient_approval_ref="owner-2",
                     expected_subject=spec().subject,
-                    expected_html_sha256=__import__("hashlib").sha256(spec().html.encode()).hexdigest())
+                    expected_html_sha256=__import__("hashlib").sha256(spec().html.encode()).hexdigest(),
+                    approved_audience_digest="0"*64)
         with patch.dict(os.environ, {"BREVO_LIVE_SEND_ENABLED": "1"}):
             self.fake.remote["recipients"] = {"lists": [16]}
             with self.assertRaises(PermissionError):
@@ -142,7 +169,8 @@ class MarketingContractTests(unittest.TestCase):
                     actual_list_id=15, campaign_approval_ref="owner-1",
                     recipient_approval_ref="owner-2",
                     expected_subject=spec().subject,
-                    expected_html_sha256=hashlib.sha256(spec().html.encode()).hexdigest())
+                    expected_html_sha256=hashlib.sha256(spec().html.encode()).hexdigest(),
+                    approved_audience_digest="0"*64)
         with patch.dict(os.environ, {"BREVO_LIVE_SEND_ENABLED": "1"}):
             self.fake.remote["htmlContent"] = "<p>Conteúdo adulterado {{ unsubscribe }}</p>"
             with self.assertRaises(PermissionError):
@@ -193,7 +221,7 @@ class LedgerContractTests(unittest.TestCase):
             with self.assertRaises(PermissionError):
                 self.ledger.dispatch(spec().local_id, self.client)
         self.ledger.record_approval(spec().local_id, "campaign", "operator:review-1")
-        self.ledger.record_approval(spec().local_id, "recipients", "operator:review-2")
+        self.ledger.record_recipients_approval(spec().local_id, "operator:review-2", self.client)
         with patch.dict(os.environ, {"BREVO_LIVE_SEND_ENABLED": "0"}):
             with self.assertRaises(PermissionError):
                 self.ledger.dispatch(spec().local_id, self.client)
@@ -203,7 +231,7 @@ class LedgerContractTests(unittest.TestCase):
         with patch.dict(os.environ, {"BREVO_DRAFT_WRITE_ENABLED": "1"}):
             self.ledger.create_remote_draft(spec(), self.client)
         self.ledger.record_approval(spec().local_id, "campaign", "operator:review-1")
-        self.ledger.record_approval(spec().local_id, "recipients", "operator:review-2")
+        self.ledger.record_recipients_approval(spec().local_id, "operator:review-2", self.client)
         with patch.dict(os.environ, {"BREVO_LIVE_SEND_ENABLED": "1"}):
             self.ledger.dispatch(spec().local_id, self.client)
             with self.assertRaises(PermissionError):
@@ -223,7 +251,7 @@ class LedgerContractTests(unittest.TestCase):
         with patch.dict(os.environ, {"BREVO_DRAFT_WRITE_ENABLED": "1"}):
             self.ledger.create_remote_draft(spec(), self.client)
         self.ledger.record_approval(spec().local_id, "campaign", "operator:review-1")
-        self.ledger.record_approval(spec().local_id, "recipients", "operator:review-2")
+        self.ledger.record_recipients_approval(spec().local_id, "operator:review-2", self.client)
         self.fake.fail = True
         with patch.dict(os.environ, {"BREVO_LIVE_SEND_ENABLED": "1"}):
             with self.assertRaises(ConnectionError):
