@@ -7,12 +7,14 @@ on:
     paths:
       - 'sender_marketing.py'
       - 'sender_campaign_ledger.py'
+      - 'sender_readonly_check.py'
       - 'tests/test_sender*.py'
       - '.github/workflows/sender-marketing-contracts.yml'
   pull_request:
     paths:
       - 'sender_marketing.py'
       - 'sender_campaign_ledger.py'
+      - 'sender_readonly_check.py'
       - 'tests/test_sender*.py'
       - '.github/workflows/sender-marketing-contracts.yml'
 
@@ -31,7 +33,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check Python syntax
-        run: python3 -m py_compile sender_marketing.py sender_campaign_ledger.py
+        run: python3 -m py_compile sender_marketing.py sender_campaign_ledger.py sender_readonly_check.py
       - name: Sender marketing provider contracts
         run: python3 -m unittest discover -s tests -p 'test_sender*.py' -v
       - name: Existing Anthares email regression contracts
