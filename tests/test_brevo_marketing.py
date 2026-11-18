@@ -51,7 +51,7 @@ def spec(**overrides):
 class MarketingContractTests(unittest.TestCase):
     def setUp(self):
         self.fake = FakeBrevo()
-        self.client = BrevoMarketing(transport=self.fake)
+        self.client = BrevoMarketing(transport=self.fake, suppression_lookup=lambda email: False)
 
     def test_readonly_readiness_exposes_no_secrets(self):
         with patch.dict(os.environ, {
@@ -73,6 +73,26 @@ class MarketingContractTests(unittest.TestCase):
             self.client.campaigns("sendNow")
         with self.assertRaises(ValueError):
             self.client.campaigns("draft", limit=1000)
+
+    def test_local_global_suppression_fails_closed(self):
+        client = BrevoMarketing(transport=self.fake,
+                                suppression_lookup=lambda email: email == "p1@example.org")
+        with self.assertRaises(PermissionError):
+            client.audience_snapshot(15)
+
+    def test_live_dispatch_without_suppression_source_fails(self):
+        client = BrevoMarketing(transport=self.fake)
+        import hashlib
+        args = dict(approved_campaign_id=123, approved_list_id=15,
+                    actual_list_id=15, campaign_approval_ref="owner-approved",
+                    recipient_approval_ref="audience-approved",
+                    expected_subject=spec().subject,
+                    expected_html_sha256=hashlib.sha256(spec().html.encode()).hexdigest(),
+                    approved_audience_digest="0" * 64)
+        with patch.dict(os.environ, {"BREVO_LIVE_SEND_ENABLED": "1"}):
+            with self.assertRaises(PermissionError):
+                client.send_now(123, **args)
+        self.assertFalse(any("/sendNow" in p for _, p, _ in self.fake.calls))
 
     def test_audience_fingerprint_is_stable_and_excludes_blocked(self):
         approved = self.client.audience_snapshot(15)
@@ -214,7 +234,7 @@ class LedgerContractTests(unittest.TestCase):
         self.folder = tempfile.TemporaryDirectory()
         self.ledger = CampaignLedger(os.path.join(self.folder.name, "ledger.db"))
         self.fake = FakeBrevo()
-        self.client = BrevoMarketing(transport=self.fake)
+        self.client = BrevoMarketing(transport=self.fake, suppression_lookup=lambda email: False)
 
     def tearDown(self):
         self.folder.cleanup()
