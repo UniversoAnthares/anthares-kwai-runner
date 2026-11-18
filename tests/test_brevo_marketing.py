@@ -12,7 +12,10 @@ class FakeBrevo:
     def __init__(self, fail=False):
         self.calls = []
         self.fail = fail
-        self.audience = [{"email": "p1@example.org", "emailBlacklisted": False}, {"email": "p2@example.org", "emailBlacklisted": True}]
+        self.audience = [
+            {"email": "p1@example.org", "emailBlacklisted": False, "listIds": [15], "listUnsubscribed": []},
+            {"email": "p2@example.org", "emailBlacklisted": True, "listIds": [15], "listUnsubscribed": []},
+        ]
         self.remote = {"status": "draft", "subject": "Material de estudo", "recipients": {"lists": [{"listId": 15}]},
                        "htmlContent": "<p>Mensagem {{ unsubscribe }}</p>"}
 
@@ -74,7 +77,7 @@ class MarketingContractTests(unittest.TestCase):
     def test_audience_fingerprint_is_stable_and_excludes_blocked(self):
         approved = self.client.audience_snapshot(15)
         self.assertEqual(approved["count"], 1)
-        self.fake.audience.append({"email": "new@example.org", "emailBlacklisted": False})
+        self.fake.audience.append({"email": "new@example.org", "emailBlacklisted": False, "listIds": [15], "listUnsubscribed": []})
         modified = self.client.audience_snapshot(15)
         self.assertEqual(modified["count"], 2)
         self.assertNotEqual(approved["digest"], modified["digest"])
@@ -87,7 +90,36 @@ class MarketingContractTests(unittest.TestCase):
                     expected_subject=spec().subject,
                     expected_html_sha256=__import__("hashlib").sha256(spec().html.encode()).hexdigest(),
                     approved_audience_digest=approved["digest"])
-        self.fake.audience = [{"email": "replacement@example.org", "emailBlacklisted": False}]
+        self.fake.audience = [{"email": "replacement@example.org", "emailBlacklisted": False, "listIds": [15], "listUnsubscribed": []}]
+        with patch.dict(os.environ, {"BREVO_LIVE_SEND_ENABLED": "1"}):
+            with self.assertRaises(PermissionError):
+                self.client.send_now(123, **args)
+        self.assertFalse(any("sendNow" in path for _, path, _ in self.fake.calls))
+
+    def test_per_list_unsubscribe_is_excluded(self):
+        original = self.client.audience_snapshot(15)
+        self.fake.audience.append({
+            "email": "unsubscribed@example.org", "emailBlacklisted": False,
+            "listIds": [15], "listUnsubscribed": [15]})
+        after = self.client.audience_snapshot(15)
+        self.assertEqual(after, original)
+
+    def test_missing_suppression_metadata_fails_closed(self):
+        self.fake.audience = [{"email": "unknown@example.org", "emailBlacklisted": False,
+                               "listIds": [15]}]
+        with self.assertRaises(RuntimeError):
+            self.client.audience_snapshot(15)
+
+    def test_recipient_segments_are_rejected(self):
+        import hashlib
+        approved = self.client.audience_snapshot(15)
+        self.fake.remote["recipients"]["segments"] = [300]
+        args = dict(approved_campaign_id=123, approved_list_id=15,
+                    actual_list_id=15, campaign_approval_ref="approval-campaign",
+                    recipient_approval_ref="approval-recipients",
+                    expected_subject=spec().subject,
+                    expected_html_sha256=hashlib.sha256(spec().html.encode()).hexdigest(),
+                    approved_audience_digest=approved["digest"])
         with patch.dict(os.environ, {"BREVO_LIVE_SEND_ENABLED": "1"}):
             with self.assertRaises(PermissionError):
                 self.client.send_now(123, **args)
