@@ -6,6 +6,7 @@ distributed workers must use a shared transactional store before activation.
 from __future__ import annotations
 
 import hashlib
+import os
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -77,6 +78,8 @@ class CampaignLedger:
         # In case the HTTP response is lost, creation is UNCERTAIN: never auto-retry.
         # The Brevo dashboard must be reconciled by unique "Anthares <local_id>" name.
         self.stage(spec)
+        if os.environ.get("BREVO_DRAFT_WRITE_ENABLED") != "1":
+            raise PermissionError("remote draft writes disabled")
         with self._db() as c:
             c.execute("BEGIN IMMEDIATE")
             cur = c.execute("""UPDATE brevo_campaigns SET state='CREATING',
@@ -139,7 +142,6 @@ class CampaignLedger:
                 c.rollback()
                 raise PermissionError("campaign and audience require separate approvals")
             # Fail before mutating the ledger when the global gate is disabled.
-            import os
             if os.environ.get("BREVO_LIVE_SEND_ENABLED") != "1":
                 c.rollback()
                 raise PermissionError("live sending disabled")
@@ -155,6 +157,8 @@ class CampaignLedger:
                 actual_list_id=snapshot["list_id"],
                 campaign_approval_ref=snapshot["campaign_approval_ref"],
                 recipient_approval_ref=snapshot["recipients_approval_ref"],
+                expected_subject=snapshot["subject"],
+                expected_html_sha256=snapshot["html_sha256"],
             )
         except Exception:
             self._set_state(local_id, "RECONCILE_REQUIRED", from_state="DISPATCHING")
