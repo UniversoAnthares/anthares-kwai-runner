@@ -160,7 +160,14 @@ class BrevoMarketing:
             for contact in contacts:
                 if not isinstance(contact, dict) or "email" not in contact:
                     raise RuntimeError("invalid Brevo contact record")
-                if contact.get("emailBlacklisted") is not True:
+                if not isinstance(contact.get("emailBlacklisted"), bool):
+                    raise RuntimeError("contact blacklist status is unknown")
+                unsubscribed = contact.get("listUnsubscribed")
+                if not isinstance(unsubscribed, list):
+                    raise RuntimeError("contact list unsubscribes are unknown")
+                if list_id not in contact.get("listIds", []):
+                    raise RuntimeError("contact no longer belongs to approved list")
+                if not contact["emailBlacklisted"] and list_id not in unsubscribed:
                     addresses.add(_email(contact["email"]))
             if len(contacts) < 500:
                 break
@@ -229,7 +236,12 @@ class BrevoMarketing:
         remote_html = info.get("htmlContent")
         if not isinstance(remote_html, str) or hashlib.sha256(remote_html.encode("utf-8")).hexdigest() != expected_html_sha256:
             raise PermissionError("remote HTML differs from approved campaign")
-        remote_ids = info.get("recipients", {}).get("lists", [])
+        recipients = info.get("recipients")
+        if not isinstance(recipients, dict) or set(recipients) - {"lists", "exclusionLists"}:
+            raise PermissionError("remote campaign has unapproved recipient selectors")
+        if recipients.get("exclusionLists", []):
+            raise PermissionError("remote campaign has unapproved exclusions")
+        remote_ids = recipients.get("lists", [])
         # Provider's report representation may have list names/IDs in objects.
         ids = {int(x.get("listId", -1)) if isinstance(x, dict) else int(x) for x in remote_ids}
         if ids != {_positive_id(actual_list_id, "actual_list_id")}:
