@@ -113,6 +113,19 @@ class MarketingContractTests(unittest.TestCase):
             self.assertFalse(any("sendNow" in path for _, path, _ in self.fake.calls))
 
 
+    def test_remote_content_change_blocks_dispatch(self):
+        import hashlib
+        args = dict(approved_campaign_id=123, approved_list_id=15,
+                    actual_list_id=15, campaign_approval_ref="owner-1",
+                    recipient_approval_ref="owner-2",
+                    expected_subject=spec().subject,
+                    expected_html_sha256=hashlib.sha256(spec().html.encode()).hexdigest())
+        with patch.dict(os.environ, {"BREVO_LIVE_SEND_ENABLED": "1"}):
+            self.fake.remote["htmlContent"] = "<p>Conteúdo adulterado {{ unsubscribe }}</p>"
+            with self.assertRaises(PermissionError):
+                self.client.send_now(123, **args)
+            self.assertFalse(any("sendNow" in path for _, path, _ in self.fake.calls))
+
 class LedgerContractTests(unittest.TestCase):
     def setUp(self):
         self.folder = tempfile.TemporaryDirectory()
@@ -175,6 +188,27 @@ class LedgerContractTests(unittest.TestCase):
         self.assertEqual(self.ledger.get(spec().local_id)["state"], "SCHEDULED")
         self.assertEqual(sum("sendNow" in p for _,p,_ in self.fake.calls), 1)
 
+
+    def test_ledger_draft_write_gate_preserves_staged_state(self):
+        with patch.dict(os.environ, {"BREVO_DRAFT_WRITE_ENABLED": "0"}):
+            with self.assertRaises(PermissionError):
+                self.ledger.create_remote_draft(spec(), self.client)
+        self.assertEqual(self.ledger.get(spec().local_id)["state"], "STAGED")
+        self.assertEqual(self.fake.calls, [])
+
+    def test_dispatch_ambiguous_provider_result_never_retried(self):
+        with patch.dict(os.environ, {"BREVO_DRAFT_WRITE_ENABLED": "1"}):
+            self.ledger.create_remote_draft(spec(), self.client)
+        self.ledger.record_approval(spec().local_id, "campaign", "operator:review-1")
+        self.ledger.record_approval(spec().local_id, "recipients", "operator:review-2")
+        self.fake.fail = True
+        with patch.dict(os.environ, {"BREVO_LIVE_SEND_ENABLED": "1"}):
+            with self.assertRaises(ConnectionError):
+                self.ledger.dispatch(spec().local_id, self.client)
+            with self.assertRaises(PermissionError):
+                self.ledger.dispatch(spec().local_id, self.client)
+        self.assertEqual(self.ledger.get(spec().local_id)["state"], "RECONCILE_REQUIRED")
+        self.assertEqual(sum("sendNow" in path for _, path, _ in self.fake.calls), 1)
 
 if __name__ == "__main__":
     unittest.main()
