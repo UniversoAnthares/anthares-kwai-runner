@@ -1,0 +1,39 @@
+name: Brevo marketing contracts (offline)
+
+on:
+  push:
+    branches:
+      - 'feat/brevo-marketing-gated-*'
+    paths:
+      - 'brevo_marketing.py'
+      - 'brevo_campaign_ledger.py'
+      - 'tests/test_brevo_marketing.py'
+      - '.github/workflows/brevo-marketing-contracts.yml'
+  pull_request:
+    paths:
+      - 'brevo_marketing.py'
+      - 'brevo_campaign_ledger.py'
+      - 'tests/test_brevo_marketing.py'
+      - '.github/workflows/brevo-marketing-contracts.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  offline-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      BREVO_DRAFT_WRITE_ENABLED: '0'
+      BREVO_CONTACT_SYNC_ENABLED: '0'
+      BREVO_TEST_SEND_ENABLED: '0'
+      BREVO_LIVE_SEND_ENABLED: '0'
+      BREVO_API_KEY: ''
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Python syntax
+        run: python3 -m py_compile brevo_marketing.py brevo_campaign_ledger.py
+      - name: Offline Brevo marketing contract tests
+        run: python3 -m unittest discover -s tests -p 'test_brevo_marketing.py' -v
+      - name: Existing email regression tests
+        run: python3 -m unittest discover -s tests -p 'test_email*.py' -v
