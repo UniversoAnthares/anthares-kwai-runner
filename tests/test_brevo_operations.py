@@ -67,6 +67,24 @@ class OperatorTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    def test_live_lookup_requires_fresh_complete_sync(self):
+        with self.assertRaises(PermissionError):
+            self.ledger.fresh_lookup()
+        pull_brevo_suppressions(self.client, self.ledger)
+        check = self.ledger.fresh_lookup()
+        self.assertTrue(check("bad@example.org"))
+        self.assertFalse(check("good@example.org"))
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("UPDATE brevo_sync_runs SET checked_at='2020-01-01T00:00:00+00:00'")
+        with self.assertRaises(PermissionError):
+            self.ledger.fresh_lookup()
+
+    def test_unavailable_unsubscribe_metadata_prevents_live_lookup(self):
+        self.transport.contacts[0].pop("listUnsubscribed")
+        pull_brevo_suppressions(self.client, self.ledger)
+        with self.assertRaises(PermissionError):
+            self.ledger.fresh_lookup()
+
     def test_pull_records_blacklists_and_unsubscribes(self):
         result = pull_brevo_suppressions(self.client, self.ledger)
         self.assertEqual(result["contacts_checked"], 3)
