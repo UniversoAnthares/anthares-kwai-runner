@@ -13,7 +13,7 @@ from unittest.mock import patch
 from brevo_marketing import BrevoMarketing
 from brevo_operations import (
     SuppressionLedger, pull_brevo_suppressions, safe_campaign_report,
-    safe_status, main,
+    safe_status, safe_campaign_index, main,
 )
 
 
@@ -131,6 +131,15 @@ class OperatorTests(unittest.TestCase):
         self.assertTrue(result["test_sent"])
         self.assertNotIn("private", json.dumps(result))
         self.assertNotIn("secret@example.org", json.dumps(result))
+
+    def test_campaign_index_hides_content_and_addresses(self):
+        result = safe_campaign_index(self.client)
+        self.assertEqual(result["total"], 0)
+        self.assertEqual(result["campaigns"], [])
+        self.assertFalse(result["truncated"])
+        self.assertTrue(all(m == "GET" for m, _ in self.transport.calls))
+        with self.assertRaises(ValueError):
+            safe_campaign_index(self.client, "unknown")
 
     def test_status_summarizes_without_contacts(self):
         result = safe_status(self.client, self.ledger)
