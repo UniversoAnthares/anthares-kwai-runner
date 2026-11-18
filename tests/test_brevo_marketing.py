@@ -12,7 +12,7 @@ class FakeBrevo:
     def __init__(self, fail=False):
         self.calls = []
         self.fail = fail
-        self.remote = {"status": "draft", "recipients": {"lists": [15]},
+        self.remote = {"status": "draft", "subject": "Material de estudo", "recipients": {"lists": [15]},
                        "htmlContent": "<p>Mensagem {{ unsubscribe }}</p>"}
 
     def __call__(self, method, path, data):
@@ -92,7 +92,9 @@ class MarketingContractTests(unittest.TestCase):
     def test_dispatch_denied_without_gate(self):
         args = dict(approved_campaign_id=123, approved_list_id=15,
                     actual_list_id=15, campaign_approval_ref="owner-1",
-                    recipient_approval_ref="owner-2")
+                    recipient_approval_ref="owner-2",
+                    expected_subject=spec().subject,
+                    expected_html_sha256=__import__("hashlib").sha256(spec().html.encode()).hexdigest())
         with patch.dict(os.environ, {"BREVO_LIVE_SEND_ENABLED": "0"}):
             with self.assertRaises(PermissionError):
                 self.client.send_now(123, **args)
@@ -101,7 +103,9 @@ class MarketingContractTests(unittest.TestCase):
     def test_dispatch_checks_remote_recipient_list(self):
         args = dict(approved_campaign_id=123, approved_list_id=15,
                     actual_list_id=15, campaign_approval_ref="owner-1",
-                    recipient_approval_ref="owner-2")
+                    recipient_approval_ref="owner-2",
+                    expected_subject=spec().subject,
+                    expected_html_sha256=__import__("hashlib").sha256(spec().html.encode()).hexdigest())
         with patch.dict(os.environ, {"BREVO_LIVE_SEND_ENABLED": "1"}):
             self.fake.remote["recipients"] = {"lists": [16]}
             with self.assertRaises(PermissionError):
