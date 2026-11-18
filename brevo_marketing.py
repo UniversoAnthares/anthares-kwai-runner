@@ -6,6 +6,7 @@ Provider writes are gated by environment switches and explicit operator actions.
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import re
 import urllib.error
@@ -15,7 +16,7 @@ from typing import Any, Callable, Optional
 
 
 BASE_URL = "https://api.brevo.com/v3"
-EMAIL = re.compile(r"^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")
+EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 class BrevoAPIError(RuntimeError):
@@ -61,7 +62,7 @@ class MarketingDraft:
     def payload(self) -> dict:
         if not self.local_id or not re.fullmatch(r"[a-zA-Z0-9_-]{3,80}", self.local_id):
             raise ValueError("invalid local campaign identifier")
-        if not self.name.strip() or not self.subject.strip():
+        if not self.name.strip() or not self.subject.strip() or not self.sender_name.strip():
             raise ValueError("name and subject are required")
         if not 10 < len(self.html.encode("utf-8")) < 1_000_000:
             raise ValueError("HTML must contain 11 bytes to less than 1 MB")
@@ -152,7 +153,8 @@ class BrevoMarketing:
 
     def send_now(self, campaign_id: int, *, approved_campaign_id: int,
                  approved_list_id: int, actual_list_id: int,
-                 campaign_approval_ref: str, recipient_approval_ref: str) -> None:
+                 campaign_approval_ref: str, recipient_approval_ref: str,
+                 expected_subject: str, expected_html_sha256: str) -> None:
         """Explicit triple gate; never infer permission from a contact/list existing."""
         if not _enabled("BREVO_LIVE_SEND_ENABLED"):
             raise PermissionError("campaign dispatch disabled")
@@ -165,6 +167,13 @@ class BrevoMarketing:
             raise PermissionError("campaign and recipient approvals both required")
         # Check actual remote list to avoid sending to a changed/unapproved list.
         info = self.campaign_details(cid)
+        if info.get("status") != "draft":
+            raise PermissionError("remote campaign must be an unsent draft")
+        if info.get("subject") != expected_subject:
+            raise PermissionError("remote subject differs from approved campaign")
+        remote_html = info.get("htmlContent")
+        if not isinstance(remote_html, str) or hashlib.sha256(remote_html.encode("utf-8")).hexdigest() != expected_html_sha256:
+            raise PermissionError("remote HTML differs from approved campaign")
         remote_ids = info.get("recipients", {}).get("lists", [])
         # Provider's report representation may have list names/IDs in objects.
         ids = {int(x.get("id", 0)) if isinstance(x, dict) else int(x) for x in remote_ids}
