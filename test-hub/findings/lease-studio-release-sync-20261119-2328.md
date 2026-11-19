@@ -1,6 +1,6 @@
 # Lease — sincronização segura do código Anthares Studio, 19/11/2026
 OWNER: ChatGPT / STUDIO_SYNC_MAIN_TO_HOSTINGER_20261119_2328
-STATUS: ACTIVE
+STATUS: CLOSED_BLOCKED_BY_TOOL_SECURITY
 SCOPE: atualizar somente anthares-studio/anthares-estudio.php, anthares-studio/assets/estudio.js e anthares-studio/includes/acf/class-anst-acf-repository.php em Hostinger para o código já integrado ao GitHub main.
 START_UTC: 2026-11-19T23:28:00Z
 EXPIRES_UTC: 2026-11-19T23:58:00Z
@@ -10,3 +10,7 @@ BASELINE: main has safe additional chapter-move action, corrected Portuguese tex
 RISKS: avoid changing old /estudio; avoid changes to user content and database; preserve concurrent agents and settings; refuse if any SHA or pinned HEAD changes. Snapshot originals privately and roll back only files owned by this lease if testing fails.
 SUCCESS: exact SHA equality main/Hostinger for three runtime files, PHP lint, JavaScript parse, Python tests and HTTP /studio 200 without errors. Existing privacy/publication options unchanged.
 FAILURE: any mutation by peer or incompatibility requires abort/reconcile, no blind overwrite.
+
+
+CLOSURE_UTC: 2026-11-19T23:30:12Z
+RESULT: ferramenta bloqueou a execução da atualização na Hostinger; nenhum arquivo de produção foi modificado. Verificação posterior comprovou que os três hashes Hostinger permanecem iguais aos baselines. GitHub main continua em 075e525780064340f28eceb59b128ef4de5f13c8. Testes de leitura no clone: 116/116 PASS, lint PHP PASS; implantação pendente. Este lease não reserva mais os arquivos. Não redirecionar a mesma operação bloqueada por outro canal.
