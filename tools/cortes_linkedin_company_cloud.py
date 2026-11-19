@@ -165,7 +165,18 @@ def main():
         print(json.dumps(out,separators=(",",":")),flush=True)
         return 0 if out.get("linkedin_company") not in {"BLOCKED_BEFORE_SUBMIT","HELD_UNCERTAIN"} else 2
     except (ConfigRequired,PlatformLimit) as exc:
-        print("LINKEDIN_COMPANY_UNAVAILABLE="+type(exc).__name__,flush=True)
+        # Only known fixed identifiers may be logged. OAuth and provider text are secret.
+        reason=str(exc).strip()
+        allowed={
+            "LINKEDIN_COMPANY_HOSTED_WORKFLOW_ONLY",
+            "LINKEDIN_COMPANY_ACCESS_TOKEN_UNAVAILABLE",
+            "LINKEDIN_COMPANY_AUTHOR_URN_INVALID",
+            "LINKEDIN_COMPANY_ADMIN_READ_AUTH_REQUIRED",
+            "LINKEDIN_COMPANY_ADMIN_RESPONSE_INVALID",
+            "LINKEDIN_COMPANY_ACCOUNT_ADMIN_NOT_VERIFIED",
+        }
+        print("LINKEDIN_COMPANY_UNAVAILABLE="+
+              (reason if reason in allowed else type(exc).__name__),flush=True)
         return 2
     except Exception as exc:
         print("LINKEDIN_COMPANY_BLOCKED="+type(exc).__name__,flush=True)
