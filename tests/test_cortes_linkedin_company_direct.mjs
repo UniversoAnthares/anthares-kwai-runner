@@ -13,7 +13,10 @@ test('LinkedIn company has distinct official OIDC authorization and queue fence'
   assert(backend.includes("FOR UPDATE OF q SKIP LOCKED LIMIT 1"));
 });
 test('Company uses only official REST organization token; Buffer absent',()=>{
-  assert(workflow.includes('LINKEDIN_ACCESS_TOKEN:'));
+  assert(workflow.includes('LINKEDIN_COMPANY_SECRET:'));
+  assert(workflow.includes('secrets.LINKEDIN_ACCESS_TOKEN'));
+  assert(workflow.includes("printf 'LINKEDIN_ACCESS_TOKEN=%s"));
+  assert(workflow.includes('::add-mask::'));
   assert(workflow.includes('urn:li:organization:145345334'));
   assert(!workflow.includes('BUFFER_API_KEY'));
   assert(workflow.includes('id-token: write'));
