@@ -61,7 +61,8 @@ class DirectInstagramTests(unittest.TestCase):
             queue.assert_not_called()
 
     def test_queue_authority_is_not_called_before_cloud_identity(self):
-        with patch.object(direct,"require_cloud",side_effect=RuntimeError("AUTH_UNAVAILABLE")):
+        with patch.object(direct,"daily_publication_window",return_value=True), \
+             patch.object(direct,"require_cloud",side_effect=RuntimeError("AUTH_UNAVAILABLE")):
             with patch.object(direct,"neon") as q:
                 with self.assertRaises(RuntimeError):
                     direct.main()
@@ -130,7 +131,8 @@ class DirectInstagramTests(unittest.TestCase):
             once.assert_not_called()
 
     def test_quota_batch_terminal_does_not_submit_next_clip(self):
-        with patch.object(direct, "require_cloud", return_value=object()), \
+        with patch.object(direct, "daily_publication_window", return_value=True), \
+             patch.object(direct, "require_cloud", return_value=object()), \
              patch.object(direct, "quota_hold_until", return_value=None), \
              patch.object(direct, "publish_once", side_effect=[5, 1]) as once, \
              patch.object(direct.time, "sleep") as sleeper:

@@ -10,6 +10,7 @@ on:
       - 'tools/cortes_instagram_public_reconcile.py'
       - 'tools/cortes_queue_ha.py'
       - 'infra/neon-cortes-queue/index.mjs'
+      - 'tests/test_instagram_direct_cloud.py'
       - 'tests/test_instagram_public_reconcile.py'
       - 'tests/test_instagram_public_neon.mjs'
       - 'tests/test_instagram_layout_standard.py'
