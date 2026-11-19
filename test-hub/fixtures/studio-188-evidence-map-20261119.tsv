@@ -1,0 +1,189 @@
+id|source_alias|exact_search_anchor|classification_intent
+001|js|function createProject(|FOUND
+002|js|function startCards(|FOUND
+003|php|function anst_bootstrap(|FOUND
+004|js|function renderProject(|FOUND
+005|js|const projectGroups=|FOUND
+006|js|function queueSave(|PARTIAL
+007|php|function anst_version_manage(|PARTIAL
+008|files|function anst_g7_file_upload(|PARTIAL
+009|js|function renderStudioSearch(|PARTIAL
+010|-|-|NO_EVIDENCE
+011|universe|function anst_g7_universe_link(|PARTIAL
+012|js|function applyWritingFocus(|FOUND
+013|workspace|function anst_g7_history(|PARTIAL
+014|php|function anst_create_note(|FOUND
+015|js|function muralMarkup(|FOUND
+016|js|function renderUnlock(|PARTIAL
+017|js|function boardCols(|FOUND
+018|js|function cardMove(|FOUND
+019|php|function anst_board_import(|PARTIAL
+020|workspace|function anst_g7_kinds(|PARTIAL
+021|workspace|function anst_g7_kinds(|PARTIAL
+022|workspace|function anst_g7_kinds(|PARTIAL
+023|workspace|function anst_g7_kinds(|PARTIAL
+024|story|source_|GATED
+025|files|function anst_g7_file_upload(|PARTIAL
+026|workspace|function anst_g7_progress(|PARTIAL
+027|workspace|function anst_g7_kinds(|PARTIAL
+028|workspace|function anst_g7_kinds(|PARTIAL
+029|js|function renderUnlock(|PARTIAL
+030|js|function renderUnlock(|PARTIAL
+031|-|-|NO_EVIDENCE
+032|js|['premise','Premissa'|FOUND
+033|js|function sentenceEditor(|FOUND
+034|js|function sentenceEditor(|FOUND
+035|js|['theme','Tema'|PARTIAL
+036|-|-|NO_EVIDENCE
+037|js|['thesis','Tese'|FOUND
+038|php|function anst_project_tone(|PARTIAL
+039|-|-|NO_EVIDENCE
+040|js|obstacle|PARTIAL
+041|js|genre|PARTIAL
+042|js|audience|PARTIAL
+043|-|-|NO_EVIDENCE
+044|js|function renderConceptSynthesis(|FOUND
+045|impact|function anst_g7_impact_report(|PARTIAL
+046|js|function boardCard(|FOUND
+047|js|function cardMove(|FOUND
+048|story|function anst_story_relations(|PARTIAL
+049|js|outline|PARTIAL
+050|js|function renderUnlock(|FOUND
+051|story|function anst_story_types(|GATED
+052|js|three_acts|FOUND
+053|js|turning|PARTIAL
+054|js|hero_journey|FOUND
+055|-|-|NO_EVIDENCE
+056|js|structureModels|PARTIAL
+057|story|conflito|GATED
+058|js|function renderStructure(|PARTIAL
+059|js|function renderNarrativeChronology(|GATED
+060|story|story_time|GATED
+061|impact|function anst_g7_impact_report(|PARTIAL
+062|story|function anst_story_fields(|GATED
+063|-|-|NO_EVIDENCE
+064|story|beat|GATED
+065|-|-|NO_EVIDENCE
+066|js|mark-pista|PARTIAL
+067|story|function anst_story_relations(|GATED
+068|js|structureModels|PARTIAL
+069|story|personagem|GATED
+070|story|role|GATED
+071|-|-|NO_EVIDENCE
+072|story|objective|GATED
+073|-|-|NO_EVIDENCE
+074|story|attributes_json|PARTIAL
+075|story|attributes_json|PARTIAL
+076|story|attributes_json|PARTIAL
+077|story|attributes_json|PARTIAL
+078|story|arc_json|GATED
+079|story|arc_json|PARTIAL
+080|story|function anst_story_relations(|GATED
+081|js|function renderStoryEntities(|PARTIAL
+082|js|function renderNarrativeChronology(|GATED
+083|story|attributes_json|PARTIAL
+084|story|voice|GATED
+085|-|-|NO_EVIDENCE
+086|impact|function anst_g7_impact_report(|PARTIAL
+087|js|function exportStoryDossier(|FOUND
+088|story|lugar|GATED
+089|story|grupo|GATED
+090|js|function renderElements(|PARTIAL
+091|story|rules_json|GATED
+092|story|history|GATED
+093|story|story_time|GATED
+094|story|map_refs_json|PARTIAL
+095|story|map_refs_json|PARTIAL
+096|story|culture_json|PARTIAL
+097|story|culture_json|PARTIAL
+098|story|culture_json|PARTIAL
+099|story|rules_json|PARTIAL
+100|story|culture_json|PARTIAL
+101|story|culture_json|PARTIAL
+102|story|rules_json|PARTIAL
+103|universe|function anst_g7_universe_library(|PARTIAL
+104|story|function anst_story_relations(|GATED
+105|impact|function anst_g7_impact_report(|PARTIAL
+106|-|-|NO_EVIDENCE
+107|js|function renderManuscript(|FOUND
+108|js|function applyWritingFocus(|FOUND
+109|js|function updateWritingReferences(|FOUND
+110|php|function anst_reorder_chapters(|PARTIAL
+111|js|function reviewCompareDialog(|FOUND
+112|story|pov|GATED
+113|story|pov|GATED
+114|-|-|NO_EVIDENCE
+115|story|voice|PARTIAL
+116|js|discourse-mark|PARTIAL
+117|docx|function anst_g7_docx_parse(|PARTIAL
+118|js|function updateWordCount(|PARTIAL
+119|story|function anst_story_fields(|GATED
+120|story|goal|GATED
+121|js|discourse-mark|FOUND
+122|js|discourse-mark|PARTIAL
+123|story|duration_minutes|GATED
+124|story|goal|GATED
+125|story|goal|PARTIAL
+126|js|function renderTextDiagnostics(|PARTIAL
+127|js|entity-link|PARTIAL
+128|js|function renderTextDiagnostics(|PARTIAL
+129|js|function narrativeTextMetrics(|FOUND
+130|js|function renderTextDiagnostics(|FOUND
+131|js|function narrativeTextMetrics(|FOUND
+132|js|function lessonControls(|PARTIAL
+133|php|function anst_review_anchor_at(|FOUND
+134|js|function reviewCompareDialog(|FOUND
+135|story|tension_planned|GATED
+136|story|conflict_score|GATED
+137|story|fortune_score|GATED
+138|story|tension_planned|PARTIAL
+139|js|function renderChapterMetrics(|PARTIAL
+140|js|function renderChapterMetrics(|PARTIAL
+141|story|tone|GATED
+142|story|tension_perceived|GATED
+143|js|mark-pista|PARTIAL
+144|js|function renderTextDiagnostics(|PARTIAL
+145|js|function renderChapterMetrics(|PARTIAL
+146|story|function anst_story_relations(|PARTIAL
+147|js|function narrativeTextMetrics(|FOUND
+148|story|conflict_score|PARTIAL
+149|js|mark-pista|PARTIAL
+150|js|function renderTextDiagnostics(|PARTIAL
+151|story|tension_perceived|PARTIAL
+152|js|function renderTextDiagnostics(|FOUND
+153|js|function renderReview(|FOUND
+154|js|function applyWritingFocus(|PARTIAL
+155|php|function anst_version_manage(|FOUND
+156|js|reviewTypes|FOUND
+157|js|reviewTypes|FOUND
+158|js|reviewTypes|FOUND
+159|js|reviewTypes|FOUND
+160|php|function anst_review_manage(|FOUND
+161|beta|function anst_g7_beta_invites(|EXCLUDED
+162|beta|function anst_g7_beta_feedback(|EXCLUDED
+163|beta|function anst_g7_beta_feedback(|EXCLUDED
+164|php|function anst_permission(|PARTIAL
+165|js|function lessonControls(|PARTIAL
+166|js|function renderUnlock(|PARTIAL
+167|js|function renderUnlock(|PARTIAL
+168|-|-|NO_EVIDENCE
+169|js|function sentenceEditor(|FOUND
+170|js|function renderUnlock(|PARTIAL
+171|js|structureModels|FOUND
+172|-|-|NO_EVIDENCE
+173|story|pov|GATED
+174|js|discourse-mark|FOUND
+175|js|function renderTextDiagnostics(|PARTIAL
+176|workspace|function anst_g7_progress(|PARTIAL
+177|js|function renderHome(|FOUND
+178|php|function anst_create_project(|FOUND
+179|php|function anst_version_snapshot(|PARTIAL
+180|story|function anst_story_register_types(|GATED
+181|story|function anst_story_relations(|GATED
+182|impact|function anst_g7_impact_report(|PARTIAL
+183|capture|function anst_g7_capture_form(|PARTIAL
+184|php|function anst_import_chapter(|PARTIAL
+185|js|function exportProjectJson(|PARTIAL
+186|js|function projectTabs(|PARTIAL
+187|-|-|NO_EVIDENCE
+188|mentors|function anst_g7_mentor_create(|PARTIAL
