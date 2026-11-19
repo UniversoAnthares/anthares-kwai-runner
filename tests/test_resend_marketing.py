@@ -34,7 +34,7 @@ class FakeResend:
             return {"object": "broadcast", "id": BROADCAST,
                     "segment_id": SEGMENT, "status": "draft",
                     "subject": "Informativo", "html": "<p>Conteudo</p>"}
-        if method == "GET" and route.startswith("/contacts?"):
+        if method == "GET" and route.startswith("/segments/" + SEGMENT + "/contacts?"):
             if "after=" in route:
                 row = self.contacts[1].copy()
                 if self.duplicate:
@@ -110,6 +110,8 @@ class ResendTests(unittest.TestCase):
         self.assertEqual(audience["count"], 1)
         self.assertEqual(len(audience["digest"]), 64)
         self.assertEqual(sum("after=" in route for _, route, _ in self.fake.calls), 1)
+        self.assertTrue(all(route.startswith("/segments/" + SEGMENT + "/contacts?")
+                            for _, route, _ in self.fake.calls))
 
     def test_missing_unsubscribe_field_blocks_approval(self):
         self.fake.missing_state = True
