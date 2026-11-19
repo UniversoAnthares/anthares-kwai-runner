@@ -19,4 +19,6 @@ jobs:
           persist-credentials: false
       - run: node --check infra/neon-cortes-queue/index.mjs
       - run: node --test tests/test_cortes_linkedin_company_direct.mjs
+      - run: python3 -m pip install --quiet --disable-pip-version-check cryptography
+      - run: python3 -m unittest discover -s tests -p test_cortes_linkedin_company_admin_preflight.py -v
       - run: python3 -m py_compile tools/cortes_linkedin_company_cloud.py social_adapters/video_social.py
