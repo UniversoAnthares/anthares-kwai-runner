@@ -1,0 +1,37 @@
+name: Resend Broadcasts contracts (offline)
+
+on:
+  push:
+    branches:
+      - 'feat/resend-broadcasts-gated-*'
+    paths:
+      - 'resend_marketing.py'
+      - 'resend_readonly_check.py'
+      - 'tests/test_resend*.py'
+      - '.github/workflows/resend-broadcasts-contracts.yml'
+  pull_request:
+    paths:
+      - 'resend_marketing.py'
+      - 'resend_readonly_check.py'
+      - 'tests/test_resend*.py'
+      - '.github/workflows/resend-broadcasts-contracts.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  resend-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      RESEND_API_KEY: ''
+      RESEND_DRAFT_WRITE_ENABLED: '0'
+      RESEND_LIVE_SEND_ENABLED: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate syntax
+        run: python3 -m py_compile resend_marketing.py
+      - name: Test Resend Broadcasts integration
+        run: python3 -m unittest discover -s tests -p 'test_resend*.py' -v
+      - name: Preserve existing email regression tests
+        run: python3 -m unittest discover -s tests -p 'test_email*.py' -v
