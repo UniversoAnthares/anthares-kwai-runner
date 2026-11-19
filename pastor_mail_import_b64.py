@@ -13,7 +13,7 @@ from pastor_mailing_queue import PastoralQueue
 def process(payload: bytes, db_path: str, source: str) -> dict:
     if len(payload) > 250_000:
         raise ValueError("batch input too large")
-    raw = base64.b64decode(payload, validate=True)
+    raw = base64.b64decode(payload.strip(), validate=True)
     rows = json.loads(raw.decode("utf-8"))
     if not isinstance(rows, list) or len(rows) > 1000 or not all(
         isinstance(x, list) and len(x) == 2 and
