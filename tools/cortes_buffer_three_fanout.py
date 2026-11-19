@@ -46,12 +46,23 @@ def enqueue(job):
         raise RuntimeError("CORTES_BUFFER_FANOUT_WRONG_DEDUPE")
     return bool(body.get("deduped"))
 
+def wordpress_read_with_transient_retry():
+    """Retry one safe GET only for transport failures, never for HTTP denials."""
+    try:
+        return linked.wp_state()
+    except urllib.error.HTTPError:
+        raise
+    except urllib.error.URLError:
+        time.sleep(3)
+        return linked.wp_state()
+
+
 def main():
     stage="preflight"
     try:
         linked.require_cloud()
         stage="wordpress"
-        source=linked.wp_state()
+        source=wordpress_read_with_transient_retry()
         stage="candidate_jobs"
         selected=linked.candidate_jobs(source)
     except Exception as exc:
