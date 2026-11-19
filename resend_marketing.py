@@ -121,10 +121,10 @@ class ResendMarketing:
         eligible: set[str] = set()
         inspected = 0
         for _ in range(600):
-            query = "?segment_id=" + segment + "&limit=100"
+            query = "/segments/" + segment + "/contacts?limit=100"
             if after:
                 query += "&after=" + urllib.parse.quote(after, safe="")
-            page = self._request("GET", "/contacts" + query)
+            page = self._request("GET", query)
             if (not isinstance(page, dict) or page.get("object") != "list" or
                     not isinstance(page.get("data"), list) or
                     not isinstance(page.get("has_more"), bool)):
