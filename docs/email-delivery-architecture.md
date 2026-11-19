@@ -16,13 +16,14 @@ States: DRAFT, QUEUED, LEASED, SENT, DELIVERED, BOUNCED, COMPLAINED, UNSUBSCRIBE
 Every item carries campaign_id, contact_id, provider, provider_message_id, attempts, lease_owner, lease_expires_at, created_at, sent_at and last_event_at.
 Suppression is checked again immediately before provider dispatch.
 
-## Provider routing
-PRIMARY_CAMPAIGN: Brevo, already authorized by anthares.us SPF and suitable for gradual campaign sending.
-SECONDARY_CAMPAIGN: Resend after explicit connection/domain verification.
+## Provider routing (Resend candidate, 2026-11-18)
+TARGET_NEXT_CAMPAIGN: **Resend Marketing Broadcasts** selected after the Sender registration security block. The isolated adapter and tests are prepared; account, API key, authenticated GET, verified domain and approvals are still required.
+PREVIOUS_PROVIDER_BLOCKED: **Brevo marketing API** authenticated for reads but POST /v3/emailCampaigns returns HTTP 405. Preserve its configuration without automatic retries.
+PREVIOUS_PROVIDER_REGISTRATION_BLOCKED: **Sender.net** was staged independently but sign-up remains blocked by Cloudflare; its support requested a cooldown.
 MAILBOX/REPLY: Hostinger contato@anthares.us.
 Gmail remains an independent human mailbox path and is not the bulk-campaign transport.
 
-Provider failure affects only that delivery item. Retry may change provider only when the alternate provider has authenticated domain alignment and the same suppression gate.
+Cross-provider re-sends and automatic failovers are disabled. Every provider change requires verified domain alignment, audited permission for the recipient set and suppression checks before any campaign dispatch.
 
 ## Deliverability
 Current DNS audit 2026-10-06:
