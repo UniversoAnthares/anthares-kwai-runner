@@ -2,6 +2,14 @@
 
 **Estado:** código e testes aprovados; staging privado Hostinger instalado; criação de conta, autenticação real e verificação do domínio pendentes.
 
+## Atualização de 19/11/2026 — painel autenticado e contrato corrigido
+- O titular compartilhou uma captura de tela da sessão autenticada de `https://resend.com/emails`, mostrando acesso à navegação de `Broadcasts`, `Domains` e `API keys`. A sessão autenticada no navegador está **PROVEN**; o endereço de login dessa conta não foi verificado por API.
+- O código foi corrigido para consultar membros do segmento via `GET /segments/{id}/contacts?limit=100`, rota especificada na documentação oficial em https://resend.com/docs/api-reference/segments/list-segment-contacts.
+- GitHub Actions: [execução 44449356310](https://github.com/UniversoAnthares/anthares-kwai-runner/actions/runs/44449356310) passou **18/18 testes Resend e 9/9 testes regressivos**.
+- Release privada Hostinger verificada independentemente: `1e2b4708877fb2338369276c49631223fc4f6221`, blob do adaptador `efa0a772299514a9d208df24a28afb192d5fa60f`.
+- A chave API privada permanece vazia (0 bytes). Não há autenticação Resend API nem domínio comprovadamente verificado. O acesso ao painel no Chrome não transfere credenciais ao executor Hostinger e não autoriza inferir o e-mail de login.
+- A solicitação da chave e a verificação dos registros DNS permanecem pendentes; preservar todos os MX Hostinger, SPF e DKIM existentes até obter os valores exatos exigidos pelo Resend.
+
 ## Escopo
 O Resend é a alternativa avaliada após o Sender. Utilizar **Marketing Broadcasts** (API `/broadcasts`) e segmentos/contatos da API Resend. A rota transacional `/emails` fica fora do mailing para pastores.
 
