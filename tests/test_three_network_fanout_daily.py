@@ -95,6 +95,34 @@ class ThreeNetworkDailyFanoutTests(unittest.TestCase):
                     fanout.main()
         self.assertEqual(len(seen),229)
 
+    def test_transient_wordpress_transport_recovers_before_queue(self):
+        from urllib.error import URLError
+        out=io.StringIO()
+        with patch.object(fanout.linked,"require_cloud"), \
+             patch.object(fanout.linked,"wp_state",side_effect=[URLError("transient"),{"items":[]}]) as read, \
+             patch.object(fanout.time,"sleep") as pause, \
+             patch.object(fanout.linked,"candidate_jobs",return_value=[]), \
+             patch.object(fanout,"enqueue",side_effect=AssertionError("enqueue forbidden")), \
+             patch.dict(os.environ,{"CORTES_FANOUT_DIAGNOSE_ONLY":"1"}):
+            with contextlib.redirect_stdout(out):
+                fanout.main()
+        self.assertEqual(read.call_count,2)
+        pause.assert_called_once_with(3)
+        self.assertIn('"new_enqueues":0',out.getvalue())
+
+    def test_wordpress_http_denial_never_retried(self):
+        from urllib.error import HTTPError
+        out=io.StringIO()
+        denied=HTTPError("https://anthares.us/wp-json/",403,"Denied",None,None)
+        with patch.object(fanout.linked,"require_cloud"), \
+             patch.object(fanout.linked,"wp_state",side_effect=denied) as read, \
+             patch.object(fanout.time,"sleep") as pause, \
+             patch.object(fanout,"enqueue",side_effect=AssertionError("enqueue forbidden")):
+            with contextlib.redirect_stdout(out), self.assertRaises(HTTPError):
+                fanout.main()
+        read.assert_called_once()
+        pause.assert_not_called()
+
     def test_preflight_failure_preserves_ledger(self):
         out=io.StringIO()
         with patch.object(fanout.linked,"require_cloud"), \
