@@ -45,5 +45,26 @@ class AuthorizedOrganizationAdminTests(unittest.TestCase):
             with self.assertRaises(c.ConfigRequired):
                 c.authorize_company_admin()
 
+    def test_known_admin_failure_emits_safe_reason(self):
+        from unittest.mock import patch
+        import contextlib
+        with patch.object(c,"cloud_only",side_effect=c.ConfigRequired(
+             "LINKEDIN_COMPANY_ACCOUNT_ADMIN_NOT_VERIFIED")):
+            out=io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(c.main(),2)
+            self.assertIn("LINKEDIN_COMPANY_UNAVAILABLE=LINKEDIN_COMPANY_ACCOUNT_ADMIN_NOT_VERIFIED",
+                          out.getvalue())
+
+    def test_arbitrary_provider_error_details_remain_hidden(self):
+        import contextlib
+        with patch.object(c,"cloud_only",side_effect=c.ConfigRequired(
+             "unexpected sensitive provider response")):
+            out=io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(c.main(),2)
+            self.assertNotIn("sensitive",out.getvalue())
+            self.assertIn("LINKEDIN_COMPANY_UNAVAILABLE=ConfigRequired",out.getvalue())
+
 if __name__=="__main__":
     unittest.main()
