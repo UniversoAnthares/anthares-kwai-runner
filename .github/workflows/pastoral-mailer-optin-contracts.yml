@@ -1,0 +1,33 @@
+name: Pastoral mailing opt-in contracts (offline)
+
+on:
+  push:
+    branches:
+      - 'feat/pastoral-mailer-consent-ledger-*'
+    paths:
+      - 'pastor_mailing_queue.py'
+      - 'tests/test_pastor_mailing_queue.py'
+      - '.github/workflows/pastoral-mailer-optin-contracts.yml'
+  pull_request:
+    paths:
+      - 'pastor_mailing_queue.py'
+      - 'tests/test_pastor_mailing_queue.py'
+      - '.github/workflows/pastoral-mailer-optin-contracts.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  optin:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      RESEND_PASTORS_LIVE_SEND: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate syntax
+        run: python3 -m py_compile pastor_mailing_queue.py
+      - name: Verify consent/suppression/daily quota
+        run: python3 -m unittest discover -s tests -p 'test_pastor_mailing_queue.py' -v
+      - name: Regression: Resend API reader
+        run: python3 -m unittest discover -s tests -p 'test_resend*.py' -q
