@@ -6,12 +6,20 @@ on:
       - 'feat/pastoral-mailer-consent-ledger-*'
     paths:
       - 'pastor_mailing_queue.py'
+      - 'pastor_mail_import_b64.py'
+      - 'pastor_mail_inbox_cli.py'
+      - 'resend_suppression_sync.py'
       - 'tests/test_pastor_mailing_queue.py'
+      - 'tests/test_resend_suppression_sync.py'
       - '.github/workflows/pastoral-mailer-optin-contracts.yml'
   pull_request:
     paths:
       - 'pastor_mailing_queue.py'
+      - 'pastor_mail_import_b64.py'
+      - 'pastor_mail_inbox_cli.py'
+      - 'resend_suppression_sync.py'
       - 'tests/test_pastor_mailing_queue.py'
+      - 'tests/test_resend_suppression_sync.py'
       - '.github/workflows/pastoral-mailer-optin-contracts.yml'
 
 permissions:
