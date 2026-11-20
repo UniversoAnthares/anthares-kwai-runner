@@ -14,3 +14,5 @@ AUTH_BROWSER: QA-only CDP tab 3DCF0B790D783BCE5284CFCB24FED09B confirmed authent
 UI_E2E: 1 chapter via new-chapter => core list 1, DOCX selector 1 without reload; bulk import TXT+MD 2/2 PASS => core 3 / DOCX 3 without reload; DOCX export+parse+preview+import => core 4 / DOCX 4 without reload.
 CLEANUP: QA project 22014, children 22015..22018 deleted; database count IDs 22014-22018 zero; original published-project count 22 unchanged.
 ALL_CHECKS_PASSED: production fix verified. Cross-account acceptance and commercial public publishing remain unexercised by design.
+
+GITHUB_SYNC: PR UniversoAnthares/anthares-wordpress#384 merged successfully (main merge commit 797fa93f839d697675061c5a4d32046b5a74980e). The main blobs exactly match the corrected branch for estudio.js (c6b70cf0a59b383d845e87d7f88af53f2611c3c6), studio-g7-docx.js (0b56988535322b07575def0a0d23e36be074a7ed), studio-g7-bulk-import.js (0eb0b1431c40b547044723e605b306e1c8a9ee36).
