@@ -23,9 +23,15 @@ if (-not $version) {
     '--user-data-dir=' + $profile, '--profile-directory=Default', '--no-first-run',
     '--no-default-browser-check', '--disable-sync', '--disable-notifications',
     '--mute-audio', '--disable-audio-output','about:blank')
-  Start-Process -FilePath $chrome -ArgumentList $args -WindowStyle Hidden | Out-Null
-  Start-Sleep -Seconds 3
-  try {$version = Invoke-RestMethod 'http://127.0.0.1:9226/json/version' -TimeoutSec 4} catch {}
+  $owned = Start-Process -FilePath $chrome -ArgumentList $args -WindowStyle Hidden -PassThru
+  $deadline = (Get-Date).AddSeconds(24)
+  do {
+    Start-Sleep -Seconds 1
+    try {$version = Invoke-RestMethod 'http://127.0.0.1:9226/json/version' -TimeoutSec 2} catch {}
+    if ($version) { break }
+    $owned.Refresh()
+    if ($owned.HasExited) { throw ('PINTEREST_HEADLESS_CHROME_EARLY_EXIT_' + $owned.ExitCode) }
+  } while ((Get-Date) -lt $deadline)
 }
 if (-not $version -or $version.Browser -notmatch '^Chrome/') { throw 'PINTEREST_CDP_UNAVAILABLE' }
 $running = @(Get-CimInstance Win32_Process -Filter "name='chrome.exe'" |
