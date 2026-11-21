@@ -120,5 +120,47 @@ class KwaiNativeUiRecoveryTests(unittest.TestCase):
             found,_,_=native.confirm('fixture',baseline,tries=1,delay=0,attempted_at=st_time,expected_caption=expected)
         self.assertFalse(found)
 
+    def test_precommit_physical_failure_memufailover_requires_identity(self):
+        from contextlib import ExitStack
+        for verified, expected in ((False, 81), (True, 82)):
+            with tempfile.TemporaryDirectory() as td:
+                media = Path(td) / "upload.mp4"
+                media.write_bytes(b"test-only")
+                with ExitStack() as st:
+                    st.enter_context(patch.dict(os.environ, {
+                        "ANTHARES_KWAI_PHYSICAL_PRIMARY_EXCLUSIVE": "1",
+                        "ANTHARES_PHYSICAL_ADB_SERIAL": "993fce720408",
+                        "ANTHARES_PHYSICAL_KWAI_AUTHENTICATED": "true",
+                        "ANTHARES_KWAI_FORCE_MEMU": "0",
+                    }))
+                    st.enter_context(patch.object(worker, "required", side_effect=lambda k: {
+                        "KWAI_QUEUE_JOB_ID": "test-precommit",
+                        "KWAI_VIDEO_URL": "https://anthares.us/wp-content/uploads/anthares-clips/test.mp4",
+                    }[k]))
+                    st.enter_context(patch.object(worker, "retry_pending_ack", return_value=None))
+                    st.enter_context(patch.object(worker, "load_health", return_value={}))
+                    st.enter_context(patch.object(worker.routing, "load_manifest", return_value={}))
+                    st.enter_context(patch.object(worker, "download_media", return_value=media))
+                    st.enter_context(patch.object(worker, "run_physical_prepare",
+                        return_value=(False, "device", "ui-dump-unavailable", {})))
+                    st.enter_context(patch.object(worker, "record_result", side_effect=lambda h, *a: h))
+                    st.enter_context(patch.object(worker, "AndroidExecutorRouter"))
+                    st.enter_context(patch.object(worker, "merge_health", return_value={}))
+                    st.enter_context(patch.object(worker.routing, "choose", return_value="memu_android"))
+                    identity = st.enter_context(patch.object(worker, "verify_memu_standby_identity",
+                        return_value=verified))
+                    prepare = st.enter_context(patch.object(worker, "prepare_memu",
+                        return_value=(False, "precommit-test-no-post", {})))
+                    started = st.enter_context(patch.object(worker, "queue_callback"))
+                    physical_commit = st.enter_context(patch.object(worker, "run_physical_commit"))
+                    self.assertEqual(worker.main(), expected)
+                    identity.assert_called_once()
+                    if verified:
+                        prepare.assert_called_once()
+                    else:
+                        prepare.assert_not_called()
+                    started.assert_not_called()
+                    physical_commit.assert_not_called()
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
