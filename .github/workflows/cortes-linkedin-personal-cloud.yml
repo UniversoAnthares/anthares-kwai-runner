@@ -31,6 +31,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install authenticated Neon queue cryptography dependency
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check 'cryptography>=42,<49'
+          python -c 'from cryptography.hazmat.primitives import hashes; from cryptography.hazmat.primitives.asymmetric import padding; print("LINKEDIN_QUEUE_CRYPTO_READY=1")'
       - name: Decide whether primary cloud publisher is healthy
         id: primary-health
         env:
