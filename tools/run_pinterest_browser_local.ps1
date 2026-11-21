@@ -20,9 +20,10 @@ if (-not $version) {
   if ($other.Count -gt 0) { throw 'PINTEREST_CDP_PORT_BUSY_UNVERIFIED' }
   New-Item -ItemType Directory -Force -Path $profile | Out-Null
   $args = @('--headless=new', '--remote-debugging-port=9226', '--remote-debugging-address=127.0.0.1',
-    '--user-data-dir=' + $profile, '--profile-directory=Default', '--no-first-run',
+    ('--user-data-dir=' + $profile), '--profile-directory=Default', '--no-first-run',
     '--no-default-browser-check', '--disable-sync', '--disable-notifications',
     '--mute-audio', '--disable-audio-output','about:blank')
+  if ($args.Count -ne 12 -or @($args | Where-Object { $_ -eq '--user-data-dir=' }).Count -gt 0) { throw 'PINTEREST_CHROME_ARGUMENT_SPLIT_DENIED' }
   $owned = Start-Process -FilePath $chrome -ArgumentList $args -WindowStyle Hidden -PassThru
   $deadline = (Get-Date).AddSeconds(24)
   do {
