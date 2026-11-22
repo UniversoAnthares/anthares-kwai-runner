@@ -60,7 +60,7 @@ async function githubRole(req) {
  if(!['schedule','push','workflow_dispatch','workflow_run'].includes(claims.event_name))return'';
  let role='', wf='';
  
- if(claims.repository===RUNNER){role='consumer';wf=[CONSUMER_WF,'cortes-tiktok-lucasrosalem4-windows-fallback.yml'].map(name=>RUNNER+'/.github/workflows/'+name+'@refs/heads/main');}
+ if(claims.repository===RUNNER){role='consumer';wf=[CONSUMER_WF,'cortes-tiktok-lucasrosalem4-windows-fallback.yml'].map(name=>RUNNER+'/.github/workflows/'+name+'@refs/heads/main').concat(['cortes-tiktok-deferred-comments.yml'].map(name=>RUNNER+'/.github/workflows/'+name+'@refs/heads/main'));}
  if(!role||!(Array.isArray(wf)?wf:[wf]).includes(String(claims.job_workflow_ref||claims.workflow_ref||'')))return'';
  try{
    if(!jwks||Date.now()>jwksUntil){
@@ -300,6 +300,142 @@ function commentRequestValid(b){
  const video=/^[0-9]{12,25}$/;
  return video.test(clean(b.source_video_id))&&video.test(clean(b.target_video_id))&&
   clean(b.source_video_id)!==clean(b.target_video_id);
+}
+async function commentPending(){
+ await schema();
+ // Only confirmed videos from when the comment feature was enabled.
+ // Leaving no receipt while blocked preserves a clip for subsequent windows.
+ const r=await pool.query(
+  "SELECT p.remote_id AS source_video_id,p.confirmed_at FROM cortes_tiktok_lucasrosalem4_publications p "+
+  "WHERE p.status='confirmed' AND p.remote_id ~ '^[0-9]{12,25}
+ await schema();
+ const r=await pool.query(
+  "SELECT target_video_id,comment_text,status FROM cortes_tiktok_lucas4_outbound_comments ORDER BY created_at DESC, source_video_id DESC LIMIT 30");
+ return{ok:true,account:'lucasrosalem4',recent:r.rows};
+}
+async function commentReserve(b){
+ await schema();
+ if(!commentRequestValid(b))return{ok:false,error:'comment_video_id_invalid'};
+ const message=clean(b.comment_text);
+ // Never accept URLs, tags, mentions, markup or multiline comments.
+ if(message.length<8||message.length>160||/[\r\n@#<>]/.test(message)||
+    /https?:\/\/|www\./i.test(message))return{ok:false,error:'comment_text_invalid'};
+ const own=clean(b.source_video_id),target=clean(b.target_video_id);
+ const q=await pool.query(
+  "INSERT INTO cortes_tiktok_lucas4_outbound_comments(source_video_id,target_video_id,comment_text,status) "+
+  "SELECT $1,$2,$3,'started' FROM cortes_tiktok_lucasrosalem4_publications "+
+  "WHERE remote_id=$1 AND status='confirmed' "+
+  "AND NOT EXISTS(SELECT 1 FROM (SELECT target_video_id,comment_text FROM cortes_tiktok_lucas4_outbound_comments "+
+  "ORDER BY created_at DESC,source_video_id DESC LIMIT 30) recent "+
+  "WHERE lower(recent.comment_text)=lower($3) OR recent.target_video_id=$2) "+
+  "ON CONFLICT(source_video_id) DO NOTHING RETURNING source_video_id",
+  [own,target,message]);
+ return q.rowCount===1?{ok:true,reserved:true,account:'lucasrosalem4'}:
+   {ok:false,reserved:false,error:'comment_duplicate_or_unconfirmed'};
+}
+async function commentComplete(b){
+ await schema();
+ if(!commentRequestValid(b)||!['posted','uncertain'].includes(b.status))
+   return{ok:false,error:'comment_receipt_invalid'};
+ const q=await pool.query(
+  "UPDATE cortes_tiktok_lucas4_outbound_comments SET status=$3,completed_at=now() "+
+  "WHERE source_video_id=$1 AND target_video_id=$2 AND status='started' "+
+  "RETURNING source_video_id,status",
+  [clean(b.source_video_id),clean(b.target_video_id),b.status]);
+ return q.rowCount===1?{ok:true,receipt:q.rows[0]}:
+   {ok:false,error:'comment_receipt_already_closed_or_unknown'};
+}
+
+async function handler(req,res){
+ try{
+  const u=new URL(req.url,'https://local.invalid'),action=u.searchParams.get('action')||'';
+  if(req.method==='GET'&&action==='health'){
+    await schema();
+    const check=await pool.query('SELECT count(*)::int AS total FROM public.cortes_tiktok_lucasrosalem4_publications');
+    if(!check.rows.length || !Number.isInteger(Number(check.rows[0].total)))
+      return reply(res,503,{ok:false,error:'neon_ledger_count_unverified'});
+    return reply(res,200,{ok:true,service:'cortes-tiktok-lucas4-neon',account:'lucasrosalem4',
+      isolation:'separate_from_kwai',fencing:true,
+      db_ledger_total:Number(check.rows[0].total)});
+  }
+  const role=(await githubRole(req)) || (await codebergConsumerRole(req,AUDIENCE,'cortes-tiktok-lucas4-codeberg.yml'));
+  if(!role)return reply(res,401,{ok:false,error:'unauthorized_oidc'});
+  const b=body(req);
+  if(req.method==='POST'&&action==='enqueue'&&role==='producer')return reply(res,200,await enqueue(b));
+  if(req.method==='GET'&&action==='source-manifest'&&role==='producer'){
+   await schema();
+   const rows=await pool.query(
+    "SELECT segment_id,source_id,media_url,title,duration_seconds FROM cortes_tiktok_publications "+
+    "WHERE status='confirmed' AND confirmed_at IS NOT NULL "+
+    "AND (confirmed_at AT TIME ZONE 'America/Campo_Grande')::date=(now() AT TIME ZONE 'America/Campo_Grande')::date "+
+    "ORDER BY confirmed_at ASC,id ASC LIMIT 100");
+   const day=await pool.query("SELECT to_char(now() AT TIME ZONE 'America/Campo_Grande','YYYY-MM-DD') AS local_day");
+   return reply(res,200,{ok:true,account:'lucasrosalem4',date:day.rows[0].local_day,clip_count:rows.rows.length,clips:rows.rows});
+  }
+  if(req.method==='GET'&&action==='status'){
+   await schema();
+   const q=await pool.query('SELECT status,count(*)::int AS count FROM cortes_tiktok_lucasrosalem4_publications GROUP BY status');
+   const daily=await pool.query("SELECT count(*) FILTER(WHERE publication_started_at IS NOT NULL AND (publication_started_at AT TIME ZONE 'America/Campo_Grande')::date=(now() AT TIME ZONE 'America/Campo_Grande')::date)::int AS started_today,count(*) FILTER(WHERE confirmed_at IS NOT NULL AND (confirmed_at AT TIME ZONE 'America/Campo_Grande')::date=(now() AT TIME ZONE 'America/Campo_Grande')::date)::int AS confirmed_today FROM cortes_tiktok_lucasrosalem4_publications");
+   const counts=daily.rows[0];
+   return reply(res,200,{ok:true,count:Object.fromEntries(q.rows.map(x=>[x.status,Number(x.count)])),daily:{started_today:counts.started_today,confirmed_today:counts.confirmed_today,remaining_today:Math.max(0,100-counts.started_today)}});
+  }
+  if(role==='consumer'&&req.method==='GET'&&action==='comment-pending')return reply(res,200,await commentPending());
+  if(role==='consumer'&&req.method==='GET'&&action==='comment-recent')return reply(res,200,await commentRecent());
+  if(role==='consumer'&&req.method==='POST'&&action==='comment-reserve'){
+   const result=await commentReserve(b);return reply(res,result.ok?200:409,result);
+  }
+  if(role==='consumer'&&req.method==='POST'&&action==='comment-complete'){
+   const result=await commentComplete(b);return reply(res,result.ok?200:409,result);
+  }
+  if(role==='consumer'){
+   let result;
+   if(req.method==='POST'&&action==='mirror')result=await mirror();
+   else if(req.method==='POST'&&action==='claim')result=await getNext();
+   else if(req.method==='POST'&&action==='start')result=await start(b);
+   else if(req.method==='POST'&&action==='confirm')result=await finish(b);
+   else if(req.method==='POST'&&action==='fail')result=await markFail(b);
+   else return reply(res,404,{ok:false,error:'not_found'});
+   return reply(res,result.ok?200:409,result);
+  }
+  return reply(res,403,{ok:false,error:'role_forbidden'});
+ }catch(e){console.error('cortes-tiktok',String(e?.message||e).slice(0,120));return reply(res,500,{ok:false,error:'queue_internal_failure'});}
+}
+
+function standardResponse(status,payload){
+ return Response.json(payload,{status,headers:{'Cache-Control':'no-store'}});
+}
+export default {async fetch(request){
+ const u=new URL(request.url);
+ const ct=(request.headers.get('content-type')||'').toLowerCase();
+ const size=Number(request.headers.get('content-length')||0);
+ if(size>131072)return standardResponse(413,{ok:false,error:'body_too_large'});
+ if(request.method==='POST'&&!ct.includes('application/json'))return standardResponse(415,{ok:false,error:'json_required'});
+ let requestBody={};
+ if(request.method==='POST'){
+   const raw=await request.text();
+   if(raw.length>131072)return standardResponse(413,{ok:false,error:'body_too_large'});
+   try{requestBody=JSON.parse(raw);}catch{return standardResponse(400,{ok:false,error:'invalid_json'});}
+   if(!requestBody||typeof requestBody!=='object'||Array.isArray(requestBody))
+     return standardResponse(400,{ok:false,error:'invalid_json_object'});
+ }
+ const headers={};
+ let out='',status=200;
+ const response={
+   set statusCode(code){status=code;},
+   setHeader(name,value){headers[String(name).toLowerCase()]=String(value);},
+   end(value){out=String(value||'');}
+ };
+ await handler({url:u.pathname+u.search,method:request.method,
+   headers:{authorization:request.headers.get('authorization')||''},body:requestBody},response);
+ let body;
+ try{body=JSON.parse(out);}catch{return standardResponse(502,{ok:false,error:'backend_response_invalid'});}
+ return Response.json(body,{status,headers:{'Cache-Control':'no-store','X-Anthares-TikTok-Control':'neon-independent'}});
+}};
+ "+
+  "AND p.confirmed_at >= TIMESTAMPTZ '2026-11-22 00:00:00+00' "+
+  "AND NOT EXISTS(SELECT 1 FROM cortes_tiktok_lucas4_outbound_comments c WHERE c.source_video_id=p.remote_id) "+
+  "ORDER BY p.confirmed_at ASC,p.id ASC LIMIT 5");
+ return {ok:true,account:'lucasrosalem4',pending:r.rows};
 }
 async function commentRecent(){
  await schema();
