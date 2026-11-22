@@ -1,5 +1,11 @@
 name: TikTok principal uncertain clip profile proof one-shot
 on:
+  workflow_dispatch:
+    inputs:
+      segment_id:
+        description: Exact fenced Neon clip segment to inspect, read-only
+        required: false
+        default: 'g1:-Vwi6-2ntPk:1650:1691'
   push:
     branches: [main]
     paths:
@@ -14,6 +20,7 @@ jobs:
     timeout-minutes: 8
     env:
       ARA_SHARED: ${{ secrets.ARA_SHARED }}
+      PROOF_SEGMENT: ${{ inputs.segment_id || 'g1:-Vwi6-2ntPk:1650:1691' }}
       PYTHONUNBUFFERED: '1'
     steps:
       - uses: actions/checkout@v4
@@ -24,12 +31,14 @@ jobs:
       - name: Read-only exact TikTok Studio segment lookup; no upload or Neon mutations
         run: |
           python3 - <<'PY'
-          import sys
+          import os,re,sys
           sys.path.insert(0,'tools')
           sys.path.insert(0,'direct-tiktok-publisher')
           from cortes_tiktok_hosted_publish import preflight_vault, inventory
           import cortes_tiktok_queue_consumer as q
-          segment='g1:-Vwi6-2ntPk:534:574'
+          segment=os.environ['PROOF_SEGMENT']
+          if not re.fullmatch(r'g[0-9]+:[A-Za-z0-9_-]{6,60}:[0-9]+:[0-9]+',segment):
+            raise SystemExit('INVALID_SEGMENT_ID')
           state=preflight_vault()
           remote=q.found(inventory(state),segment)
           if remote:
