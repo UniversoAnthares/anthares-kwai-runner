@@ -1,0 +1,81 @@
+name: TikTok editor hit-test one shot
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tiktok-comment-editor-hit-test-once.yml'
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    env:
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+      TIKTOK_LUCASROSALEM4_STORAGE_STATE: ${{ secrets.TIKTOK_LUCASROSALEM4_STORAGE_STATE }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install authenticated read-only browser
+        run: |
+          python3 -m pip install -q playwright requests cryptography
+          PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=120000 python3 -m playwright install chromium
+      - name: Inspect actual editor pointer hit-testing and visible overlays
+        run: |
+          python3 - <<'PY'
+          import json,sys
+          sys.path.insert(0,'tools');sys.path.insert(0,'direct-tiktok-publisher')
+          from tiktok_session_authority import load_canonical_state
+          from cortes_tiktok_lucasrosalem4_cloud_publish import state_from_secret
+          from cortes_tiktok_after_publish_comment import verify_owner,comment_editor,open_comment_editor,guard_page
+          from playwright.sync_api import sync_playwright
+          sessions=[
+            ('universo.anthares',load_canonical_state()[0],
+             'https://www.tiktok.com/@danteachr/video/7710173903745764616'),
+            ('lucasrosalem4',state_from_secret(),
+             'https://www.tiktok.com/@7195726752122913798/video/7708525373029453076')
+          ]
+          js="""el => {
+            const rect=el.getBoundingClientRect(),x=Math.min(innerWidth-2,Math.round(rect.left+rect.width/2)),
+                  y=Math.min(innerHeight-2,Math.round(rect.top+rect.height/2));
+            const describe=e=>e?({tag:e.tagName,id:e.id||'',class:String(e.className||'').slice(0,120),
+                                  aria:e.getAttribute('aria-label'),role:e.getAttribute('role'),
+                                  attrs:[...e.attributes].filter(a=>/cookie|consent|modal|overlay|dialog/i.test(a.name+' '+a.value)).map(a=>a.name+'='+a.value.slice(0,65)).slice(0,4)}):null;
+            const found=document.elementsFromPoint(x,y).slice(0,8).map(describe);
+            const custom=[...document.querySelectorAll('*')].filter(e=>
+              /cookie|consent|modal|overlay/i.test(e.tagName+' '+e.id+' '+String(e.className||''))).slice(0,12)
+              .map(e=>({...describe(e),shadow:!!e.shadowRoot,shadowButtons:e.shadowRoot?.querySelectorAll('button').length||0}));
+            return {urlPath:location.pathname,viewport:{width:innerWidth,height:innerHeight},
+                    target:{x,y,width:rect.width,height:rect.height},hit:found,custom:custom,
+                    dialogs:document.querySelectorAll('[role="dialog"]').length};
+          }"""
+          with sync_playwright() as p:
+            browser=p.chromium.launch(headless=True,args=['--no-sandbox','--disable-dev-shm-usage','--disable-gpu'])
+            try:
+              for account,state,url in sessions:
+                ctx=browser.new_context(storage_state=state,locale='pt-BR',viewport={'width':1280,'height':900})
+                page=ctx.new_page()
+                try:
+                  verify_owner(page,account)
+                  page.goto(url,wait_until='domcontentloaded',timeout=30000)
+                  page.wait_for_timeout(1850)
+                  guard_page(page)
+                  node=open_comment_editor(page)
+                  if node is None:
+                    print('TIKTOK_EDITOR_HIT_MISSING account='+account,flush=True)
+                    continue
+                  result=node.evaluate(js)
+                  print('TIKTOK_EDITOR_HIT_TEST='+json.dumps({'account':account,**result},separators=(',',':')),flush=True)
+                  try:
+                    node.click(trial=True,timeout=1700)
+                    print('TIKTOK_EDITOR_HIT_TRIAL=PASS '+account,flush=True)
+                  except Exception as exc:
+                    err=str(exc).replace('\n',' ').replace('\r',' ')
+                    print('TIKTOK_EDITOR_HIT_TRIAL=FAIL '+account+' '+type(exc).__name__+
+                          ' reason='+err[-450:],flush=True)
+                except Exception as exc:
+                  print('TIKTOK_EDITOR_HIT_HOLD='+account+' '+type(exc).__name__,flush=True)
+                finally:
+                  ctx.close()
+            finally:
+              browser.close()
+          PY
