@@ -1,4 +1,5 @@
 name: CORTES TikTok hosted canonical Neon publisher
+# Explicit operator retry 2026-11-22 16:44 America/Campo_Grande; preserve Neon idempotency.
 
 on:
   workflow_dispatch: {}
