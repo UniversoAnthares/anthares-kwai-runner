@@ -61,7 +61,7 @@ async function githubRole(req) {
  if(!['schedule','push','workflow_dispatch','workflow_run'].includes(claims.event_name))return'';
  let role='', wf='';
  if(claims.repository===CLIPPER){role='producer';wf=CLIPPER+'/.github/workflows/'+SOURCE_WF+'@refs/heads/main';}
- if(claims.repository===RUNNER){role='consumer';wf=[CONSUMER_WF,'tiktok-central-session-read.yml','cortes-tiktok-lucasrosalem4-manifest.yml','cortes-tiktok-primary-windows-fallback.yml'].map(name=>RUNNER+'/.github/workflows/'+name+'@refs/heads/main').concat(['cortes-tiktok-deferred-comments.yml'].map(name=>RUNNER+'/.github/workflows/'+name+'@refs/heads/main'));}
+ if(claims.repository===RUNNER){role='consumer';wf=[CONSUMER_WF,'tiktok-central-session-read.yml','cortes-tiktok-lucasrosalem4-manifest.yml','cortes-tiktok-primary-windows-fallback.yml','tiktok-exact-owner-proof-finalize-once.yml'].map(name=>RUNNER+'/.github/workflows/'+name+'@refs/heads/main').concat(['cortes-tiktok-deferred-comments.yml'].map(name=>RUNNER+'/.github/workflows/'+name+'@refs/heads/main'));}
  if(!role||!(Array.isArray(wf)?wf:[wf]).includes(String(claims.job_workflow_ref||claims.workflow_ref||'')))return'';
  try{
    if(!jwks||Date.now()>jwksUntil){
@@ -272,6 +272,20 @@ async function start(b){
   [id,gen]);
  return r.rowCount?{ok:true,job:r.rows[0]}:{ok:false,error:'stale_fence'};
 }
+async function getExactReconcileJob(b){
+ await schema();
+ const id=clean(b.id),sid=clean(b.segment_id);
+ if(!/^tt-[a-f0-9]{32}$/.test(id)||!/^g[0-9]+:[A-Za-z0-9_-]{6,60}:[0-9]+:[0-9]+$/.test(sid))
+  return{ok:false,error:'invalid_exact_proof_request'};
+ // Consumer could already read callback data when it claims any queue job.
+ // This read-only method handles a proven UNCERTAIN item without leasing a new clip.
+ const r=await pool.query(
+  "SELECT * FROM cortes_tiktok_publications "+
+  "WHERE id=$1 AND segment_id=$2 AND status IN ('started','uncertain') "+
+  "AND publication_started_at IS NOT NULL AND remote_id IS NULL LIMIT 1",
+  [id,sid]);
+ return r.rowCount===1?{ok:true,job:r.rows[0]}:{ok:false,error:'exact_proof_job_not_pending'};
+}
 async function finish(b){
  await schema();
  const id=clean(b.id),gen=Number(b.lease_generation),remote=clean(b.remote_id);
@@ -439,7 +453,8 @@ async function handler(req,res){
   }
   if(role==='consumer'){
    let result;
-   if(req.method==='POST'&&action==='claim')result=await getNext();
+   if(req.method==='POST'&&action==='proof-job')result=await getExactReconcileJob(b);
+   else if(req.method==='POST'&&action==='claim')result=await getNext();
    else if(req.method==='POST'&&action==='start')result=await start(b);
    else if(req.method==='POST'&&action==='confirm')result=await finish(b);
    else if(req.method==='POST'&&action==='fail')result=await markFail(b);
