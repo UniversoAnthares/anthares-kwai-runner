@@ -45,7 +45,7 @@ class CommentTests(unittest.TestCase):
         calls = []
         with patch.object(c, "verify_owner"), patch.object(
             c, "select_target", return_value=("1234567890123457", "https://www.tiktok.com/@person/video/1234567890123457")
-        ), patch.object(c, "post_comment_once", side_effect=lambda *args: calls.append("click") or True):
+        ), patch.object(c, "prepare_comment", return_value=object()), patch.object(c, "post_comment_once", side_effect=lambda *args: calls.append("click") or True):
             result = c._execute(
                 object(), "universo.anthares", "1234567890123456", [],
                 c.COMMENT_LIBRARY[0],
@@ -59,7 +59,7 @@ class CommentTests(unittest.TestCase):
         receipts = []
         with patch.object(c, "verify_owner"), patch.object(
             c, "select_target", return_value=("1234567890123457", "https://www.tiktok.com/@person/video/1234567890123457")
-        ), patch.object(c, "post_comment_once", side_effect=lambda *args: submitted.append(1) or True):
+        ), patch.object(c, "prepare_comment", return_value=object()), patch.object(c, "post_comment_once", side_effect=lambda *args: submitted.append(1) or True):
             result = c._execute(object(), "lucasrosalem4", "1234567890123456", [],
                                 c.COMMENT_LIBRARY[0],
                                 lambda payload: {"ok": True, "reserved": True},
@@ -75,7 +75,7 @@ class CommentTests(unittest.TestCase):
         receipts = []
         with patch.object(c, "verify_owner"), patch.object(
             c, "select_target", return_value=("1234567890123457", "https://www.tiktok.com/@person/video/1234567890123457")
-        ), patch.object(c, "post_comment_once", side_effect=TimeoutError("ambiguous")) as action:
+        ), patch.object(c, "prepare_comment", return_value=object()), patch.object(c, "post_comment_once", side_effect=TimeoutError("ambiguous")) as action:
             with self.assertRaises(TimeoutError):
                 c._execute(object(), "lucasrosalem4", "1234567890123456", [],
                            c.COMMENT_LIBRARY[0],
@@ -114,6 +114,40 @@ class CommentTests(unittest.TestCase):
             existing_page=object())
         self.assertEqual(result, "identity_invalid")
 
+
+
+
+    def test_editor_failure_occurs_before_any_neon_reservation(self):
+        calls=[]
+        with patch.object(c, "verify_owner"), patch.object(
+            c, "select_target", return_value=(
+                "1234567890123457", "https://www.tiktok.com/@person/video/1234567890123457")
+        ), patch.object(c, "prepare_comment", side_effect=TimeoutError("not-clickable")), patch.object(
+            c, "post_comment_once", side_effect=lambda *a: calls.append("clicked")):
+            result=c._execute(
+                object(), "lucasrosalem4", "1234567890123456", [],
+                c.COMMENT_LIBRARY[0],
+                lambda p: calls.append("reserve"),
+                lambda p: calls.append("complete"))
+        self.assertEqual(result, "composer_unavailable")
+        self.assertEqual(calls, [])
+
+    def test_prepared_button_is_passed_to_only_click_after_reservation(self):
+        button=object()
+        order=[]
+        with patch.object(c, "verify_owner"), patch.object(
+            c, "select_target", return_value=(
+                "1234567890123457", "https://www.tiktok.com/@person/video/1234567890123457", button)
+        ), patch.object(c, "prepare_comment", side_effect=AssertionError("already prepared")), patch.object(
+            c, "post_comment_once", side_effect=lambda *args: (
+                order.append(("click", args[2] is button)) or True)):
+            result=c._execute(
+                object(), "lucasrosalem4", "1234567890123456", [],
+                c.COMMENT_LIBRARY[0],
+                lambda p: order.append(("reserve", True)) or {"ok":True,"reserved":True},
+                lambda p: order.append(("complete", p["status"])))
+        self.assertEqual(result, "posted")
+        self.assertEqual(order, [("reserve",True),("click",True),("complete","posted")])
 
 
 class FeedDiscoveryTests(unittest.TestCase):
@@ -192,6 +226,42 @@ class FeedDiscoveryTests(unittest.TestCase):
         page = Page()
         self.assertEqual(c.scroll_discovery(page)["after"], 868)
         self.assertIn("#column-list-container", page.script)
+
+    def test_tiktok_slider_modal_is_security_challenge_before_any_comment(self):
+        class Node:
+            def __init__(self, shown):
+                self.shown=shown
+
+            @property
+            def first(self):
+                return self
+
+            def count(self):
+                return int(self.shown)
+
+            def is_visible(self, **kwargs):
+                return self.shown
+
+        class Page:
+            url = "https://www.tiktok.com/@danteachr/video/7710173903745764616"
+
+            def locator(self, selector):
+                return Node("captcha-verify-container" in selector)
+
+        with self.assertRaisesRegex(RuntimeError,"TIKTOK_COMMENT_SECURITY_CHALLENGE"):
+            c.guard_page(Page())
+
+    def test_after_confirmed_reports_slider_and_never_reserves(self):
+        with patch.dict(os.environ,{"TIKTOK_POST_COMMENT_ENABLED":"true"}), patch.object(
+            c,"verify_owner",side_effect=RuntimeError("TIKTOK_COMMENT_SECURITY_CHALLENGE")
+        ):
+            r=c.after_confirmed(
+                account="lucasrosalem4",source_video_id="7711050254891633928",
+                recent_call=lambda:{"ok":True,"recent":[]},
+                reserve_call=lambda payload:self.fail("security challenge forbids reservation"),
+                complete_call=lambda payload:self.fail("security challenge forbids completion"),
+                existing_page=object())
+        self.assertEqual(r,"security_challenge")
 
     def test_hidden_captcha_does_not_block_legitimate_pages(self):
         class Node:

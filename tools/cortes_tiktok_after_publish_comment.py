@@ -114,7 +114,10 @@ def guard_page(page) -> None:
         nodes = page.locator(selector)
         if nodes.count() and nodes.first.is_visible(timeout=400):
             raise RuntimeError("TIKTOK_COMMENT_LOGIN_REQUIRED")
-    for selector in ("iframe[src*='captcha']", "[id*='captcha']",
+    # TikTok's slider challenge is a visible TUXModal with a captcha class.
+    # The actual captcha can have no iframe/id/data-e2e marker at all.
+    for selector in ("[class*='captcha-verify-container']",
+                     "iframe[src*='captcha']", "[id*='captcha']",
                      "[data-e2e*='captcha']"):
         nodes = page.locator(selector)
         if nodes.count() and nodes.first.is_visible(timeout=400):
@@ -241,7 +244,7 @@ def collect_video_urls(page, account, excluded, urls):
     return added
 
 
-def select_target(page, account: str, recent: list[dict], rng=RNG):
+def select_target(page, account: str, recent: list[dict], rng=RNG, message=None):
     """Start at the homepage and browse the real feed/Explore with bounded scrolling."""
     excluded = {str(x.get("target_video_id") or "")
                 for x in recent[:30] if isinstance(x, dict)}
@@ -283,6 +286,18 @@ def select_target(page, account: str, recent: list[dict], rng=RNG):
             if not canonical or canonical[1] != video_id:
                 continue
             if open_comment_editor(page):
+                if message is not None:
+                    try:
+                        prepared = prepare_comment(page, message)
+                    except Exception as exc:
+                        if "LOGIN_REQUIRED" in str(exc) or "SECURITY_CHALLENGE" in str(exc):
+                            raise
+                        print("TIKTOK_POST_COMMENT_PREPARE_SKIP=" +
+                              type(exc).__name__ + " account=" + account, flush=True)
+                        continue
+                    print("TIKTOK_POST_COMMENT_TARGET_PREPARED account=" + account +
+                          " id=" + video_id, flush=True)
+                    return video_id, urls[video_id], prepared
                 print("TIKTOK_POST_COMMENT_TARGET_READY account=" + account +
                       " id=" + video_id, flush=True)
                 return video_id, urls[video_id]
@@ -292,24 +307,37 @@ def select_target(page, account: str, recent: list[dict], rng=RNG):
             continue
     return None
 
-def post_comment_once(page, message: str) -> bool:
+def prepare_comment(page, message: str):
+    """Validate composer, fill text and trial-check submit BEFORE Neon reservation."""
     editor = comment_editor(page)
     if editor is None:
         raise RuntimeError("TIKTOK_COMMENT_EDITOR_UNAVAILABLE")
-    editor.fill(message, timeout=6000)
-    present = (editor.input_value(timeout=2000)
+    guard_page(page)
+    if not editor.is_editable(timeout=1200):
+        raise RuntimeError("TIKTOK_COMMENT_EDITOR_NOT_EDITABLE")
+    editor.click(trial=True, timeout=2200)
+    editor.fill(message, timeout=5000)
+    present = (editor.input_value(timeout=1700)
                if editor.evaluate("(el)=>el.tagName") in ("TEXTAREA", "INPUT")
-               else editor.inner_text(timeout=2000))
+               else editor.inner_text(timeout=1700))
     if message not in present:
         raise RuntimeError("TIKTOK_COMMENT_EDITOR_READBACK_FAILED")
     button = comment_submit(page)
     if button is None:
         raise RuntimeError("TIKTOK_COMMENT_BUTTON_UNAVAILABLE")
     guard_page(page)
+    button.click(trial=True, timeout=2500)
+    return button
+
+
+def post_comment_once(page, message: str, prepared_button=None) -> bool:
+    """Single irreversible click only after the browser and Neon both approve."""
+    button = prepared_button if prepared_button is not None else prepare_comment(page, message)
+    guard_page(page)
     button.click(timeout=7000)  # ONE irreversible click; never retry.
     page.wait_for_timeout(1800)
     guard_page(page)
-    # Editor text is not sufficient: seek a posted comment in the comments list.
+    # Editor text alone is not proof; the sent comment must appear in the list.
     for selector in (
         '[data-e2e="comment-level-1"]',
         '[data-e2e*="comment-item"]',
@@ -318,7 +346,6 @@ def post_comment_once(page, message: str) -> bool:
         if page.locator(selector).filter(has_text=message).count():
             return True
     return False
-
 
 def after_confirmed(*, account: str, source_video_id: str, recent_call,
                     reserve_call, complete_call, storage_state=None,
@@ -364,17 +391,25 @@ def after_confirmed(*, account: str, source_video_id: str, recent_call,
                         reserve_call, complete_call)
     except Exception as exc:
         # A comment error never marks an already confirmed video as uncertain.
+        if str(exc) == "TIKTOK_COMMENT_SECURITY_CHALLENGE":
+            print("TIKTOK_POST_COMMENT_HOLD=SECURITY_CHALLENGE_MANUAL_VERIFICATION", flush=True)
+            return "security_challenge"
         print("TIKTOK_POST_COMMENT_HOLD=" + type(exc).__name__, flush=True)
         return "unavailable"
 
 
 def _execute(page, account, source_video_id, recent, message, reserve_call, complete_call):
     verify_owner(page, account)
-    target = select_target(page, account, recent)
+    target = select_target(page, account, recent, message=message)
     if not target:
         print("TIKTOK_POST_COMMENT_NO_ELIGIBLE_TARGET=1", flush=True)
         return "no_target"
-    target_id, _ = target
+    target_id, _ = target[:2]
+    try:
+        prepared_button = target[2] if len(target) == 3 else prepare_comment(page, message)
+    except Exception as exc:
+        print("TIKTOK_POST_COMMENT_PREPARE_FAILED=" + type(exc).__name__, flush=True)
+        return "composer_unavailable"
     payload = {"source_video_id": source_video_id, "target_video_id": target_id,
                "comment_text": message}
     reservation = reserve_call(payload)
@@ -383,7 +418,7 @@ def _execute(page, account, source_video_id, recent, message, reserve_call, comp
         return "already_reserved"
     status = "uncertain"
     try:
-        if post_comment_once(page, message):
+        if post_comment_once(page, message, prepared_button):
             status = "posted"
     finally:
         # A timeout before/after click is always uncertain and never replayed.
