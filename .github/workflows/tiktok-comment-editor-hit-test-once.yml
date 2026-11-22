@@ -46,7 +46,24 @@ jobs:
               .map(e=>({...describe(e),shadow:!!e.shadowRoot,shadowButtons:e.shadowRoot?.querySelectorAll('button').length||0}));
             return {urlPath:location.pathname,viewport:{width:innerWidth,height:innerHeight},
                     target:{x,y,width:rect.width,height:rect.height},hit:found,custom:custom,
-                    dialogs:document.querySelectorAll('[role="dialog"]').length};
+                    dialogs:document.querySelectorAll('[role="dialog"]').length,
+                    visible_dialogs:[...document.querySelectorAll('[role="dialog"],[aria-modal="true"],.TUXModal-overlay')].filter(e=>{
+                      const r=e.getBoundingClientRect(),s=getComputedStyle(e);
+                      return r.width>5&&r.height>5&&s.display!=='none'&&s.visibility!=='hidden';
+                    }).slice(0,8).map(e=>({
+                      tag:e.tagName,class:String(e.className||'').slice(0,80),
+                      text:(e.innerText||'').replace(/\s+/g,' ').slice(0,480),
+                      controls:[...e.querySelectorAll('button,[role="button"],input')].slice(0,12).map(x=>({
+                        tag:x.tagName,aria:x.getAttribute('aria-label'),
+                        text:(x.innerText||'').trim().slice(0,85)
+                      }))
+                    })),
+                    inert_ancestors:(()=>{let p=el,a=[];while(p&&a.length<15){
+                      if(p.inert||p.hasAttribute('inert')||p.getAttribute('aria-hidden')==='true')
+                        a.push({tag:p.tagName,cls:String(p.className||'').slice(0,90),
+                                inert:p.inert,ariaHidden:p.getAttribute('aria-hidden')});
+                      p=p.parentElement;}return a})()
+                    };
           }"""
           with sync_playwright() as p:
             browser=p.chromium.launch(headless=True,args=['--no-sandbox','--disable-dev-shm-usage','--disable-gpu'])
