@@ -9,8 +9,13 @@ fence remains authoritative: at most one actual attempt per published video.
 from __future__ import annotations
 
 import os
+import re
 import sys
+from pathlib import Path
 from typing import Callable
+
+# The canonical primary session authority lives outside tools/.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'direct-tiktok-publisher'))
 
 from cortes_tiktok_after_publish_comment import after_confirmed
 
@@ -110,7 +115,11 @@ def main() -> int:
         return 0
     except Exception as exc:
         # Preserve privacy of cookies, auth headers, and account state.
-        print("TIKTOK_DEFERRED_HOLD=" + type(exc).__name__, flush=True)
+        code = str(exc)
+        if re.fullmatch(r"[A-Z][A-Z0-9_]{3,100}", code):
+            print("TIKTOK_DEFERRED_HOLD=" + code, flush=True)
+        else:
+            print("TIKTOK_DEFERRED_HOLD=" + type(exc).__name__, flush=True)
         return 1
 
 
