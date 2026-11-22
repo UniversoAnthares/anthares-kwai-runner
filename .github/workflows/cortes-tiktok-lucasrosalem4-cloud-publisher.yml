@@ -7,6 +7,8 @@ on:
     branches: [main]
     paths:
       - 'tools/cortes_tiktok_lucasrosalem4_cloud_publish.py'
+      - 'tools/cortes_tiktok_after_publish_comment.py'
+      - 'tests/test_cortes_tiktok_after_publish_comment.py'
       - 'infra/neon-cortes-lucasrosalem4/**'
       - '.github/workflows/cortes-tiktok-lucasrosalem4-cloud-publisher.yml'
       - 'tests/test_cortes_tiktok_lucas4_cloud.py'
@@ -42,7 +44,8 @@ jobs:
           test "$installed" -eq 1
       - name: Validate independent account fence and publisher
         run: |
-          python3 -m py_compile tools/cortes_tiktok_lucasrosalem4_cloud_publish.py
+          python3 -m py_compile tools/cortes_tiktok_lucasrosalem4_cloud_publish.py tools/cortes_tiktok_after_publish_comment.py tests/test_cortes_tiktok_after_publish_comment.py
+          python3 -m unittest discover -s tests -p 'test_cortes_tiktok_after_publish_comment.py' -v
           node --check infra/neon-cortes-lucasrosalem4/index.mjs
           python3 -m unittest discover -s tests -p 'test_cortes_tiktok_lucas4_cloud.py' -v
       - name: Probe cloud session or publish at most one fenced short
