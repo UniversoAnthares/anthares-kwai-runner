@@ -61,7 +61,7 @@ async function githubRole(req) {
  if(!['schedule','push','workflow_dispatch','workflow_run'].includes(claims.event_name))return'';
  let role='', wf='';
  if(claims.repository===CLIPPER){role='producer';wf=CLIPPER+'/.github/workflows/'+SOURCE_WF+'@refs/heads/main';}
- if(claims.repository===RUNNER){role='consumer';wf=[CONSUMER_WF,'tiktok-central-session-read.yml','cortes-tiktok-lucasrosalem4-manifest.yml','cortes-tiktok-primary-windows-fallback.yml'].map(name=>RUNNER+'/.github/workflows/'+name+'@refs/heads/main');}
+ if(claims.repository===RUNNER){role='consumer';wf=[CONSUMER_WF,'tiktok-central-session-read.yml','cortes-tiktok-lucasrosalem4-manifest.yml','cortes-tiktok-primary-windows-fallback.yml'].map(name=>RUNNER+'/.github/workflows/'+name+'@refs/heads/main').concat(['cortes-tiktok-deferred-comments.yml'].map(name=>RUNNER+'/.github/workflows/'+name+'@refs/heads/main'));}
  if(!role||!(Array.isArray(wf)?wf:[wf]).includes(String(claims.job_workflow_ref||claims.workflow_ref||'')))return'';
  try{
    if(!jwks||Date.now()>jwksUntil){
@@ -341,6 +341,17 @@ function commentRequestValid(b){
  return video.test(clean(b.source_video_id))&&video.test(clean(b.target_video_id))&&
   clean(b.source_video_id)!==clean(b.target_video_id);
 }
+async function commentPending(){
+ await schema();
+ const result=await pool.query(
+  "SELECT p.remote_id AS source_video_id,p.confirmed_at FROM cortes_tiktok_publications p "+
+  "WHERE p.status='confirmed' AND length(p.remote_id) BETWEEN 12 AND 25 "+
+  "AND translate(p.remote_id,'0123456789','')='' "+
+  "AND p.confirmed_at >= TIMESTAMPTZ '2026-11-22 00:00:00+00' "+
+  "AND NOT EXISTS(SELECT 1 FROM cortes_tiktok_outbound_comments c WHERE c.source_video_id=p.remote_id) "+
+  "ORDER BY p.confirmed_at ASC,p.id ASC LIMIT 5");
+ return {ok:true,account:'universo.anthares',pending:result.rows};
+}
 async function commentRecent(){
  await schema();
  const r=await pool.query(
@@ -418,6 +429,7 @@ async function handler(req,res){
    const counts=daily.rows[0];
    return reply(res,200,{ok:true,count:Object.fromEntries(q.rows.map(x=>[x.status,Number(x.count)])),daily:{started_today:counts.started_today,confirmed_today:counts.confirmed_today,remaining_today:Math.max(0,100-counts.started_today)}});
   }
+  if(role==='consumer'&&req.method==='GET'&&action==='comment-pending')return reply(res,200,await commentPending());
   if(role==='consumer'&&req.method==='GET'&&action==='comment-recent')return reply(res,200,await commentRecent());
   if(role==='consumer'&&req.method==='POST'&&action==='comment-reserve'){
    const result=await commentReserve(b);return reply(res,result.ok?200:409,result);
