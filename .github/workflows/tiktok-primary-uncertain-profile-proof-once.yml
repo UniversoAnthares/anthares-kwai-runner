@@ -1,0 +1,40 @@
+name: TikTok principal uncertain clip profile proof one-shot
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tiktok-primary-uncertain-profile-proof-once.yml'
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install identity and owner-profile read-only browser
+        run: |
+          python3 -m pip install -q playwright requests cryptography
+          PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=120000 python3 -m playwright install chromium
+      - name: Read-only exact TikTok Studio segment lookup; no upload or Neon mutations
+        run: |
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0,'tools')
+          sys.path.insert(0,'direct-tiktok-publisher')
+          from cortes_tiktok_hosted_publish import preflight_vault, inventory
+          import cortes_tiktok_queue_consumer as q
+          segment='g1:-Vwi6-2ntPk:2391:2433'
+          state=preflight_vault()
+          remote=q.found(inventory(state),segment)
+          if remote:
+            print('PRIMARY_READONLY_EXACT_REMOTE_ID='+remote,flush=True)
+            print('PRIMARY_READONLY_EXACT_URL=https://www.tiktok.com/@universo.anthares/video/'+remote,flush=True)
+          else:
+            print('PRIMARY_READONLY_EXACT_MATCH_UNVERIFIED=1',flush=True)
+          PY
