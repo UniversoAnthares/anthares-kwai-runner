@@ -269,6 +269,12 @@ def main():
             and remote_status.get("publisher_ready")):
         print("CORTES_TIKTOK_BROWSERLESS_PREFLIGHT_HOLD_NO_NEON_CLAIM",flush=True)
         return 0
+    # The existing Northflank /publish-url endpoint returned 503 after STARTED.
+    # Require the patched runtime before admitting a fresh irreversible start.
+    worker_health=q.wcall("/health",q.worker_auth(),timeout=18)
+    if worker_health.get("publisher_handler_debug_revision")!="2026-11-22-preclick-stage-v1":
+        print("CORTES_TIKTOK_RUNTIME_PATCH_PENDING_NO_NEON_CLAIM",flush=True)
+        return 0
     state=preflight_vault()
     control=q.oidc()
     if os.getenv("TIKTOK_CODEBERG_PREFLIGHT_ONLY")=="1":
