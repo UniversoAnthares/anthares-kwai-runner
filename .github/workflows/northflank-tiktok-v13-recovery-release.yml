@@ -1,4 +1,5 @@
 name: TikTok Northflank existing service bounded v21 owner drag release
+# Owner retry: prior build compiled source sha 55d6157e, ahead of health marker commit 8e4a1af; latest source must now be rebuilt.
 on:
   workflow_dispatch: {}
   push:
