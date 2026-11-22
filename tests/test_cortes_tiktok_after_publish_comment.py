@@ -208,7 +208,8 @@ class FeedDiscoveryTests(unittest.TestCase):
             target = c.select_target(page, "lucasrosalem4", [], self.Random())
         self.assertEqual(target, ("7711043089078471944",
                                   "https://www.tiktok.com/@anotherwriter/video/7711043089078471944"))
-        self.assertEqual(page.initial_sources, ["https://www.tiktok.com/"])
+        self.assertEqual(page.initial_sources[0], "https://www.tiktok.com/")
+        self.assertIn("https://www.tiktok.com/explore", page.initial_sources)
 
     def test_recent_target_is_excluded_after_scroll(self):
         page = self.FakePage()

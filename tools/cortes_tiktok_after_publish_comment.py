@@ -273,7 +273,9 @@ def select_target(page, account: str, recent: list[dict], rng=RNG, message=None)
             scroll_discovery(page)
         print("TIKTOK_POST_COMMENT_DISCOVERY account=" + account +
               " source=" + label + " eligible_links=" + str(len(urls)), flush=True)
-        if urls:
+        # A single non-commentable video must not prevent additional searches.
+        # Accumulate up to eight distinct real links across the home and Explore.
+        if len(urls) >= 8:
             break
     ids = list(urls)
     rng.shuffle(ids)
