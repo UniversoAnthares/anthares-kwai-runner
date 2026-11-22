@@ -99,7 +99,14 @@ def normalize_candidate(url: str, account: str) -> tuple[str, str] | None:
     if parts.scheme != "https" or parts.hostname not in ("www.tiktok.com", "tiktok.com"):
         return None
     match = VIDEO_RE.fullmatch(parts.path)
-    if not match or match.group(1)[1:].casefold() in {
+    if not match:
+        return None
+    author = match.group(1)[1:]
+    # TikTok sometimes renders links with a 19-digit owner UID instead of the
+    # public handle. Live owner-session verification proved those links can
+    # redirect back to our own account, exhausting all discovery candidates.
+    # Only canonical public creator handles are eligible for random comments.
+    if (author.isdecimal() and len(author) >= 16) or author.casefold() in {
         account.casefold(), "universo.anthares", "lucasrosalem4"
     }:
         return None

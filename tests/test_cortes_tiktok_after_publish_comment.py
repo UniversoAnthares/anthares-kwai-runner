@@ -32,6 +32,11 @@ class CommentTests(unittest.TestCase):
     def test_rejects_own_accounts_and_external_links(self):
         self.assertIsNone(c.normalize_candidate("https://www.tiktok.com/@lucasrosalem4/video/1234567890123456",
                                                  "universo.anthares"))
+        self.assertIsNone(c.normalize_candidate("https://www.tiktok.com/@7195726752122913798/video/7577402306489027860",
+                                                 "lucasrosalem4"))
+        self.assertEqual(c.normalize_candidate("https://www.tiktok.com/@writer2026/video/1234567890123456",
+                                                "lucasrosalem4"),
+                         ("https://www.tiktok.com/@writer2026/video/1234567890123456", "1234567890123456"))
         self.assertIsNone(c.normalize_candidate("https://evil.example/@someone/video/1234567890123456",
                                                  "lucasrosalem4"))
         self.assertIsNone(c.normalize_candidate("http://www.tiktok.com/@someone/video/1234567890123456",
