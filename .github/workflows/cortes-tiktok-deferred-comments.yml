@@ -10,8 +10,12 @@ on:
       - 'tools/cortes_tiktok_deferred_comments.py'
       - 'tools/cortes_tiktok_after_publish_comment.py'
   schedule:
-    # America/Campo_Grande (UTC-4): 08h, 11h, 14h, 17h, 21h.
-    - cron: '0 1,12,15,18,21 * * *'
+    # America/Campo_Grande (UTC-4): five off-peak minute windows, avoiding GitHub's top-of-hour schedule congestion.
+    - cron: '7 12 * * *'   # 08:07 local
+    - cron: '13 15 * * *'  # 11:13 local
+    - cron: '19 18 * * *'  # 14:19 local
+    - cron: '25 21 * * *'  # 17:25 local
+    - cron: '31 1 * * *'   # 21:31 local
 
 permissions:
   contents: read
