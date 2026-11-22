@@ -39,3 +39,12 @@ for(const path of ['tools/cortes_tiktok_hosted_publish.py',
   assert.ok(s.includes('comment-complete'));
  });
 }
+
+test('secondary comment actions use direct Neon despite disabled edge deploy',()=>{
+ const s=fs.readFileSync('tools/cortes_tiktok_lucasrosalem4_cloud_publish.py','utf8');
+ assert.ok(s.includes('route=QUEUE'));
+ assert.ok(s.includes('if action in ("comment-recent","comment-reserve","comment-complete"):'));
+ assert.ok(s.includes('route="https://br-crimson-unit-b89nau08-cortestiktok4.compute.c-14.us-east-1.aws.neon.tech/"'));
+ assert.ok(s.includes('url=route+"?"'));
+ assert.ok(s.includes('if action in ("mirror","claim"):'), 'publication failover preserved');
+});
