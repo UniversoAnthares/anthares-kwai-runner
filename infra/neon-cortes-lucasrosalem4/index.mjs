@@ -303,11 +303,16 @@ function commentRequestValid(b){
 }
 async function commentPending(){
  await schema();
- // Only confirmed videos from when the comment feature was enabled.
- // Leaving no receipt while blocked preserves a clip for subsequent windows.
- const r=await pool.query(
+ const result=await pool.query(
   "SELECT p.remote_id AS source_video_id,p.confirmed_at FROM cortes_tiktok_lucasrosalem4_publications p "+
-  "WHERE p.status='confirmed' AND p.remote_id ~ '^[0-9]{12,25}
+  "WHERE p.status='confirmed' AND length(p.remote_id) BETWEEN 12 AND 25 "+
+  "AND translate(p.remote_id,'0123456789','')='' "+
+  "AND p.confirmed_at >= TIMESTAMPTZ '2026-11-22 00:00:00+00' "+
+  "AND NOT EXISTS(SELECT 1 FROM cortes_tiktok_lucas4_outbound_comments c WHERE c.source_video_id=p.remote_id) "+
+  "ORDER BY p.confirmed_at ASC,p.id ASC LIMIT 5");
+ return {ok:true,account:'lucasrosalem4',pending:result.rows};
+}
+async function commentRecent(){
  await schema();
  const r=await pool.query(
   "SELECT target_video_id,comment_text,status FROM cortes_tiktok_lucas4_outbound_comments ORDER BY created_at DESC, source_video_id DESC LIMIT 30");
