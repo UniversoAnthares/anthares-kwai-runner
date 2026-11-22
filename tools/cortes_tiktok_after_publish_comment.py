@@ -179,7 +179,9 @@ def select_target(page, account: str, recent: list[dict], rng=RNG):
     urls: dict[str, str] = {}
     # For You first; topical discovery is a fallback when TikTok omits links.
     for origin in ("https://www.tiktok.com/foryou",
-                   "https://www.tiktok.com/search?q=" + quote("livros literatura escrita")):
+                   "https://www.tiktok.com/search/video?q=" + quote("livros"),
+                   "https://www.tiktok.com/search?q=" + quote("literatura"),
+                   "https://www.tiktok.com/tag/livros"):
         page.goto(origin, wait_until="domcontentloaded", timeout=30000)
         guard_page(page)
         for _ in range(RNG.randint(3, 5)):
@@ -190,11 +192,13 @@ def select_target(page, account: str, recent: list[dict], rng=RNG):
                 )
             except Exception:
                 links = []
-            for url in links:
+            for url in list(links) + [str(page.url)]:
                 entry = normalize_candidate(str(url), account)
                 if entry and entry[1] not in excluded:
                     urls[entry[1]] = entry[0]
             page.mouse.wheel(0, RNG.randint(540, 1150))
+        print("TIKTOK_POST_COMMENT_DISCOVERY candidates=" + str(len(urls)) +
+              " origin=" + ("feed" if "/foryou" in origin else "search"), flush=True)
         if urls:
             break
     ids = list(urls)
@@ -204,7 +208,7 @@ def select_target(page, account: str, recent: list[dict], rng=RNG):
             page.goto(urls[video_id], wait_until="domcontentloaded", timeout=25000)
             page.wait_for_timeout(1250)
             guard_page(page)
-            if comment_editor(page) and comment_submit(page, require_enabled=False):
+            if comment_editor(page):
                 return video_id, urls[video_id]
         except RuntimeError:
             # Security challenges stop the whole commenting action.

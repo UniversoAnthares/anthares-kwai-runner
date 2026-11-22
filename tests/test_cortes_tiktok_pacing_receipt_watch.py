@@ -57,6 +57,12 @@ class PacingReceiptTests(unittest.TestCase):
         self.assertIn("export async function pacingAudit()",source)
         self.assertIn("guardsActive",source)
         self.assertIn("clock.rows[0].local_day",source)
-        self.assertNotIn("INSERT INTO",source[source.index("export async function pacingAudit()"):source.index("async function handler(req,res)")])
+        audit_start=source.index("export async function pacingAudit()")
+        audit_end=source.index("\n}\n",audit_start)+2
+        audit=source[audit_start:audit_end]
+        self.assertIn("SELECT publication_started_at",audit)
+        self.assertNotIn("INSERT INTO",audit)
+        self.assertNotIn("UPDATE ",audit)
+        self.assertNotIn("DELETE FROM",audit)
 
 if __name__=="__main__":unittest.main()
