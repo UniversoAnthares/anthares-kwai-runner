@@ -115,5 +115,112 @@ class CommentTests(unittest.TestCase):
         self.assertEqual(result, "identity_invalid")
 
 
+
+class FeedDiscoveryTests(unittest.TestCase):
+    """Regression for both observed TikTok home page layouts."""
+
+    class Random:
+        def randint(self, low, high):
+            return low
+
+        def shuffle(self, seq):
+            seq.reverse()
+
+    class FakeLinks:
+        def __init__(self, parent):
+            self.parent = parent
+
+        def evaluate_all(self, script):
+            if self.parent.in_detail:
+                return []
+            if self.parent.scrolls < 2:
+                return []
+            return [
+                "https://www.tiktok.com/@anotherwriter/video/7711043089078471944",
+                "https://www.tiktok.com/@universo.anthares/video/7711044202028682516",
+            ]
+
+    class FakePage:
+        def __init__(self):
+            self.url = "https://www.tiktok.com/"
+            self.scrolls = 0
+            self.in_detail = False
+            self.initial_sources = []
+
+        def goto(self, url, **kwargs):
+            self.url = url
+            self.in_detail = "/video/" in url
+            if not self.in_detail:
+                self.initial_sources.append(url)
+                self.scrolls = 0
+
+        def wait_for_timeout(self, duration):
+            pass
+
+        def locator(self, selector):
+            if selector != 'a[href*="/video/"]':
+                raise AssertionError("unexpected selector: " + selector)
+            return FeedDiscoveryTests.FakeLinks(self)
+
+        def evaluate(self, script):
+            self.scrolls += 1
+            return {"container": "feed", "before": self.scrolls - 1,
+                    "after": self.scrolls}
+
+    def test_home_scroll_finds_real_video_link_after_initial_empty_dom(self):
+        page = self.FakePage()
+        with patch.object(c, "guard_page"), patch.object(c, "open_comment_editor",
+                                                      return_value=object()):
+            target = c.select_target(page, "lucasrosalem4", [], self.Random())
+        self.assertEqual(target, ("7711043089078471944",
+                                  "https://www.tiktok.com/@anotherwriter/video/7711043089078471944"))
+        self.assertEqual(page.initial_sources, ["https://www.tiktok.com/"])
+
+    def test_recent_target_is_excluded_after_scroll(self):
+        page = self.FakePage()
+        recent = [{"target_video_id": "7711043089078471944"}]
+        with patch.object(c, "guard_page"), patch.object(c, "open_comment_editor",
+                                                      return_value=object()):
+            target = c.select_target(page, "lucasrosalem4", recent, self.Random())
+        self.assertIsNone(target)
+
+    def test_scroller_targets_virtualized_feed_not_only_window(self):
+        class Page:
+            def evaluate(self, script):
+                self.script = script
+                return {"container": "feed", "before": 0, "after": 868}
+        page = Page()
+        self.assertEqual(c.scroll_discovery(page)["after"], 868)
+        self.assertIn("#column-list-container", page.script)
+
+    def test_hidden_captcha_does_not_block_legitimate_pages(self):
+        class Node:
+            def __init__(self, visible):
+                self.visible = visible
+
+            @property
+            def first(self):
+                return self
+
+            def count(self):
+                return 1
+
+            def is_visible(self, **kwargs):
+                return self.visible
+
+        class Page:
+            url = "https://www.tiktok.com/explore"
+
+            def __init__(self, visible):
+                self.visible = visible
+
+            def locator(self, selector):
+                return Node(self.visible and "captcha" in selector)
+
+        c.guard_page(Page(False))
+        with self.assertRaisesRegex(RuntimeError, "SECURITY_CHALLENGE"):
+            c.guard_page(Page(True))
+
+
 if __name__ == "__main__":
     unittest.main()
