@@ -1,0 +1,87 @@
+name: TikTok Northflank build 409 one-shot audit
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tiktok-northflank-build-status-once.yml'
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    env:
+      NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+    steps:
+      - name: Inspect only existing TikTok service builds and classified errors
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os,json,urllib.request,urllib.error,urllib.parse
+          T=os.environ.get('NORTHFLANK_API_TOKEN','')
+          if len(T)<20:raise SystemExit('NORTHFLANK_ADMIN_TOKEN_MISSING')
+          BASE='https://api.northflank.com/v1'
+          def get(path):
+              request=urllib.request.Request(BASE+path,headers={
+                  'Authorization':'Bearer '+T,
+                  'Accept':'application/json',
+                  'User-Agent':'AntharesNorthflankReadOnlyBuildStatus/1.0'})
+              try:
+                  with urllib.request.urlopen(request,timeout=20) as r:
+                      return r.status,json.load(r)
+              except urllib.error.HTTPError as ex:
+                  return ex.code,{}
+              except Exception:
+                  return 0,{}
+          c,p=get('/projects')
+          if c!=200:raise SystemExit('NORTHFLANK_PROJECT_READ_FAILED_'+str(c))
+          projects=(p.get('data') or {}).get('projects') or []
+          if isinstance(projects,dict):projects=list(projects.values())
+          service=[]
+          for row in projects:
+              pid=row.get('id')
+              if not pid:continue
+              status,result=get('/projects/'+urllib.parse.quote(pid,safe='')+'/services')
+              if status!=200:continue
+              rows=(result.get('data') or {}).get('services') or []
+              if isinstance(rows,dict):rows=list(rows.values())
+              for one in rows:
+                  if one.get('name')=='anthares-tiktok-northflank':
+                      service.append((pid,one.get('id') or one.get('name')))
+          if len(service)!=1:raise SystemExit('NORTHFLANK_SERVICE_NOT_UNIQUE')
+          pid,sid=service[0]
+          root='/projects/'+urllib.parse.quote(pid,safe='')+'/services/'+urllib.parse.quote(sid,safe='')
+          c,d=get(root)
+          if c!=200:raise SystemExit('NORTHFLANK_DETAIL_FAILED_'+str(c))
+          status=(d.get('data') or {}).get('status') or {}
+          print('NF_BUILD_CURRENT='+str((status.get('build') or {}).get('status')),flush=True)
+          print('NF_DEPLOY_CURRENT='+str((status.get('deployment') or {}).get('status')),flush=True)
+          c,v=get(root+'/build?per_page=8')
+          print('NF_BUILD_LIST_HTTP='+str(c),flush=True)
+          builds=(v.get('data') or {}).get('builds') or []
+          if not isinstance(builds,list):builds=[]
+          for b in builds[:8]:
+              sha=str(b.get('sha') or '')
+              print('NF_BUILD_ROW='+json.dumps({
+                  'id':str(b.get('id') or '')[:90],
+                  'sha':sha[:12],
+                  'status':str(b.get('status') or '')[:50],
+                  'concluded':bool(b.get('concluded')),
+                  'created':str(b.get('createdAt') or '')[:30],
+                  'success':bool(b.get('success'))
+              },separators=(',',':')),flush=True)
+          for b in builds[:2]:
+              bid=str(b.get('id') or '')
+              if not bid:continue
+              c,logs=get(root+'/build-logs?queryType=range&duration=1800&lineLimit=100&direction=backward&buildId='+urllib.parse.quote(bid,safe=''))
+              rows=logs.get('data') if isinstance(logs.get('data'),list) else []
+              keywords=('error','failed','fatal','denied','timeout','cancelled','missing',
+                        'not found','dockerfile','no space','quota','unauthorized',
+                        'clone','git','image','builder','buildkit')
+              matches={key:sum(key in str(row.get('log') or '').lower() for row in rows) for key in keywords}
+              print('NF_BUILD_LOG_CLASS='+json.dumps({
+                  'id':bid[:70],'http':c,'log_count':len(rows),
+                  'keyword_counts':{k:v for k,v in matches.items() if v}
+              },separators=(',',':')),flush=True)
+          print('NF_BUILD_AUDIT_READONLY_DONE=1',flush=True)
+          PY
