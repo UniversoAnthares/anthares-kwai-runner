@@ -1,0 +1,53 @@
+name: TikTok exact owner proof finalize one-shot
+on:
+  workflow_dispatch: {}
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: tiktok-exact-proof-finalize-534-574
+  cancel-in-progress: false
+jobs:
+  finalize:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    env:
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install isolated authenticated owner browser
+        run: |
+          python3 -m pip install -q --disable-pip-version-check playwright requests cryptography
+          PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=120000 python3 -m playwright install chromium
+      - name: Verify exact owner's video and finalize WordPress then fenced Neon
+        run: |
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0,'tools')
+          sys.path.insert(0,'direct-tiktok-publisher')
+          from cortes_tiktok_hosted_publish import preflight_vault, inventory
+          from cortes_tiktok_queue_consumer import (
+              oidc,qcall,found,finish,validate_job,SafeStop)
+          SEGMENT='g1:-Vwi6-2ntPk:534:574'
+          JOB='tt-a39949581e738aae4397e51699fa8af9'
+          PROOF='7711107796988693781'
+          state=preflight_vault()
+          matched=found(inventory(state),SEGMENT)
+          if matched!=PROOF:
+              print('TIKTOK_EXACT_PROOF_RECONCILE_HOLD_OWNER_MARKER_MISSING',flush=True)
+              raise SystemExit(2)
+          print('TIKTOK_EXACT_PROOF_OWNER_STUDIO_VERIFIED=1',flush=True)
+          token=oidc()
+          response=qcall('proof-job',token,{'id':JOB,'segment_id':SEGMENT})
+          job=response.get('job') or {}
+          if (response.get('ok') is not True or job.get('id')!=JOB or
+                  job.get('segment_id')!=SEGMENT or job.get('status') not in ('started','uncertain')):
+              raise SafeStop('EXACT_PROOF_NEON_JOB_UNVERIFIED')
+          sid,generation=validate_job(job)
+          if sid!=SEGMENT:
+              raise SafeStop('EXACT_PROOF_SEGMENT_MISMATCH')
+          finish(job,generation,PROOF,token)
+          print('TIKTOK_EXACT_PROOF_WORDPRESS_NEON_FINALIZED=1',flush=True)
+          PY
