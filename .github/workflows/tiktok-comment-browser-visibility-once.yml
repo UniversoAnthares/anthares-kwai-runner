@@ -1,0 +1,71 @@
+name: TikTok comment discovery browser visibility one-shot
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tiktok-comment-browser-visibility-once.yml'
+permissions:
+  contents: read
+concurrency:
+  group: tiktok-comment-browser-visibility-only
+  cancel-in-progress: false
+jobs:
+  inspect:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      TIKTOK_LUCASROSALEM4_STORAGE_STATE: ${{ secrets.TIKTOK_LUCASROSALEM4_STORAGE_STATE }}
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install private read-only browser
+        run: |
+          python3 -m pip install -q playwright requests
+          PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=120000 python3 -m playwright install chromium
+      - name: Inspect rendered TikTok feed and discovery DOM without commenting or publishing
+        run: |
+          python3 - <<'PY'
+          import json,sys
+          from urllib.parse import urlsplit
+          sys.path.insert(0,'tools')
+          from cortes_tiktok_lucasrosalem4_cloud_publish import state_from_secret
+          from playwright.sync_api import sync_playwright
+          state=state_from_secret()
+          sources=[
+            'https://www.tiktok.com/profile',
+            'https://www.tiktok.com/foryou',
+            'https://www.tiktok.com/search/video?q=livros',
+            'https://www.tiktok.com/search?q=literatura',
+            'https://www.tiktok.com/tag/livros',
+            'https://www.tiktok.com/@patzzic'
+          ]
+          with sync_playwright() as p:
+            browser=p.chromium.launch(headless=True,args=['--no-sandbox','--disable-dev-shm-usage','--disable-gpu'])
+            context=browser.new_context(storage_state=state,locale='pt-BR',viewport={'width':1280,'height':900})
+            page=context.new_page()
+            for src in sources:
+              try:
+                resp=page.goto(src,wait_until='domcontentloaded',timeout=30000)
+                page.wait_for_timeout(3000)
+                result=page.evaluate("""() => ({
+                  anchors: document.querySelectorAll('a[href]').length,
+                  direct_videos: document.querySelectorAll('a[href*="/video/"]').length,
+                  videos: document.querySelectorAll('video').length,
+                  app_root: !!document.querySelector('#app'),
+                  universal: !!document.querySelector('#__UNIVERSAL_DATA_FOR_REHYDRATION__'),
+                  body_length: (document.body?.innerText || '').length,
+                  title_length: document.title.length,
+                  login_forms: document.querySelectorAll('input[type="password"]').length,
+                  captcha_nodes: document.querySelectorAll('[id*="captcha"],iframe[src*="captcha"]').length,
+                  script_count: document.scripts.length
+                })""")
+                result.update({'origin':urlsplit(src).path,'final_path':urlsplit(page.url).path,
+                               'http':resp.status if resp else 0})
+                print('TIKTOK_READONLY_DISCOVERY_DIAG='+json.dumps(result,ensure_ascii=True),flush=True)
+              except Exception as exc:
+                print('TIKTOK_READONLY_DISCOVERY_ERROR='+type(exc).__name__+' origin='+urlsplit(src).path,flush=True)
+            context.close()
+            browser.close()
+          PY
