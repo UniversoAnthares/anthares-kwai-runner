@@ -509,17 +509,8 @@ def publish_one(job,token,state):
                     if str(done.get("job",{}).get("remote_id"))!=found:
                         raise SafeStop("SECONDARY_NEON_CONFIRM_ACK_MISSING")
                     print("SECONDARY_CLOUD_CONFIRMED=https://www.tiktok.com/@"+ACCOUNT+"/video/"+found,flush=True)
-                    try:
-                        from cortes_tiktok_after_publish_comment import after_confirmed
-                        after_confirmed(
-                            account=ACCOUNT, source_video_id=found,
-                            existing_page=page,
-                            recent_call=lambda: call("comment-recent",token),
-                            reserve_call=lambda payload: call("comment-reserve",token,payload),
-                            complete_call=lambda payload: call("comment-complete",token,payload),
-                        )
-                    except Exception as exc:
-                        print("SECONDARY_POST_COMMENT_UNAVAILABLE="+type(exc).__name__,flush=True)
+                    # The independent five-window comment worker owns engagement.
+                    print("SECONDARY_COMMENT_DEFERRED_TO_SCHEDULE=1",flush=True)
                 finally:
                     page.close()
                     ctx.close()
