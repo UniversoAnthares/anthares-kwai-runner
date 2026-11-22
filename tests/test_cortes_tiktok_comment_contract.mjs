@@ -41,7 +41,7 @@ for(const path of ['tools/cortes_tiktok_hosted_publish.py',
 }
 test('five daily windows and independent per-account Neon flow',()=>{
  const s=fs.readFileSync('.github/workflows/cortes-tiktok-deferred-comments.yml','utf8');
- assert.ok(s.includes("0 1,12,15,18,21 * * *"));
+ for (const clock of ['7 12 * * *','13 15 * * *','19 18 * * *','25 21 * * *','31 1 * * *']) assert.ok(s.includes(clock),clock);
  assert.ok(s.includes('TIKTOK_DEFERRED_ACCOUNT: universo.anthares'));
  assert.ok(s.includes('TIKTOK_DEFERRED_ACCOUNT: lucasrosalem4'));
  assert.ok(s.includes('tools/cortes_tiktok_deferred_comments.py'));
