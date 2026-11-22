@@ -3,7 +3,7 @@ import os
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 import cortes_tiktok_after_publish_comment as c
@@ -45,6 +45,46 @@ class CommentTests(unittest.TestCase):
             c.normalize_candidate("https://www.tiktok.com/@somecreator/video/1234567890123456?foo=bar",
                                   "universo.anthares"),
             ("https://www.tiktok.com/@somecreator/video/1234567890123456", "1234567890123456"))
+
+    def test_draftjs_placeholder_is_clicked_before_comment_fill(self):
+        page = MagicMock()
+        placeholder = MagicMock()
+        placeholder.count.return_value = 1
+        placeholder.is_visible.return_value = True
+        page.locator.return_value.first = placeholder
+        editor = MagicMock()
+        editor.is_editable.return_value = True
+        editor.evaluate.return_value = "DIV"
+        editor.inner_text.return_value = "Obrigado por compartilhar."
+        submit = MagicMock()
+        with patch.object(c, "comment_editor", return_value=editor), patch.object(
+            c, "guard_page"
+        ), patch.object(c, "comment_submit", return_value=submit):
+            got = c.prepare_comment(page, "Obrigado por compartilhar.")
+        self.assertIs(got, submit)
+        placeholder.click.assert_called_once_with(timeout=4000)
+        editor.click.assert_not_called()
+        submit.click.assert_called_once_with(trial=True, timeout=2500)
+
+    def test_draftjs_fallback_rechecks_full_readback(self):
+        page = MagicMock()
+        placeholder = MagicMock()
+        placeholder.count.return_value = 1
+        placeholder.is_visible.return_value = True
+        page.locator.return_value.first = placeholder
+        editor = MagicMock()
+        editor.is_editable.return_value = True
+        editor.evaluate.return_value = "DIV"
+        editor.inner_text.side_effect = ["", "Obrigado por compartilhar."]
+        submit = MagicMock()
+        with patch.object(c, "comment_editor", return_value=editor), patch.object(
+            c, "guard_page"
+        ), patch.object(c, "comment_submit", return_value=submit):
+            got = c.prepare_comment(page, "Obrigado por compartilhar.")
+        self.assertIs(got, submit)
+        editor.press_sequentially.assert_called_once_with(
+            "Obrigado por compartilhar.", delay=40, timeout=16000
+        )
 
     def test_unconfirmed_reservation_never_posts(self):
         calls = []
