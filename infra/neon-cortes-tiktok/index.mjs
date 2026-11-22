@@ -102,7 +102,16 @@ async function schema(){
  // Every uncertain clip must be audited independently, even with a busy queue.
  await pool.query('ALTER TABLE cortes_tiktok_publications ADD COLUMN IF NOT EXISTS reconcile_checked_at timestamptz');
  await pool.query('ALTER TABLE cortes_tiktok_publications ADD COLUMN IF NOT EXISTS reconcile_attempts integer NOT NULL DEFAULT 0');
- ready=true;
+
+ await pool.query(
+  'CREATE TABLE IF NOT EXISTS cortes_tiktok_outbound_comments ('+
+  'source_video_id text PRIMARY KEY,target_video_id text NOT NULL,'+
+  'comment_text text NOT NULL,status text NOT NULL DEFAULT \'started\','+
+  'created_at timestamptz NOT NULL DEFAULT now(),completed_at timestamptz,'+
+  'CONSTRAINT cortes_tiktok_outbound_comments_state CHECK (status IN (\'started\',\'posted\',\'uncertain\'))'+
+  ')');
+ await pool.query('CREATE INDEX IF NOT EXISTS cortes_tiktok_outbound_comments_recent ON cortes_tiktok_outbound_comments(created_at DESC)');
+  ready=true;
 }
 
 function allowedMedia(raw){
@@ -326,6 +335,51 @@ export async function pacingAudit(){
          capacity_used:pace.used,deadline_at:pace.deadline_at||null};
 }
 
+
+function commentRequestValid(b){
+ const video=/^[0-9]{12,25}$/;
+ return video.test(clean(b.source_video_id))&&video.test(clean(b.target_video_id))&&
+  clean(b.source_video_id)!==clean(b.target_video_id);
+}
+async function commentRecent(){
+ await schema();
+ const r=await pool.query(
+  "SELECT target_video_id,comment_text,status FROM cortes_tiktok_outbound_comments ORDER BY created_at DESC, source_video_id DESC LIMIT 30");
+ return{ok:true,account:'universo.anthares',recent:r.rows};
+}
+async function commentReserve(b){
+ await schema();
+ if(!commentRequestValid(b))return{ok:false,error:'comment_video_id_invalid'};
+ const message=clean(b.comment_text);
+ // Never accept URLs, tags, mentions, markup or multiline comments.
+ if(message.length<8||message.length>160||/[\r\n@#<>]/.test(message)||
+    /https?:\/\/|www\./i.test(message))return{ok:false,error:'comment_text_invalid'};
+ const own=clean(b.source_video_id),target=clean(b.target_video_id);
+ const q=await pool.query(
+  "INSERT INTO cortes_tiktok_outbound_comments(source_video_id,target_video_id,comment_text,status) "+
+  "SELECT $1,$2,$3,'started' FROM cortes_tiktok_publications "+
+  "WHERE remote_id=$1 AND status='confirmed' "+
+  "AND NOT EXISTS(SELECT 1 FROM (SELECT target_video_id,comment_text FROM cortes_tiktok_outbound_comments "+
+  "ORDER BY created_at DESC,source_video_id DESC LIMIT 30) recent "+
+  "WHERE lower(recent.comment_text)=lower($3) OR recent.target_video_id=$2) "+
+  "ON CONFLICT(source_video_id) DO NOTHING RETURNING source_video_id",
+  [own,target,message]);
+ return q.rowCount===1?{ok:true,reserved:true,account:'universo.anthares'}:
+   {ok:false,reserved:false,error:'comment_duplicate_or_unconfirmed'};
+}
+async function commentComplete(b){
+ await schema();
+ if(!commentRequestValid(b)||!['posted','uncertain'].includes(b.status))
+   return{ok:false,error:'comment_receipt_invalid'};
+ const q=await pool.query(
+  "UPDATE cortes_tiktok_outbound_comments SET status=$3,completed_at=now() "+
+  "WHERE source_video_id=$1 AND target_video_id=$2 AND status='started' "+
+  "RETURNING source_video_id,status",
+  [clean(b.source_video_id),clean(b.target_video_id),b.status]);
+ return q.rowCount===1?{ok:true,receipt:q.rows[0]}:
+   {ok:false,error:'comment_receipt_already_closed_or_unknown'};
+}
+
 async function handler(req,res){
  try{
   const u=new URL(req.url,'https://local.invalid'),action=u.searchParams.get('action')||'';
@@ -363,6 +417,13 @@ async function handler(req,res){
    const daily=await pool.query("SELECT count(*) FILTER(WHERE publication_started_at IS NOT NULL AND (publication_started_at AT TIME ZONE 'America/Campo_Grande')::date=(now() AT TIME ZONE 'America/Campo_Grande')::date)::int AS started_today,count(*) FILTER(WHERE confirmed_at IS NOT NULL AND (confirmed_at AT TIME ZONE 'America/Campo_Grande')::date=(now() AT TIME ZONE 'America/Campo_Grande')::date)::int AS confirmed_today FROM cortes_tiktok_publications");
    const counts=daily.rows[0];
    return reply(res,200,{ok:true,count:Object.fromEntries(q.rows.map(x=>[x.status,Number(x.count)])),daily:{started_today:counts.started_today,confirmed_today:counts.confirmed_today,remaining_today:Math.max(0,100-counts.started_today)}});
+  }
+  if(role==='consumer'&&req.method==='GET'&&action==='comment-recent')return reply(res,200,await commentRecent());
+  if(role==='consumer'&&req.method==='POST'&&action==='comment-reserve'){
+   const result=await commentReserve(b);return reply(res,result.ok?200:409,result);
+  }
+  if(role==='consumer'&&req.method==='POST'&&action==='comment-complete'){
+   const result=await commentComplete(b);return reply(res,result.ok?200:409,result);
   }
   if(role==='consumer'){
    let result;
