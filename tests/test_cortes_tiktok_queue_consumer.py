@@ -29,6 +29,34 @@ class TikTokQueueContract(unittest.TestCase):
         self.assertFalse(hosted.publication_window_open(before, boundary))
         self.assertTrue(hosted.publication_window_open(at_boundary, boundary))
 
+    def test_postclick_reconcile_uses_exact_owner_marker_and_one_fenced_confirmation(self):
+        from unittest.mock import patch
+        j = job()
+        waits = []
+        with patch.object(hosted, "inventory", return_value={"account":"universo.anthares"}) as inventory, patch.object(
+            hosted.q, "found", side_effect=[None, "7711113238892514578"]
+        ) as found, patch.object(hosted.q, "finish") as finish, patch.object(
+            hosted, "publish_one_preloaded", side_effect=AssertionError("must never upload")
+        ) as publish:
+            self.assertTrue(hosted.reconcile_postclick_profile(
+                j, 2, {"cookies":[]}, {"Authorization":"test"}, pause=waits.append))
+        self.assertEqual(inventory.call_count, 2)
+        self.assertEqual(found.call_count, 2)
+        self.assertEqual(found.call_args[0][1], j["segment_id"])
+        finish.assert_called_once_with(j, 2, "7711113238892514578", {"Authorization":"test"})
+        publish.assert_not_called()
+        self.assertEqual(waits, [6])
+
+    def test_postclick_reconcile_missing_owner_proof_remains_unverified(self):
+        from unittest.mock import patch
+        with patch.object(hosted, "inventory", return_value={}) as inventory, patch.object(
+            hosted.q, "found", return_value=None
+        ), patch.object(hosted.q, "finish") as finish:
+            self.assertFalse(hosted.reconcile_postclick_profile(
+                job(), 2, {}, {}, pause=lambda _: None))
+        self.assertEqual(inventory.call_count, 3)
+        finish.assert_not_called()
+
     def test_tiktok_publication_gate_fails_closed_when_missing_or_invalid(self):
         now = datetime(2026, 10, 20, 10, 0, tzinfo=timezone.utc)
         self.assertFalse(hosted.publication_window_open(now, None))

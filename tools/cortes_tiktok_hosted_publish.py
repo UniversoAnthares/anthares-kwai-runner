@@ -378,6 +378,7 @@ def main():
         changed=q.qcall("start",control,{"id":job["id"],"lease_generation":generation})
         if not changed.get("ok") or (changed.get("job") or {}).get("status")!="started":
             raise q.SafeStop("TIKTOK_IRREVERSIBLE_FENCE_UNCONFIRMED")
+        finish_attempted=False
         try:
             if matching:
                 remote=matching
@@ -387,6 +388,7 @@ def main():
                 verified=q.found(inventory(state),sid)
                 if verified!=remote:
                     raise q.SafeStop("TIKTOK_PROFILE_MARKER_CONFIRMATION_MISMATCH")
+            finish_attempted=True
             q.finish(job,generation,remote,control)
             # Comments are processed independently in five daily windows.
             # This removes comment CAPTCHAs from the publication critical path.
@@ -394,12 +396,44 @@ def main():
             request_followup_if_pending(control)
             return 0
         except Exception:
+            # TikTok may finish posting after its confirmation modal without
+            # showing the success banner. Recheck the independent, signed-in
+            # owner Studio for the EXACT #anthares marker before declaring
+            # this previously STARTED upload uncertain. Never submit again.
+            if not matching and not finish_attempted:
+                try:
+                    if reconcile_postclick_profile(job,generation,state,control):
+                        print("CORTES_TIKTOK_POSTCLICK_STUDIO_RECONCILED=1",flush=True)
+                        request_followup_if_pending(control)
+                        return 0
+                except Exception as exc:
+                    print("CORTES_TIKTOK_POSTCLICK_PROOF_HOLD="+
+                          type(exc).__name__,flush=True)
             try:
                 q.qcall("fail",control,{"id":job["id"],"lease_generation":generation,
                                          "error":"after_started_requires_reconciliation"})
             except Exception:
                 pass
             raise
+
+
+def reconcile_postclick_profile(job,generation,state,control,pause=time.sleep):
+    """Owner-only, read-only evidence after an ambiguous TikTok post click.
+
+    A public profile with the exact segment marker is proof of publication.
+    Only the original fenced WordPress + Neon confirmation path closes it.
+    This function has no upload or comment operation.
+    """
+    for attempt in range(3):
+        if attempt:
+            pause(6)
+        evidence=q.found(inventory(state),str(job["segment_id"]))
+        if evidence:
+            q.finish(job,generation,evidence,control)
+            print("CORTES_TIKTOK_POSTCLICK_OWNER_PROOF remote_id="+evidence,
+                  flush=True)
+            return True
+    return False
 
 
 def publish_one_preloaded(job,sid,folder,state,generation):
