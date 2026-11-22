@@ -509,10 +509,14 @@ def main() -> int:
                 if failure_class not in routing.DEVICE_FAILURES:
                     print(f"KWAI_DEVICE_STATE=FAILED_NO_FAILOVER CLASS={failure_class}", flush=True)
                     return 80
-                if os.getenv("ANTHARES_KWAI_PHYSICAL_PRIMARY_EXCLUSIVE","0")=="1":
-                    print("KWAI_DEVICE_STATE=PHYSICAL_PREPARE_BLOCKED_NO_MEMU_SWITCH", flush=True)
+                # The phone failed before the irreversible STARTED fence.
+                # A leased worker may switch only to an independently authenticated,
+                # healthy MEmu4 for the SAME account and job; unsafe outcomes
+                # still return above without attempting a second publication.
+                print("KWAI_PRECOMMIT_PHYSICAL_FAILED_VERIFY_MEMU", flush=True)
+                if not verify_memu_standby_identity():
+                    print("KWAI_DEVICE_STATE=PHYSICAL_FAILED_MEMU_IDENTITY_NOT_VERIFIED", flush=True)
                     return 81
-                verify_memu_standby_identity()
                 probes2 = AndroidExecutorRouter().status()
                 state2 = merge_health(probes2, history)
                 selected2 = routing.choose(manifest, state2, workload="kwai_publish")
