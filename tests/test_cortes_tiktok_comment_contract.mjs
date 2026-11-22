@@ -18,32 +18,39 @@ for(const [file,table,posts,account] of accounts){
   assert.ok(s.includes("role==='consumer'&&req.method==='POST'&&action==='comment-reserve'"));
   assert.ok(s.includes("role==='consumer'&&req.method==='POST'&&action==='comment-complete'"));
   assert.ok(s.includes("role==='consumer'&&req.method==='GET'&&action==='comment-recent'"));
+  assert.ok(s.includes("role==='consumer'&&req.method==='GET'&&action==='comment-pending'"));
+  assert.ok(s.includes("AND NOT EXISTS(SELECT 1 FROM "+table));
  });
 }
 for(const route of ['infra/cloudflare-cortes-tiktok-ha/src/index.js',
                       'infra/cloudflare-cortes-tiktok-lucas4-ha/src/index.js']){
  test(route+' retains OIDC and forwards receipt actions',()=>{
   const s=fs.readFileSync(route,'utf8');
-  for(const name of ['comment-recent','comment-reserve','comment-complete'])
+  for(const name of ['comment-pending','comment-recent','comment-reserve','comment-complete'])
    assert.ok(s.includes("'"+name+"'"),name);
   assert.ok(s.includes("oidc_required"));
  });
 }
 for(const path of ['tools/cortes_tiktok_hosted_publish.py',
                     'tools/cortes_tiktok_lucasrosalem4_cloud_publish.py']){
- test(path+' invokes optional comment after confirmed new publication',()=>{
+ test(path+' defers comments to five independent daily windows',()=>{
   const s=fs.readFileSync(path,'utf8');
-  assert.ok(s.includes('from cortes_tiktok_after_publish_comment import after_confirmed'));
-  assert.ok(s.includes('source_video_id='));
-  assert.ok(s.includes('comment-reserve'));
-  assert.ok(s.includes('comment-complete'));
+  assert.ok(s.includes('COMMENT_DEFERRED_TO_SCHEDULE=1'));
+  assert.ok(!s.includes('from cortes_tiktok_after_publish_comment import after_confirmed'));
  });
 }
+test('five daily windows and independent per-account Neon flow',()=>{
+ const s=fs.readFileSync('.github/workflows/cortes-tiktok-deferred-comments.yml','utf8');
+ assert.ok(s.includes("0 1,12,15,18,21 * * *"));
+ assert.ok(s.includes('TIKTOK_DEFERRED_ACCOUNT: universo.anthares'));
+ assert.ok(s.includes('TIKTOK_DEFERRED_ACCOUNT: lucasrosalem4'));
+ assert.ok(s.includes('tools/cortes_tiktok_deferred_comments.py'));
+});
 
 test('secondary comment actions use direct Neon despite disabled edge deploy',()=>{
  const s=fs.readFileSync('tools/cortes_tiktok_lucasrosalem4_cloud_publish.py','utf8');
  assert.ok(s.includes('route=QUEUE'));
- assert.ok(s.includes('if action in ("comment-recent","comment-reserve","comment-complete"):'));
+ assert.ok(s.includes('if action in ("comment-pending","comment-recent","comment-reserve","comment-complete"):'));
  assert.ok(s.includes('route="https://br-crimson-unit-b89nau08-cortestiktok4.compute.c-14.us-east-1.aws.neon.tech/"'));
  assert.ok(s.includes('url=route+"?"'));
  assert.ok(s.includes('if action in ("mirror","claim"):'), 'publication failover preserved');
