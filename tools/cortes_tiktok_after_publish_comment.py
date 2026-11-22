@@ -107,12 +107,18 @@ def normalize_candidate(url: str, account: str) -> tuple[str, str] | None:
 
 
 def guard_page(page) -> None:
+    """Stop on visible login/captcha challenges, without flagging hidden widgets."""
     if "/login" in str(page.url).lower():
         raise RuntimeError("TIKTOK_COMMENT_LOGIN_REQUIRED")
-    for selector in ("iframe[src*='captcha']", "[id*='captcha']", "[data-e2e*='captcha']"):
-        if page.locator(selector).count():
+    for selector in ("#loginModalContentContainer", "input[type='password']"):
+        nodes = page.locator(selector)
+        if nodes.count() and nodes.first.is_visible(timeout=400):
+            raise RuntimeError("TIKTOK_COMMENT_LOGIN_REQUIRED")
+    for selector in ("iframe[src*='captcha']", "[id*='captcha']",
+                     "[data-e2e*='captcha']"):
+        nodes = page.locator(selector)
+        if nodes.count() and nodes.first.is_visible(timeout=400):
             raise RuntimeError("TIKTOK_COMMENT_SECURITY_CHALLENGE")
-
 
 def verify_owner(page, account: str) -> None:
     page.goto("https://www.tiktok.com/profile", wait_until="domcontentloaded", timeout=30000)
@@ -136,12 +142,15 @@ def verify_owner(page, account: str) -> None:
 
 
 def comment_editor(page):
+    """Return a fillable comment composer, excluding non-editable wrapper divs."""
     selectors = (
         '[data-e2e="comment-input"] [contenteditable="true"]',
         '[data-e2e="comment-input"][contenteditable="true"]',
-        '[data-e2e="comment-input"]',
         'div[contenteditable="true"][data-e2e*="comment"]',
         'textarea[data-e2e*="comment"]',
+        'div[contenteditable="true"][aria-label*="comment" i]',
+        'textarea[placeholder*="comment" i]',
+        'textarea[placeholder*="coment" i]',
     )
     for selector in selectors:
         nodes = page.locator(selector)
@@ -154,6 +163,36 @@ def comment_editor(page):
                 pass
     return None
 
+
+def open_comment_editor(page):
+    """Open only the visibly labelled comments panel, never engagement actions."""
+    existing = comment_editor(page)
+    if existing:
+        return existing
+    for selector in (
+        '[aria-label^="Read or add comments"]',
+        '[data-e2e="browse-comment-icon"]',
+        '[data-e2e="comment-icon"]',
+        'button[aria-label*="comment" i]',
+        'button[aria-label*="coment" i]',
+    ):
+        nodes = page.locator(selector)
+        if not nodes.count():
+            continue
+        control = nodes.first
+        try:
+            if not control.is_visible(timeout=650):
+                continue
+            guard_page(page)
+            control.click(timeout=5000)
+            page.wait_for_timeout(900)
+            guard_page(page)
+            return comment_editor(page)
+        except RuntimeError:
+            raise
+        except Exception:
+            continue
+    return None
 
 def comment_submit(page, *, require_enabled=True):
     for selector in (
@@ -172,51 +211,86 @@ def comment_submit(page, *, require_enabled=True):
     return None
 
 
+def scroll_discovery(page):
+    """Scroll TikTok's actual virtualized feed; use window on Explore pages."""
+    return page.evaluate("""() => {
+        const feed=document.querySelector('#column-list-container');
+        if (feed) {
+            const before=feed.scrollTop;
+            feed.scrollTop=Math.min(feed.scrollHeight,
+                                    feed.scrollTop+Math.max(650,feed.clientHeight));
+            return {container:'feed',before,after:feed.scrollTop};
+        }
+        const before=window.scrollY;
+        window.scrollBy(0,Math.max(700,Math.round(window.innerHeight*0.85)));
+        return {container:'window',before,after:window.scrollY};
+    }""")
+
+
+def collect_video_urls(page, account, excluded, urls):
+    """Collect only TikTok's actual rendered canonical links, never guessed IDs."""
+    links = page.locator('a[href*="/video/"]').evaluate_all(
+        "(xs) => xs.slice(0, 250).map(x => x.href)"
+    )
+    added = 0
+    for url in list(links) + [str(page.url)]:
+        entry = normalize_candidate(str(url), account)
+        if entry and entry[1] not in excluded and entry[1] not in urls:
+            urls[entry[1]] = entry[0]
+            added += 1
+    return added
+
+
 def select_target(page, account: str, recent: list[dict], rng=RNG):
-    """Browse for a few seconds; randomly inspect eligible non-owned videos."""
+    """Start at the homepage and browse the real feed/Explore with bounded scrolling."""
     excluded = {str(x.get("target_video_id") or "")
                 for x in recent[:30] if isinstance(x, dict)}
     urls: dict[str, str] = {}
-    # For You first; topical discovery is a fallback when TikTok omits links.
-    for origin in ("https://www.tiktok.com/foryou",
-                   "https://www.tiktok.com/search/video?q=" + quote("livros"),
-                   "https://www.tiktok.com/search?q=" + quote("literatura"),
-                   "https://www.tiktok.com/tag/livros"):
+    # Live proof on Nov 22: / routes primary to Explore, while secondary has a
+    # virtualized For You list. Both yield real video links only after scrolling.
+    for label, origin in (
+        ("home", "https://www.tiktok.com/"),
+        ("explore", "https://www.tiktok.com/explore"),
+        ("foryou", "https://www.tiktok.com/foryou"),
+        ("video-search", "https://www.tiktok.com/search/video?q=" + quote("livros")),
+        ("literature-search", "https://www.tiktok.com/search?q=" + quote("literatura")),
+        ("books", "https://www.tiktok.com/tag/livros"),
+    ):
         page.goto(origin, wait_until="domcontentloaded", timeout=30000)
         guard_page(page)
-        for _ in range(RNG.randint(3, 5)):
-            page.wait_for_timeout(RNG.randint(900, 1700))
+        for step in range(6):
+            page.wait_for_timeout(rng.randint(1500, 2150))
+            guard_page(page)
             try:
-                links = page.locator('a[href*="/video/"]').evaluate_all(
-                    "(xs) => xs.slice(0, 100).map(x => x.href)"
-                )
+                collect_video_urls(page, account, excluded, urls)
             except Exception:
-                links = []
-            for url in list(links) + [str(page.url)]:
-                entry = normalize_candidate(str(url), account)
-                if entry and entry[1] not in excluded:
-                    urls[entry[1]] = entry[0]
-            page.mouse.wheel(0, RNG.randint(540, 1150))
-        print("TIKTOK_POST_COMMENT_DISCOVERY candidates=" + str(len(urls)) +
-              " origin=" + ("feed" if "/foryou" in origin else "search"), flush=True)
+                pass
+            if len(urls) >= 8 and step >= 2:
+                break
+            scroll_discovery(page)
+        print("TIKTOK_POST_COMMENT_DISCOVERY account=" + account +
+              " source=" + label + " eligible_links=" + str(len(urls)), flush=True)
         if urls:
             break
     ids = list(urls)
     rng.shuffle(ids)
-    for video_id in ids[:8]:
+    for video_id in ids[:12]:
         try:
             page.goto(urls[video_id], wait_until="domcontentloaded", timeout=25000)
-            page.wait_for_timeout(1250)
+            page.wait_for_timeout(1300)
             guard_page(page)
-            if comment_editor(page):
+            canonical = normalize_candidate(str(page.url), account)
+            if not canonical or canonical[1] != video_id:
+                continue
+            if open_comment_editor(page):
+                print("TIKTOK_POST_COMMENT_TARGET_READY account=" + account +
+                      " id=" + video_id, flush=True)
                 return video_id, urls[video_id]
         except RuntimeError:
-            # Security challenges stop the whole commenting action.
             raise
         except Exception:
             continue
     return None
-
 
 def post_comment_once(page, message: str) -> bool:
     editor = comment_editor(page)
