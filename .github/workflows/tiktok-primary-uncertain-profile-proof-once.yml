@@ -29,7 +29,7 @@ jobs:
           sys.path.insert(0,'direct-tiktok-publisher')
           from cortes_tiktok_hosted_publish import preflight_vault, inventory
           import cortes_tiktok_queue_consumer as q
-          segment='g1:-Vwi6-2ntPk:2391:2433'
+          segment='g1:-Vwi6-2ntPk:373:413'
           state=preflight_vault()
           remote=q.found(inventory(state),segment)
           if remote:

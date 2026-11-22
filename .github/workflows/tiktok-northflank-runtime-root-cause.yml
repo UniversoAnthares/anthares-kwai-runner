@@ -1,4 +1,5 @@
 name: TikTok Northflank existing service root-cause audit
+# Requested 2026-11-22 16:56 BRT after publish-url HTTP 503 publisher_handler.
 on:
   workflow_dispatch: {}
   push:
