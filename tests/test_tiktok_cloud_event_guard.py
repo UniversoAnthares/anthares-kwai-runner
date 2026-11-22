@@ -4,6 +4,8 @@ import os
 import sys
 import tempfile
 import unittest
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from pathlib import Path
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"tools"))
@@ -47,7 +49,8 @@ class CloudTriggerTest(unittest.TestCase):
         from unittest.mock import patch
         with tempfile.TemporaryDirectory() as root:
             output=str(Path(root)/"out.txt")
-            with patch.dict(os.environ,{"GITHUB_OUTPUT":output}), patch.object(h.q,"qcall",return_value={"ok":True,"count":{"queued":3}}):
+            with patch.dict(os.environ,{"GITHUB_OUTPUT":output}), patch.object(h.q,"qcall",return_value={"ok":True,"count":{"queued":3}}), patch.object(h,"datetime") as clock:
+                clock.now.return_value=datetime(2026,11,22,12,0,tzinfo=ZoneInfo("America/Campo_Grande"))
                 h.request_followup_if_pending({})
             self.assertEqual(Path(output).read_text().strip(),"queue_followup=true")
 
