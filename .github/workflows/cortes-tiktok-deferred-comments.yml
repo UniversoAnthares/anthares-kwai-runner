@@ -1,0 +1,58 @@
+name: CORTES TikTok five daily deferred comment windows
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    # America/Campo_Grande (UTC-4): 08h, 11h, 14h, 17h, 21h.
+    - cron: '0 1,12,15,18,21 * * *'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: cortes-tiktok-deferred-comments-five-daily-windows
+  cancel-in-progress: false
+
+jobs:
+  primary:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 13
+    env:
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
+      TIKTOK_DEFERRED_ACCOUNT: universo.anthares
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate deferred comment contract
+        run: |
+          python3 -m py_compile tools/cortes_tiktok_deferred_comments.py tools/cortes_tiktok_after_publish_comment.py
+          python3 -m unittest discover -s tests -p 'test_cortes_tiktok_deferred_comments.py' -v
+      - name: Install isolated authenticated comment browser
+        run: |
+          python3 -m pip install -q --disable-pip-version-check playwright requests cryptography
+          PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=120000 python3 -m playwright install chromium
+      - name: Process previously confirmed clips with idempotent Neon receipts
+        run: python3 -u tools/cortes_tiktok_deferred_comments.py
+
+  secondary:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 13
+    env:
+      TIKTOK_LUCASROSALEM4_STORAGE_STATE: ${{ secrets.TIKTOK_LUCASROSALEM4_STORAGE_STATE }}
+      TIKTOK_DEFERRED_ACCOUNT: lucasrosalem4
+      PYTHONUNBUFFERED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate deferred comment contract
+        run: |
+          python3 -m py_compile tools/cortes_tiktok_deferred_comments.py tools/cortes_tiktok_after_publish_comment.py
+          python3 -m unittest discover -s tests -p 'test_cortes_tiktok_deferred_comments.py' -v
+      - name: Install isolated authenticated comment browser
+        run: |
+          python3 -m pip install -q --disable-pip-version-check playwright requests
+          PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=120000 python3 -m playwright install chromium
+      - name: Process secondary confirmed clips without disturbing Kwai MEmu
+        run: python3 -u tools/cortes_tiktok_deferred_comments.py
