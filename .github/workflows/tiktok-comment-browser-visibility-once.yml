@@ -100,3 +100,66 @@ jobs:
             finally:
               browser.close()
           PY
+      - name: Probe real third-party comment editor clickability, without posting
+        run: |
+          python3 - <<'PY'
+          import json,sys
+          sys.path.insert(0,'tools')
+          sys.path.insert(0,'direct-tiktok-publisher')
+          from tiktok_session_authority import load_canonical_state
+          from cortes_tiktok_lucasrosalem4_cloud_publish import state_from_secret
+          from cortes_tiktok_after_publish_comment import (
+              verify_owner,select_target,comment_editor,comment_submit)
+          from playwright.sync_api import sync_playwright
+          sessions=[('universo.anthares',load_canonical_state()[0]),
+                    ('lucasrosalem4',state_from_secret())]
+          with sync_playwright() as p:
+            browser=p.chromium.launch(headless=True,args=['--no-sandbox','--disable-dev-shm-usage','--disable-gpu'])
+            try:
+              for account,state in sessions:
+                context=browser.new_context(storage_state=state,locale='pt-BR',viewport={'width':1280,'height':900})
+                page=context.new_page()
+                try:
+                  verify_owner(page,account)
+                  target=select_target(page,account,[])
+                  print('TIKTOK_EDITOR_PROBE_TARGET='+json.dumps({'account':account,'target':target},sort_keys=True),flush=True)
+                  if not target:continue
+                  node=comment_editor(page)
+                  if node is None:
+                    print('TIKTOK_EDITOR_PROBE_EDITOR_MISSING account='+account,flush=True)
+                    continue
+                  details=node.evaluate("""el=>({
+                    tag:el.tagName, editable:el.isContentEditable,
+                    contenteditable:el.getAttribute('contenteditable'),
+                    data_e2e:el.getAttribute('data-e2e'),
+                    aria:el.getAttribute('aria-label'),
+                    placeholder:el.getAttribute('placeholder'),
+                    outer_tag:el.outerHTML.slice(0,180).replace(/>[^<]+</g,'><'),
+                    rect:(()=>{const r=el.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height}})()
+                  })""")
+                  print('TIKTOK_EDITOR_PROBE_DOM='+json.dumps(details,separators=(',',':')),flush=True)
+                  try:
+                    trial=node.click(trial=True,timeout=2800)
+                    print('TIKTOK_EDITOR_PROBE_TRIAL_CLICK=PASS account='+account,flush=True)
+                  except Exception as exc:
+                    print('TIKTOK_EDITOR_PROBE_TRIAL_CLICK=FAIL account='+account+' reason='+type(exc).__name__,flush=True)
+                  try:
+                    editable=node.is_editable(timeout=1600)
+                    print('TIKTOK_EDITOR_PROBE_IS_EDITABLE='+str(editable)+' account='+account,flush=True)
+                    if editable:
+                      msg='Obrigado por compartilhar este conteúdo.'
+                      node.fill(msg,timeout=3800)
+                      echo=(node.inner_text(timeout=1200) if details['tag'] not in ('TEXTAREA','INPUT') else node.input_value(timeout=1200))
+                      print('TIKTOK_EDITOR_PROBE_FILL='+str(msg in echo)+' account='+account,flush=True)
+                      button=comment_submit(page)
+                      print('TIKTOK_EDITOR_PROBE_BUTTON_READY='+str(button is not None)+' account='+account,flush=True)
+                      node.fill('',timeout=1500)
+                  except Exception as exc:
+                    print('TIKTOK_EDITOR_PROBE_PREPARE=FAIL account='+account+' reason='+type(exc).__name__,flush=True)
+                except Exception as exc:
+                  print('TIKTOK_EDITOR_PROBE_HOLD account='+account+' reason='+type(exc).__name__,flush=True)
+                finally:
+                  context.close()
+            finally:
+              browser.close()
+          PY
