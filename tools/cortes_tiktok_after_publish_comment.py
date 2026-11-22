@@ -155,7 +155,7 @@ def comment_editor(page):
     return None
 
 
-def comment_submit(page):
+def comment_submit(page, *, require_enabled=True):
     for selector in (
         '[data-e2e="comment-post"]',
         'button[data-e2e*="comment-post"]',
@@ -165,7 +165,7 @@ def comment_submit(page):
         if nodes.count():
             node = nodes.first
             try:
-                if node.is_visible(timeout=900) and node.is_enabled(timeout=900):
+                if node.is_visible(timeout=900) and (not require_enabled or node.is_enabled(timeout=900)):
                     return node
             except Exception:
                 pass
@@ -204,7 +204,7 @@ def select_target(page, account: str, recent: list[dict], rng=RNG):
             page.goto(urls[video_id], wait_until="domcontentloaded", timeout=25000)
             page.wait_for_timeout(1250)
             guard_page(page)
-            if comment_editor(page) and comment_submit(page):
+            if comment_editor(page) and comment_submit(page, require_enabled=False):
                 return video_id, urls[video_id]
         except RuntimeError:
             # Security challenges stop the whole commenting action.
