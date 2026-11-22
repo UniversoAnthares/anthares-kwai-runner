@@ -64,7 +64,7 @@ def call(action,token,payload=None):
     # Comment receipts use the directly deployed, OIDC-fenced Neon function;
     # ordinary publication queue failover remains unchanged.
     route=QUEUE
-    if action in ("comment-recent","comment-reserve","comment-complete"):
+    if action in ("comment-pending","comment-recent","comment-reserve","comment-complete"):
         route="https://br-crimson-unit-b89nau08-cortestiktok4.compute.c-14.us-east-1.aws.neon.tech/"
     url=route+"?"+urllib.parse.urlencode({"action":action})
     headers={"Accept":"application/json","Authorization":"Bearer "+token}
