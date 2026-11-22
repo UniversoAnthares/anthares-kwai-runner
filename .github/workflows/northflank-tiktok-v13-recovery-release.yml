@@ -29,6 +29,7 @@ jobs:
           ROOT='https://api.northflank.com/v1'
           LIVE='https://http--anthares-tiktok-northflank--6f6pbqmvhpv6.code.run'
           EXPECTED='2026-11-13-browser-ffmpeg-owner-drag-v21'
+          PATCH='2026-11-22-preclick-stage-v1'
           def call(url,token,method='GET',body=None,timeout=25):
               headers={'Authorization':'Bearer '+token,'Accept':'application/json','User-Agent':'Anthares-Northflank-TikTok-V14-Bounded-Recovery/1.0'}
               if body is not None:headers['Content-Type']='application/json'
@@ -44,8 +45,10 @@ jobs:
                   return 0,{}
           c,rev=call(LIVE+'/interactive-browser/revision',SHARED,timeout=13)
           print('NF_CURRENT_REVISION_HTTP='+str(c),flush=True)
-          if c==200 and rev.get('revision')==EXPECTED:
-              print('NF_V21_RELEASE_ALREADY_ACTIVE=1',flush=True)
+          hc,patch=call(LIVE+'/health',SHARED,timeout=13)
+          print('NF_HANDLER_DIAG_PRECHECK_HTTP='+str(hc),flush=True)
+          if c==200 and rev.get('revision')==EXPECTED and hc==200 and patch.get('publisher_handler_debug_revision')==PATCH:
+              print('NF_PUBLISH_HANDLER_PATCH_ALREADY_ACTIVE=1',flush=True)
           else:
               c,p=call(ROOT+'/projects',T)
               if c!=200:raise SystemExit('NF_ADMIN_INVALID_HTTP_'+str(c))
@@ -82,8 +85,9 @@ jobs:
               for attempt in range(50):
                   time.sleep(10)
                   c,rev=call(LIVE+'/interactive-browser/revision',SHARED,timeout=13)
-                  if c==200 and rev.get('revision')==EXPECTED:
-                      print('NF_V21_DEPLOYMENT_CONFIRMED=1',flush=True)
+                  hc,patch=call(LIVE+'/health',SHARED,timeout=13)
+                  if c==200 and rev.get('revision')==EXPECTED and hc==200 and patch.get('publisher_handler_debug_revision')==PATCH:
+                      print('NF_PUBLISH_HANDLER_PATCH_DEPLOYED=1',flush=True)
                       break
                   if attempt%5==0:print('NF_DEPLOY_WAITING_10SEC_STEP='+str(attempt+1)+' http='+str(c),flush=True)
               else:raise SystemExit('NF_V21_DEPLOYMENT_TIMEOUT')
@@ -97,6 +101,8 @@ jobs:
           else:raise SystemExit('NF_FFMPEG_SELF_TEST_UNVERIFIED')
           c,s=call(LIVE+'/interactive-browser/status',SHARED,timeout=12)
           print('NF_BROWSER_STATUS_HTTP='+str(c),flush=True)
+          if not h.get('publisher_handler_debug_revision')==PATCH:
+              raise SystemExit('NF_PUBLISH_HANDLER_PATCH_HEALTH_UNVERIFIED')
           if c!=200 or s.get('ok') is not True or s.get('backend')!='northflank_chromium_cdp':
               raise SystemExit('NF_BROWSER_STATUS_UNVERIFIED')
           print('NF_BROWSER_STATUS_V14_PASS=1',flush=True)
