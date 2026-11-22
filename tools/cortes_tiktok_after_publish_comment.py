@@ -328,11 +328,30 @@ def prepare_comment(page, message: str):
     guard_page(page)
     if not editor.is_editable(timeout=1200):
         raise RuntimeError("TIKTOK_COMMENT_EDITOR_NOT_EDITABLE")
-    editor.click(trial=True, timeout=2200)
+    # TikTok's Draft.js input has a real, clickable placeholder overlay.
+    # In live Chrome its placeholder intercepts trial clicks on contenteditable.
+    # Use the same visible placeholder a person would click to activate editing.
+    draft_placeholder = page.locator(
+        '[data-e2e="comment-input"] .public-DraftEditorPlaceholder-inner'
+    ).first
+    used_placeholder = bool(
+        draft_placeholder.count() and draft_placeholder.is_visible(timeout=600)
+    )
+    if used_placeholder:
+        draft_placeholder.click(timeout=4000)
+    else:
+        editor.click(trial=True, timeout=2200)
+    guard_page(page)
     editor.fill(message, timeout=5000)
     present = (editor.input_value(timeout=1700)
                if editor.evaluate("(el)=>el.tagName") in ("TEXTAREA", "INPUT")
                else editor.inner_text(timeout=1700))
+    if message not in present and used_placeholder:
+        # React Draft.js may discard a synthetic fill. One keyboard fallback
+        # is permitted before reservation, with mandatory full-text readback.
+        editor.fill("", timeout=2500)
+        editor.press_sequentially(message, delay=40, timeout=16000)
+        present = editor.inner_text(timeout=1700)
     if message not in present:
         raise RuntimeError("TIKTOK_COMMENT_EDITOR_READBACK_FAILED")
     button = comment_submit(page)
