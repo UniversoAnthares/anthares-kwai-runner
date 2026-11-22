@@ -1,4 +1,4 @@
-name: TikTok comment discovery browser visibility one-shot
+name: TikTok comment discovery read-only feed diagnosis
 on:
   workflow_dispatch: {}
   push:
@@ -16,56 +16,87 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     env:
+      ARA_SHARED: ${{ secrets.ARA_SHARED }}
       TIKTOK_LUCASROSALEM4_STORAGE_STATE: ${{ secrets.TIKTOK_LUCASROSALEM4_STORAGE_STATE }}
       PYTHONUNBUFFERED: '1'
     steps:
       - uses: actions/checkout@v4
-      - name: Install private read-only browser
+      - name: Install private read-only browsers
         run: |
-          python3 -m pip install -q playwright requests
+          python3 -m pip install -q playwright requests cryptography
           PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=120000 python3 -m playwright install chromium
-      - name: Inspect rendered TikTok feed and discovery DOM without commenting or publishing
+      - name: Inspect both TikTok accounts home and For You rendered cards
         run: |
           python3 - <<'PY'
           import json,sys
           from urllib.parse import urlsplit
           sys.path.insert(0,'tools')
+          sys.path.insert(0,'direct-tiktok-publisher')
+          from tiktok_session_authority import load_canonical_state
           from cortes_tiktok_lucasrosalem4_cloud_publish import state_from_secret
           from playwright.sync_api import sync_playwright
-          state=state_from_secret()
-          sources=[
-            'https://www.tiktok.com/profile',
-            'https://www.tiktok.com/foryou',
-            'https://www.tiktok.com/search/video?q=livros',
-            'https://www.tiktok.com/search?q=literatura',
-            'https://www.tiktok.com/tag/livros',
-            'https://www.tiktok.com/@patzzic'
-          ]
+          sessions=[('universo.anthares',load_canonical_state()[0]),
+                    ('lucasrosalem4',state_from_secret())]
+          js="""() => {
+            const visible=e=>{if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'};
+            const root=document.querySelector('#column-list-container');
+            const cards=[...document.querySelectorAll('article[data-e2e="recommend-list-item-container"],section[id^="media-card-"]')].slice(0,7);
+            return {
+              page_title:document.title,
+              body_length:(document.body?.innerText||'').length,
+              total_anchors:document.querySelectorAll('a[href]').length,
+              video_anchors:document.querySelectorAll('a[href*="/video/"]').length,
+              article_cards:document.querySelectorAll('article[data-e2e="recommend-list-item-container"]').length,
+              media_sections:document.querySelectorAll('section[id^="media-card-"]').length,
+              videos:document.querySelectorAll('video').length,
+              login_visible:[...document.querySelectorAll('#loginModalContentContainer,input[type="password"]')].some(visible),
+              challenge_visible:[...document.querySelectorAll('iframe[src*="captcha"],[data-e2e*="captcha"],[id*="captcha"]')].some(visible),
+              scroll_container:!!root,
+              scroll_top:root?.scrollTop||0,
+              scroll_height:root?.scrollHeight||0,
+              scroll_client_height:root?.clientHeight||0,
+              cards:cards.map(card=>({
+                visible:visible(card),tag:card.tagName,
+                data_e2e:card.getAttribute('data-e2e')||'',
+                id_prefix:(card.id||'').slice(0,25),
+                inner_text_length:(card.innerText||'').length,
+                child_video_count:card.querySelectorAll('video').length,
+                child_link_count:card.querySelectorAll('a[href]').length,
+                child_video_links:card.querySelectorAll('a[href*="/video/"]').length,
+                element_roles:[...new Set([...card.querySelectorAll('[role]')].map(x=>x.getAttribute('role')))].slice(0,6)
+              }))
+            };
+          }"""
           with sync_playwright() as p:
             browser=p.chromium.launch(headless=True,args=['--no-sandbox','--disable-dev-shm-usage','--disable-gpu'])
-            context=browser.new_context(storage_state=state,locale='pt-BR',viewport={'width':1280,'height':900})
-            page=context.new_page()
-            for src in sources:
-              try:
-                resp=page.goto(src,wait_until='domcontentloaded',timeout=30000)
-                page.wait_for_timeout(3000)
-                result=page.evaluate("""() => ({
-                  anchors: document.querySelectorAll('a[href]').length,
-                  direct_videos: document.querySelectorAll('a[href*="/video/"]').length,
-                  videos: document.querySelectorAll('video').length,
-                  app_root: !!document.querySelector('#app'),
-                  universal: !!document.querySelector('#__UNIVERSAL_DATA_FOR_REHYDRATION__'),
-                  body_length: (document.body?.innerText || '').length,
-                  title_length: document.title.length,
-                  login_forms: document.querySelectorAll('input[type="password"]').length,
-                  captcha_nodes: document.querySelectorAll('[id*="captcha"],iframe[src*="captcha"]').length,
-                  script_count: document.scripts.length
-                })""")
-                result.update({'origin':urlsplit(src).path,'final_path':urlsplit(page.url).path,
-                               'http':resp.status if resp else 0})
-                print('TIKTOK_READONLY_DISCOVERY_DIAG='+json.dumps(result,ensure_ascii=True),flush=True)
-              except Exception as exc:
-                print('TIKTOK_READONLY_DISCOVERY_ERROR='+type(exc).__name__+' origin='+urlsplit(src).path,flush=True)
-            context.close()
-            browser.close()
+            try:
+              for account,state in sessions:
+                ctx=browser.new_context(storage_state=state,locale='pt-BR',viewport={'width':1280,'height':900})
+                page=ctx.new_page()
+                try:
+                  page.goto('https://www.tiktok.com/profile',wait_until='domcontentloaded',timeout=30000)
+                  page.wait_for_timeout(1600)
+                  owner=urlsplit(page.url).path.lower().split('/@')[-1].split('/')[0]
+                  print('FEED_DIAG_OWNER='+json.dumps({'account':account,'confirmed':owner==account},sort_keys=True),flush=True)
+                  if owner!=account:continue
+                  for url in ('https://www.tiktok.com/','https://www.tiktok.com/foryou'):
+                    try:
+                      response=page.goto(url,wait_until='domcontentloaded',timeout=30000)
+                      page.wait_for_timeout(3500)
+                      for scroll in range(4):
+                        obs=page.evaluate(js)
+                        obs.update({'account':account,'url_path':urlsplit(page.url).path,'step':scroll,'http':response.status if response else 0})
+                        print('TIKTOK_READONLY_FEED_CARDS='+json.dumps(obs,separators=(',',':')),flush=True)
+                        if obs['login_visible'] or obs['challenge_visible']:
+                          print('TIKTOK_FEED_STOP_AUTH_OR_SECURITY account='+account,flush=True)
+                          break
+                        page.evaluate("""() => {const el=document.querySelector('#column-list-container');if(el){el.scrollTop+=Math.min(1100,Math.max(650,el.clientHeight));}else{window.scrollBy(0,850)}}""")
+                        page.mouse.wheel(0,650)
+                        page.wait_for_timeout(1800)
+                    except Exception as exc:
+                      print('TIKTOK_FEED_DIAG_ERR='+account+' '+type(exc).__name__,flush=True)
+                finally:
+                  ctx.close()
+            finally:
+              browser.close()
           PY
