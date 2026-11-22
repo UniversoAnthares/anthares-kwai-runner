@@ -9,7 +9,7 @@ permissions:
   contents: read
 jobs:
   dispatch-reviewed-tiktok-only-routes:
-    if: ${{ github.ref == 'refs/heads/main' && github.event.head_commit.message == 'chore: activate TikTok comment HA once' }}
+    if: ${{ github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'chore: activate TikTok comment HA once') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 4
     steps:
