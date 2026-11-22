@@ -1,0 +1,45 @@
+name: CORTES TikTok post-confirmation comment contract
+on:
+  pull_request:
+    paths:
+      - 'tools/cortes_tiktok_after_publish_comment.py'
+      - 'tools/cortes_tiktok_hosted_publish.py'
+      - 'tools/cortes_tiktok_lucasrosalem4_cloud_publish.py'
+      - 'infra/neon-cortes-tiktok/index.mjs'
+      - 'infra/neon-cortes-lucasrosalem4/index.mjs'
+      - 'infra/cloudflare-cortes-tiktok-ha/src/index.js'
+      - 'infra/cloudflare-cortes-tiktok-lucas4-ha/src/index.js'
+      - 'tests/test_cortes_tiktok_after_publish_comment.py'
+      - 'tests/test_cortes_tiktok_comment_contract.mjs'
+      - '.github/workflows/cortes-tiktok-post-comment-contract.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tools/cortes_tiktok_after_publish_comment.py'
+      - 'tests/test_cortes_tiktok_after_publish_comment.py'
+      - 'tests/test_cortes_tiktok_comment_contract.mjs'
+      - '.github/workflows/cortes-tiktok-post-comment-contract.yml'
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile both TikTok publishers and the comment module
+        run: |
+          python -m py_compile tools/cortes_tiktok_after_publish_comment.py tools/cortes_tiktok_hosted_publish.py tools/cortes_tiktok_lucasrosalem4_cloud_publish.py tests/test_cortes_tiktok_after_publish_comment.py
+      - name: Test comment idempotency and account isolation without publication
+        run: python -m unittest discover -s tests -p 'test_cortes_tiktok_after_publish_comment.py' -v
+      - name: Verify Neon and Cloudflare source syntax
+        run: |
+          node --check infra/neon-cortes-tiktok/index.mjs
+          node --check infra/neon-cortes-lucasrosalem4/index.mjs
+          node --check infra/cloudflare-cortes-tiktok-ha/src/index.js
+          node --check infra/cloudflare-cortes-tiktok-lucas4-ha/src/index.js
+      - name: Test two-account persistent ledger contracts
+        run: node --test tests/test_cortes_tiktok_comment_contract.mjs

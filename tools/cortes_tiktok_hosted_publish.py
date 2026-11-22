@@ -382,6 +382,18 @@ def main():
                 if verified!=remote:
                     raise q.SafeStop("TIKTOK_PROFILE_MARKER_CONFIRMATION_MISMATCH")
             q.finish(job,generation,remote,control)
+            if not matching:
+                try:
+                    from cortes_tiktok_after_publish_comment import after_confirmed
+                    after_confirmed(
+                        account=EXPECTED, source_video_id=str(remote),
+                        storage_state=state,
+                        recent_call=lambda: q.qcall("comment-recent",control),
+                        reserve_call=lambda payload: q.qcall("comment-reserve",control,payload),
+                        complete_call=lambda payload: q.qcall("comment-complete",control,payload),
+                    )
+                except Exception as exc:
+                    print("TIKTOK_POST_COMMENT_UNAVAILABLE="+type(exc).__name__,flush=True)
             request_followup_if_pending(control)
             return 0
         except Exception:
