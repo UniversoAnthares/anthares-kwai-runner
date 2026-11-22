@@ -227,6 +227,42 @@ class FeedDiscoveryTests(unittest.TestCase):
         self.assertEqual(c.scroll_discovery(page)["after"], 868)
         self.assertIn("#column-list-container", page.script)
 
+    def test_tiktok_slider_modal_is_security_challenge_before_any_comment(self):
+        class Node:
+            def __init__(self, shown):
+                self.shown=shown
+
+            @property
+            def first(self):
+                return self
+
+            def count(self):
+                return int(self.shown)
+
+            def is_visible(self, **kwargs):
+                return self.shown
+
+        class Page:
+            url = "https://www.tiktok.com/@danteachr/video/7710173903745764616"
+
+            def locator(self, selector):
+                return Node("captcha-verify-container" in selector)
+
+        with self.assertRaisesRegex(RuntimeError,"TIKTOK_COMMENT_SECURITY_CHALLENGE"):
+            c.guard_page(Page())
+
+    def test_after_confirmed_reports_slider_and_never_reserves(self):
+        with patch.dict(os.environ,{"TIKTOK_POST_COMMENT_ENABLED":"true"}), patch.object(
+            c,"verify_owner",side_effect=RuntimeError("TIKTOK_COMMENT_SECURITY_CHALLENGE")
+        ):
+            r=c.after_confirmed(
+                account="lucasrosalem4",source_video_id="7711050254891633928",
+                recent_call=lambda:{"ok":True,"recent":[]},
+                reserve_call=lambda payload:self.fail("security challenge forbids reservation"),
+                complete_call=lambda payload:self.fail("security challenge forbids completion"),
+                existing_page=object())
+        self.assertEqual(r,"security_challenge")
+
     def test_hidden_captcha_does_not_block_legitimate_pages(self):
         class Node:
             def __init__(self, visible):
