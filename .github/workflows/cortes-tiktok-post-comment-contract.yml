@@ -3,6 +3,9 @@ on:
   pull_request:
     paths:
       - 'tools/cortes_tiktok_after_publish_comment.py'
+      - 'tools/cortes_tiktok_deferred_comments.py'
+      - 'tests/test_cortes_tiktok_deferred_comments.py'
+      - '.github/workflows/cortes-tiktok-deferred-comments.yml'
       - 'tools/cortes_tiktok_hosted_publish.py'
       - 'tools/cortes_tiktok_lucasrosalem4_cloud_publish.py'
       - 'infra/neon-cortes-tiktok/index.mjs'
@@ -16,6 +19,9 @@ on:
     branches: [main]
     paths:
       - 'tools/cortes_tiktok_after_publish_comment.py'
+      - 'tools/cortes_tiktok_deferred_comments.py'
+      - 'tests/test_cortes_tiktok_deferred_comments.py'
+      - '.github/workflows/cortes-tiktok-deferred-comments.yml'
       - 'tests/test_cortes_tiktok_after_publish_comment.py'
       - 'tests/test_cortes_tiktok_comment_contract.mjs'
       - '.github/workflows/cortes-tiktok-post-comment-contract.yml'
@@ -32,9 +38,11 @@ jobs:
           python-version: '3.12'
       - name: Compile both TikTok publishers and the comment module
         run: |
-          python -m py_compile tools/cortes_tiktok_after_publish_comment.py tools/cortes_tiktok_hosted_publish.py tools/cortes_tiktok_lucasrosalem4_cloud_publish.py tests/test_cortes_tiktok_after_publish_comment.py
+          python -m py_compile tools/cortes_tiktok_after_publish_comment.py tools/cortes_tiktok_hosted_publish.py tools/cortes_tiktok_lucasrosalem4_cloud_publish.py tests/test_cortes_tiktok_after_publish_comment.py tools/cortes_tiktok_deferred_comments.py tests/test_cortes_tiktok_deferred_comments.py
       - name: Test comment idempotency and account isolation without publication
         run: python -m unittest discover -s tests -p 'test_cortes_tiktok_after_publish_comment.py' -v
+      - name: Test five-window deferred queue and security behavior
+        run: python -m unittest discover -s tests -p 'test_cortes_tiktok_deferred_comments.py' -v
       - name: Verify Neon and Cloudflare source syntax
         run: |
           node --check infra/neon-cortes-tiktok/index.mjs
