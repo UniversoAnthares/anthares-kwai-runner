@@ -114,7 +114,10 @@ def guard_page(page) -> None:
         nodes = page.locator(selector)
         if nodes.count() and nodes.first.is_visible(timeout=400):
             raise RuntimeError("TIKTOK_COMMENT_LOGIN_REQUIRED")
-    for selector in ("iframe[src*='captcha']", "[id*='captcha']",
+    # TikTok's slider challenge is a visible TUXModal with a captcha class.
+    # The actual captcha can have no iframe/id/data-e2e marker at all.
+    for selector in ("[class*='captcha-verify-container']",
+                     "iframe[src*='captcha']", "[id*='captcha']",
                      "[data-e2e*='captcha']"):
         nodes = page.locator(selector)
         if nodes.count() and nodes.first.is_visible(timeout=400):
@@ -388,6 +391,9 @@ def after_confirmed(*, account: str, source_video_id: str, recent_call,
                         reserve_call, complete_call)
     except Exception as exc:
         # A comment error never marks an already confirmed video as uncertain.
+        if str(exc) == "TIKTOK_COMMENT_SECURITY_CHALLENGE":
+            print("TIKTOK_POST_COMMENT_HOLD=SECURITY_CHALLENGE_MANUAL_VERIFICATION", flush=True)
+            return "security_challenge"
         print("TIKTOK_POST_COMMENT_HOLD=" + type(exc).__name__, flush=True)
         return "unavailable"
 
