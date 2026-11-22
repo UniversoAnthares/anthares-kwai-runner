@@ -39,6 +39,7 @@ on:
       - 'direct-tiktok-publisher/tiktok_creator_inventory.py'
       - 'direct-tiktok-publisher/tiktok_cloud_publish.py'
       - 'tools/cortes_tiktok_hosted_publish.py'
+      - 'tools/cortes_tiktok_after_publish_comment.py'
       - 'tests/test_tiktok_creator_inventory.py'
       - 'tests/test_tiktok_cloud_event_guard.py'
       - 'tests/test_cortes_tiktok_queue_consumer.py'
