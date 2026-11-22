@@ -1,0 +1,24 @@
+name: CORTES TikTok comment HA one-time release
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cortes-tiktok-comment-ha-rollout-once.yml'
+permissions:
+  actions: write
+  contents: read
+jobs:
+  dispatch-reviewed-tiktok-only-routes:
+    if: ${{ github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'chore: activate TikTok comment HA once') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - name: Dispatch the two existing SHA-gated HA release workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          gh workflow run cortes-tiktok-neon-edge-ha-deploy.yml --repo "$GITHUB_REPOSITORY" --ref main -f release_sha="$GITHUB_SHA" -f mode=release
+          gh workflow run cortes-tiktok-lucas4-cloudflare-deploy.yml --repo "$GITHUB_REPOSITORY" --ref main -f release_sha="$GITHUB_SHA" -f mode=release
+          echo TIKTOK_COMMENT_HA_RELEASE_DISPATCHED=2
