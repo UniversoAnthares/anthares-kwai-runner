@@ -60,7 +60,13 @@ def oidc():
 
 
 def call(action,token,payload=None):
-    url=QUEUE+"?"+urllib.parse.urlencode({"action":action})
+    # The secondary Cloudflare deploy workflow is manually disabled.
+    # Comment receipts use the directly deployed, OIDC-fenced Neon function;
+    # ordinary publication queue failover remains unchanged.
+    route=QUEUE
+    if action in ("comment-recent","comment-reserve","comment-complete"):
+        route="https://br-crimson-unit-b89nau08-cortestiktok4.compute.c-14.us-east-1.aws.neon.tech/"
+    url=route+"?"+urllib.parse.urlencode({"action":action})
     headers={"Accept":"application/json","Authorization":"Bearer "+token}
     if payload is not None:
         headers["Content-Type"]="application/json"
