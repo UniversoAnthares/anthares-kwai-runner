@@ -290,6 +290,10 @@ def select_target(page, account: str, recent: list[dict], rng=RNG, message=None)
                     try:
                         prepared = prepare_comment(page, message)
                     except Exception as exc:
+                        # A slider can appear during the trial click. Recheck
+                        # security before considering another video's composer.
+                        page.wait_for_timeout(350)
+                        guard_page(page)
                         if "LOGIN_REQUIRED" in str(exc) or "SECURITY_CHALLENGE" in str(exc):
                             raise
                         print("TIKTOK_POST_COMMENT_PREPARE_SKIP=" +

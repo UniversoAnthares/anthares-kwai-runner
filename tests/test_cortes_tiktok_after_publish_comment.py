@@ -263,6 +263,22 @@ class FeedDiscoveryTests(unittest.TestCase):
                 existing_page=object())
         self.assertEqual(r,"security_challenge")
 
+    def test_slider_appearing_during_trial_stops_other_candidates(self):
+        page=self.FakePage()
+        page.challenge=False
+        def guard(p):
+            if p.challenge:
+                raise RuntimeError("TIKTOK_COMMENT_SECURITY_CHALLENGE")
+        def prepare(p,message):
+            p.challenge=True
+            raise TimeoutError("slider opened during trial")
+        with patch.object(c,"guard_page",side_effect=guard), patch.object(
+            c,"open_comment_editor",return_value=object()
+        ), patch.object(c,"prepare_comment",side_effect=prepare) as prepared:
+            with self.assertRaisesRegex(RuntimeError,"SECURITY_CHALLENGE"):
+                c.select_target(page,"lucasrosalem4",[],self.Random(),message="Obrigado.")
+        self.assertEqual(prepared.call_count,1)
+
     def test_hidden_captcha_does_not_block_legitimate_pages(self):
         class Node:
             def __init__(self, visible):
