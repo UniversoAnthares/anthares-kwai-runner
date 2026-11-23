@@ -2,7 +2,18 @@ name: CORTES TikTok five daily deferred comment windows
 # Explicit operator retry 2026-11-22 16:44 America/Campo_Grande; preserve Neon idempotency.
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      captcha_cleared_primary:
+        description: "Human resolved TikTok CAPTCHA for @universo.anthares in this session"
+        type: boolean
+        required: false
+        default: false
+      captcha_cleared_secondary:
+        description: "Human resolved TikTok CAPTCHA for @lucasrosalem4 in this session"
+        type: boolean
+        required: false
+        default: false
   push:
     branches: [main]
     paths:
@@ -34,6 +45,9 @@ jobs:
       ARA_SHARED: ${{ secrets.ARA_SHARED }}
       TIKTOK_DEFERRED_ACCOUNT: universo.anthares
       TIKTOK_COMMENT_RECOVERY_ENABLED: 'true'
+      # Scheduled and push runs inspect pending sources but never retry a CAPTCHA.
+      # Only an explicit human-cleared dispatch permits one browser attempt.
+      TIKTOK_COMMENT_BROWSER_CLEARED: ${{ github.event_name == 'workflow_dispatch' && inputs.captcha_cleared_primary && 'true' || 'false' }}
       PYTHONUNBUFFERED: '1'
     steps:
       - uses: actions/checkout@v4
@@ -56,6 +70,7 @@ jobs:
       TIKTOK_LUCASROSALEM4_STORAGE_STATE: ${{ secrets.TIKTOK_LUCASROSALEM4_STORAGE_STATE }}
       TIKTOK_DEFERRED_ACCOUNT: lucasrosalem4
       TIKTOK_COMMENT_RECOVERY_ENABLED: 'true'
+      TIKTOK_COMMENT_BROWSER_CLEARED: ${{ github.event_name == 'workflow_dispatch' && inputs.captcha_cleared_secondary && 'true' || 'false' }}
       PYTHONUNBUFFERED: '1'
     steps:
       - uses: actions/checkout@v4
