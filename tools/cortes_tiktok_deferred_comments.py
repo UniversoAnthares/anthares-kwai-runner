@@ -98,12 +98,18 @@ def pending_ids(data: object, account: str) -> list[str]:
 
 
 def run_account(account: str, state: dict, request: Callable, *,
-                play_runtime=None, action=after_confirmed) -> dict:
+                play_runtime=None, action=after_confirmed, allow_browser=True) -> dict:
     """Read pending before starting a browser; stop when TikTok asks for verification."""
     source_ids = pending_ids(request("comment-pending"), account)
     print(f"TIKTOK_DEFERRED_PENDING account={account} count={len(source_ids)}", flush=True)
     if not source_ids:
         return {"account": account, "attempted": 0, "state": "idle"}
+    if not allow_browser:
+        # CAPTCHA was confirmed on both sessions. Scheduled runs stay read-only
+        # until a human resolves it and explicitly dispatches a cleared session.
+        print(f"TIKTOK_DEFERRED_HOLD=SECURITY_CHALLENGE_MANUAL_VERIFICATION_PENDING account={account}", flush=True)
+        print("::warning title=TikTok CAPTCHA pending::Comment browser held until legitimate verification and explicit manual dispatch", flush=True)
+        return {"account": account, "attempted": 0, "state": "manual_hold"}
     if not isinstance(state, dict) or not isinstance(state.get("cookies"), list):
         raise RuntimeError("TIKTOK_DEFERRED_SESSION_INVALID")
 
@@ -166,10 +172,16 @@ def main() -> int:
                 if use_recovery:
                     return recovery_request(account, token, action, payload)
                 return call(action, token, payload)
-        result = run_account(account, state, request)
+        # Each dispatch must attest the CAPTCHA was resolved for this account.
+        # Cron/push executions only inspect the Neon pending ledger.
+        clearance = os.getenv("TIKTOK_COMMENT_BROWSER_CLEARED", "false").strip().lower() == "true"
+        result = run_account(account, state, request, allow_browser=clearance)
         print("TIKTOK_DEFERRED_FINAL account=" + result["account"] +
               " state=" + result["state"] +
               " attempted=" + str(result["attempted"]), flush=True)
+        if result["state"] == "security_challenge":
+            print("::error title=TikTok CAPTCHA requires human verification::Session stopped; no further automatic comment attempts", flush=True)
+            return 3
         return 0
     except Exception as exc:
         # Preserve privacy of cookies, auth headers, and account state.
