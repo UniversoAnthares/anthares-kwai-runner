@@ -153,11 +153,16 @@ def main() -> int:
         return 2
     try:
         use_recovery = os.getenv("TIKTOK_COMMENT_RECOVERY_ENABLED", "false").lower() == "true"
+        # CAPTCHA-gated schedules must read only the pending ledger. Loading
+        # browser cookies on a HOLD run is unnecessary and can fail independently
+        # of Neon; the authenticated state is mandatory when clearance is real.
+        clearance = os.getenv("TIKTOK_COMMENT_BROWSER_CLEARED", "false").strip().lower() == "true"
+        state: dict = {}
         if account == "universo.anthares":
-            # Primary state is maintained in the authenticated browser vault.
-            from tiktok_session_authority import load_canonical_state
             from cortes_tiktok_queue_consumer import qcall, oidc
-            state, _ = load_canonical_state()
+            if clearance:
+                from tiktok_session_authority import load_canonical_state
+                state, _ = load_canonical_state()
             token = oidc()
             def request(action, payload=None):
                 if use_recovery:
@@ -166,15 +171,13 @@ def main() -> int:
         else:
             from cortes_tiktok_lucasrosalem4_cloud_publish import (
                 state_from_secret, call, oidc)
-            state = state_from_secret()
+            if clearance:
+                state = state_from_secret()
             token = oidc()
             def request(action, payload=None):
                 if use_recovery:
                     return recovery_request(account, token, action, payload)
                 return call(action, token, payload)
-        # Each dispatch must attest the CAPTCHA was resolved for this account.
-        # Cron/push executions only inspect the Neon pending ledger.
-        clearance = os.getenv("TIKTOK_COMMENT_BROWSER_CLEARED", "false").strip().lower() == "true"
         result = run_account(account, state, request, allow_browser=clearance)
         print("TIKTOK_DEFERRED_FINAL account=" + result["account"] +
               " state=" + result["state"] +
