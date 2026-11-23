@@ -132,6 +132,67 @@ class DeferredTests(unittest.TestCase):
         self.assertEqual(result["attempted"],2)
 
 
+class SessionLoadingTests(unittest.TestCase):
+    def modules(self, state_load):
+        primary = types.ModuleType("cortes_tiktok_queue_consumer")
+        primary.qcall = lambda *args: self.fail("legacy queue must not be used")
+        primary.oidc = lambda: {"Authorization": "Bearer " + "x"*210}
+        secondary = types.ModuleType("cortes_tiktok_lucasrosalem4_cloud_publish")
+        secondary.state_from_secret = lambda: state_load("lucasrosalem4")
+        secondary.call = lambda *args: self.fail("legacy queue must not be used")
+        secondary.oidc = lambda: "x"*210
+        vault = types.ModuleType("tiktok_session_authority")
+        vault.load_canonical_state = lambda: (state_load("universo.anthares"), "test")
+        return {
+            "cortes_tiktok_queue_consumer": primary,
+            "cortes_tiktok_lucasrosalem4_cloud_publish": secondary,
+            "tiktok_session_authority": vault,
+        }
+
+    def test_scheduled_hold_reads_neon_without_loading_tiktok_state(self):
+        attempted = []
+        def forbidden_load(account):
+            self.fail("HOLD cannot load TikTok browser state: " + account)
+        def read_pending(account, token, action, payload=None):
+            self.assertEqual(action, "comment-pending")
+            self.assertIsNone(payload)
+            attempted.append(account)
+            return {"ok": True, "account": account,
+                    "pending": [{"source_video_id": "7711053609256963349"}]}
+        with patch.dict(sys.modules, self.modules(forbidden_load)), \
+             patch.object(d, "recovery_request", side_effect=read_pending):
+            for account in d.ACCOUNTS:
+                with self.subTest(account=account), patch.dict(
+                    "os.environ",
+                    {"TIKTOK_DEFERRED_ACCOUNT": account,
+                     "TIKTOK_COMMENT_RECOVERY_ENABLED": "true",
+                     "TIKTOK_COMMENT_BROWSER_CLEARED": "false"}, clear=True
+                ):
+                    self.assertEqual(d.main(), 0)
+        self.assertEqual(attempted, list(d.ACCOUNTS))
+
+    def test_manual_clearance_still_requires_authenticated_state(self):
+        loaded = []
+        def state_load(account):
+            loaded.append(account)
+            return {"cookies": [{"name": "dummy", "value": "test"}]}
+        def run_assert(account, state, request, *, allow_browser):
+            self.assertTrue(allow_browser)
+            self.assertEqual(state, {"cookies": [{"name": "dummy", "value": "test"}]})
+            return {"account": account, "attempted": 0, "state": "idle"}
+        with patch.dict(sys.modules, self.modules(state_load)), \
+             patch.object(d, "run_account", side_effect=run_assert):
+            for account in d.ACCOUNTS:
+                with self.subTest(account=account), patch.dict(
+                    "os.environ",
+                    {"TIKTOK_DEFERRED_ACCOUNT": account,
+                     "TIKTOK_COMMENT_RECOVERY_ENABLED": "true",
+                     "TIKTOK_COMMENT_BROWSER_CLEARED": "true"}, clear=True
+                ):
+                    self.assertEqual(d.main(), 0)
+        self.assertEqual(loaded, list(d.ACCOUNTS))
+
+
 class RecoveryTransportTests(unittest.TestCase):
     def test_disallows_upload_actions_and_cross_account(self):
         with self.assertRaisesRegex(RuntimeError, "ROUTE_REJECTED"):
