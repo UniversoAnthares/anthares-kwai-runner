@@ -1,0 +1,2 @@
+# Lease Studio Mercado Pago — 2026-11-23
+Owner: GPT6 Studio item16. Scope: `anthares-studio/includes/integrations/class-anst-g7-mercadopago.php`, G7 beta backend and author UI, bootstrap, explicit QA. Financial rule: stage/test only by default; no live payout or irreversible sale without verified merchant connection and owner/author consent. Preserve legacy `/estudio/`. Branch `feat/studio-mercadopago-brl-payouts-20261123`. Lock release upon PR and QA closeout.
