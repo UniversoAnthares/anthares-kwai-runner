@@ -148,6 +148,26 @@ class RecoveryTransportTests(unittest.TestCase):
         self.assertEqual(sent[0].full_url,
             d.COMMENT_RECOVERY_ENDPOINTS["lucasrosalem4"]+"?action=comment-pending")
 
+    def test_primary_signed_oidc_header_matches_secondary_raw_jwt(self):
+        import json
+        sent=[]
+        class Response:
+            status=200
+            def __enter__(self):return self
+            def __exit__(self,*args):return False
+            def read(self,*args):return json.dumps({
+                "ok":True,"account":"universo.anthares","pending":[]}).encode()
+        def fetch(req,timeout):
+            sent.append(req)
+            return Response()
+        with patch("urllib.request.urlopen",side_effect=fetch):
+            got=d.recovery_request("universo.anthares",
+                                   {"Authorization":"Bearer "+"x"*210},
+                                   "comment-pending")
+        self.assertEqual(got["account"],"universo.anthares")
+        self.assertEqual(sent[0].get_header("Authorization"),
+                         "Bearer "+"x"*210)
+
     def test_fails_closed_if_backend_returns_another_account(self):
         import json
         class Response:
