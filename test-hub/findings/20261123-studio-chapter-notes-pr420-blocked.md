@@ -1,0 +1,13 @@
+# Studio chapter-first item 9: PR420 audit
+
+Date: 2026-11-23. Owner: GPT6/STUDIO_CHAPTER_NOTES_20261123.
+State: IMPLEMENTED_IN_PR_NOT_DEPLOYED; QA_TRANSACTION_BLOCKED_BY_REMOTE_EXECUTION_LOCK. Lease: test-hub/findings/lease-studio-chapter-reminders-20261123.md.
+PR: https://github.com/UniversoAnthares/anthares-wordpress/pull/420 (open; no Hostinger mutation).
+Branch: feat/studio-chapter-first-reminders-20261123.
+
+Canonical chapter is anst_capitulo with `_anst_ntl_chapter_notes_v1` private postmeta. UUID notes, text, optional details, optimistic SHA-256 revision and GET/POST author/project-scoped REST. Same note UI from Manuscript title/list, attached structural stage cards, chapter track on the timeline; collapsible legacy scenes/events retained. New text reminders no longer create separate event CPT; Quill Delta unchanged. Styling accessible dialog, note chips, mobile track.
+Staged only on private Hostinger directory `/home/u566597497/studio-private-staging/studio-chapter-notes-20261123`. Current copied stage may need git pull to latest branch. No production plugin files replaced; legacy /estudio untouched.
+Evidence: staged PHP 8.3 syntax PASS for changed domain and new transaction QA (before later simple postmeta wp_slash amendment). Narrative timeline Python 13/13 PASS after old contract adapted. QA manifest 776/776 PASS. JavaScript syntax parse PASS both changed scripts, including final updated timeline. Tests cover isolation, revision 409, note create/update/delete, stability across stage move and postmeta removal.
+Runtime QA first attempted via WP-CLI with --skip-plugins=anthares-studio, observed first temporary project creation and rollback, then failed chapter creation because late module include left anst_capitulo unregistered at init; fixture amended to invoke anst_register_types when absent. Follow-up QA blocked: WinRemote Shell repeatedly reports `Timeout waiting for shell lock (another shell task is running)`; Anthares Remote capability and exec unavailable, MeshCentral timed out. Do not override shared lock or kill concurrent task.
+Release gate pending: sync private stage, rerun qa_chapter_notes_transaction.php to TOTAL_PASS and ROLLBACK=EXECUTED; rerun regression QA structure models/timeline; verify main HEAD and destination SHA CAS; backup production plugin; deploy changed PHP/JS/CSS to Hostinger, check HTTP assets hashes and legacy SHA; authenticated desktop/mobile QA of all three entry points; clean private stage owned by this task.
+Original file name preserved for user-facing documentation: PENDÊNCIAS URGENTES (1).md; item9 documented with explicit pending deployment state. No assertion of finished production release.
