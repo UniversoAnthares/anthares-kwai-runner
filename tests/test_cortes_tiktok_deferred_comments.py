@@ -75,6 +75,19 @@ class DeferredTests(unittest.TestCase):
         self.assertEqual(r["state"],"idle")
         self.assertEqual(calls,["comment-pending"])
 
+    def test_captcha_hold_uses_neon_read_only_and_never_launches_browser(self):
+        calls = []
+        def request(action, payload=None):
+            calls.append((action, payload))
+            return {"ok": True, "account": "universo.anthares",
+                    "pending": [{"source_video_id": "7711107796988693781"}]}
+        result = d.run_account("universo.anthares", {"cookies": [{}]},
+                               request, allow_browser=False,
+                               action=lambda **kw: self.fail("CAPTCHA hold must not interact"))
+        self.assertEqual(result, {"account": "universo.anthares",
+                                  "attempted": 0, "state": "manual_hold"})
+        self.assertEqual(calls, [("comment-pending", None)])
+
     def test_challenge_stops_and_leaves_later_pending_clips(self):
         sources=["7711053609256963349","7711050254891633928"]
         runtime=MockRuntime()
