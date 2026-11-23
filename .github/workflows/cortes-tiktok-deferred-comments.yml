@@ -33,6 +33,7 @@ jobs:
     env:
       ARA_SHARED: ${{ secrets.ARA_SHARED }}
       TIKTOK_DEFERRED_ACCOUNT: universo.anthares
+      TIKTOK_COMMENT_RECOVERY_ENABLED: 'true'
       PYTHONUNBUFFERED: '1'
     steps:
       - uses: actions/checkout@v4
@@ -54,6 +55,7 @@ jobs:
     env:
       TIKTOK_LUCASROSALEM4_STORAGE_STATE: ${{ secrets.TIKTOK_LUCASROSALEM4_STORAGE_STATE }}
       TIKTOK_DEFERRED_ACCOUNT: lucasrosalem4
+      TIKTOK_COMMENT_RECOVERY_ENABLED: 'true'
       PYTHONUNBUFFERED: '1'
     steps:
       - uses: actions/checkout@v4

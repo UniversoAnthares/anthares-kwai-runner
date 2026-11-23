@@ -119,5 +119,47 @@ class DeferredTests(unittest.TestCase):
         self.assertEqual(result["attempted"],2)
 
 
+class RecoveryTransportTests(unittest.TestCase):
+    def test_disallows_upload_actions_and_cross_account(self):
+        with self.assertRaisesRegex(RuntimeError, "ROUTE_REJECTED"):
+            d.recovery_request("other-account", "x"*210, "comment-pending")
+        with self.assertRaisesRegex(RuntimeError, "ROUTE_REJECTED"):
+            d.recovery_request("universo.anthares", "x"*210, "publish")
+        with self.assertRaisesRegex(RuntimeError, "AUTH_MISSING"):
+            d.recovery_request("universo.anthares", "", "comment-pending")
+
+    def test_recovery_pending_uses_exact_signed_origin(self):
+        import json
+        sent=[]
+        class Response:
+            status=200
+            def __enter__(self):return self
+            def __exit__(self,*args):return False
+            def read(self,*args):return json.dumps({
+                "ok":True,"account":"lucasrosalem4","pending":[]}).encode()
+        def call(req,timeout):
+            sent.append(req)
+            self.assertEqual(timeout,25)
+            return Response()
+        with patch("urllib.request.urlopen",side_effect=call):
+            r=d.recovery_request("lucasrosalem4","x"*210,"comment-pending")
+        self.assertEqual(r["pending"],[])
+        self.assertEqual(sent[0].get_method(),"GET")
+        self.assertEqual(sent[0].full_url,
+            d.COMMENT_RECOVERY_ENDPOINTS["lucasrosalem4"]+"?action=comment-pending")
+
+    def test_fails_closed_if_backend_returns_another_account(self):
+        import json
+        class Response:
+            status=200
+            def __enter__(self):return self
+            def __exit__(self,*args):return False
+            def read(self,*args):return json.dumps({
+                "ok":True,"account":"universo.anthares","pending":[]}).encode()
+        with patch("urllib.request.urlopen",return_value=Response()):
+            with self.assertRaisesRegex(RuntimeError, "IDENTITY_MISMATCH"):
+                d.recovery_request("lucasrosalem4","x"*210,"comment-pending")
+
+
 if __name__=="__main__":
     unittest.main()

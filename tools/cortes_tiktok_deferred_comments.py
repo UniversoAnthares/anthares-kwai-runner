@@ -25,6 +25,53 @@ STOP_RESULTS = frozenset({"security_challenge", "unavailable", "no_target",
                           "composer_unavailable"})
 MAX_PER_WINDOW = 5
 
+# Independent, namespaced recovery ledger on the existing free Neon project.
+# This path is strictly comments-only; no upload or publisher action is exposed.
+# Before returning to the legacy ledger, reconcile receipts made here.
+COMMENT_RECOVERY_ENDPOINTS = {
+    "universo.anthares": "https://br-dark-rice-b7jf2e9e-cortescmtmain.compute.c-13.us-east-1.aws.neon.tech/",
+    "lucasrosalem4": "https://br-dark-rice-b7jf2e9e-cortescmtlucas.compute.c-13.us-east-1.aws.neon.tech/",
+}
+COMMENT_ACTIONS = frozenset({"comment-pending", "comment-recent",
+                             "comment-reserve", "comment-complete"})
+
+
+def recovery_request(account: str, token: str, action: str, payload=None) -> dict:
+    """Signed GitHub OIDC, canonical host and comment-only verbs; fail closed."""
+    import json
+    import urllib.request
+    import urllib.error
+    if account not in COMMENT_RECOVERY_ENDPOINTS or action not in COMMENT_ACTIONS:
+        raise RuntimeError("TIKTOK_COMMENT_RECOVERY_ROUTE_REJECTED")
+    if not isinstance(token, str) or len(token) < 200:
+        raise RuntimeError("TIKTOK_COMMENT_RECOVERY_AUTH_MISSING")
+    if payload is not None and action not in ("comment-reserve", "comment-complete"):
+        raise RuntimeError("TIKTOK_COMMENT_RECOVERY_METHOD_INVALID")
+    if payload is None and action in ("comment-reserve", "comment-complete"):
+        raise RuntimeError("TIKTOK_COMMENT_RECOVERY_METHOD_INVALID")
+    body = json.dumps(payload, separators=(",", ":")).encode("utf-8") if payload is not None else None
+    headers = {"Authorization": "Bearer " + token, "Accept": "application/json"}
+    if body is not None:
+        headers["Content-Type"] = "application/json"
+    req = urllib.request.Request(
+        COMMENT_RECOVERY_ENDPOINTS[account] + "?action=" + action,
+        data=body, headers=headers, method="POST" if body else "GET")
+    try:
+        with urllib.request.urlopen(req, timeout=25) as response:
+            if response.status != 200:
+                raise RuntimeError("TIKTOK_COMMENT_RECOVERY_HTTP_NON200")
+            data = json.loads(response.read(65536))
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError("TIKTOK_COMMENT_RECOVERY_HTTP_" + str(exc.code)) from None
+    except urllib.error.URLError:
+        raise RuntimeError("TIKTOK_COMMENT_RECOVERY_TRANSPORT_UNAVAILABLE") from None
+    if not isinstance(data, dict) or data.get("ok") is not True:
+        raise RuntimeError("TIKTOK_COMMENT_RECOVERY_RESPONSE_DENIED")
+    if action in ("comment-pending", "comment-recent") and data.get("account") != account:
+        raise RuntimeError("TIKTOK_COMMENT_RECOVERY_IDENTITY_MISMATCH")
+    return data
+
+
 
 def pending_ids(data: object, account: str) -> list[str]:
     """Only accept a known account, confirmed numeric IDs and bounded result."""
@@ -93,6 +140,7 @@ def main() -> int:
         print("TIKTOK_DEFERRED_ACCOUNT_NOT_ALLOWLISTED=1", flush=True)
         return 2
     try:
+        use_recovery = os.getenv("TIKTOK_COMMENT_RECOVERY_ENABLED", "false").lower() == "true"
         if account == "universo.anthares":
             # Primary state is maintained in the authenticated browser vault.
             from tiktok_session_authority import load_canonical_state
@@ -100,6 +148,8 @@ def main() -> int:
             state, _ = load_canonical_state()
             token = oidc()
             def request(action, payload=None):
+                if use_recovery:
+                    return recovery_request(account, token, action, payload)
                 return qcall(action, token, payload)
         else:
             from cortes_tiktok_lucasrosalem4_cloud_publish import (
@@ -107,6 +157,8 @@ def main() -> int:
             state = state_from_secret()
             token = oidc()
             def request(action, payload=None):
+                if use_recovery:
+                    return recovery_request(account, token, action, payload)
                 return call(action, token, payload)
         result = run_account(account, state, request)
         print("TIKTOK_DEFERRED_FINAL account=" + result["account"] +
