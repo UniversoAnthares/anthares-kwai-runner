@@ -22,7 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: One independently fenced X video; no automatic blind retry
-        run: python -u tools/x_cloud_issue_consumer.py
+        run: python -u -m tools.x_cloud_issue_consumer
       - name: Priority QA incident (deduplicated)
         if: failure()
         env:
