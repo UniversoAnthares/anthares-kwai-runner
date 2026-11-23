@@ -57,8 +57,11 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_cortes_tiktok_deferred_comments.py' -v
       - name: Install isolated authenticated comment browser
         run: |
-          python3 -m pip install -q --disable-pip-version-check playwright requests cryptography
-          PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=120000 python3 -m playwright install chromium
+          python3 -m pip install -q --disable-pip-version-check requests cryptography
+          if [ "$TIKTOK_COMMENT_BROWSER_CLEARED" = "true" ]; then
+            python3 -m pip install -q --disable-pip-version-check playwright
+            PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=120000 python3 -m playwright install chromium
+          fi
       - name: Process previously confirmed clips with idempotent Neon receipts
         run: python3 -u tools/cortes_tiktok_deferred_comments.py
 
@@ -80,7 +83,10 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_cortes_tiktok_deferred_comments.py' -v
       - name: Install isolated authenticated comment browser
         run: |
-          python3 -m pip install -q --disable-pip-version-check playwright requests
-          PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=120000 python3 -m playwright install chromium
+          python3 -m pip install -q --disable-pip-version-check requests
+          if [ "$TIKTOK_COMMENT_BROWSER_CLEARED" = "true" ]; then
+            python3 -m pip install -q --disable-pip-version-check playwright
+            PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=120000 python3 -m playwright install chromium
+          fi
       - name: Process secondary confirmed clips without disturbing Kwai MEmu
         run: python3 -u tools/cortes_tiktok_deferred_comments.py
