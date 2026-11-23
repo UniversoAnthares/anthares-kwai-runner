@@ -43,14 +43,20 @@ def recovery_request(account: str, token: str, action: str, payload=None) -> dic
     import urllib.error
     if account not in COMMENT_RECOVERY_ENDPOINTS or action not in COMMENT_ACTIONS:
         raise RuntimeError("TIKTOK_COMMENT_RECOVERY_ROUTE_REJECTED")
-    if not isinstance(token, str) or len(token) < 200:
+    if isinstance(token, dict):
+        header = str(token.get("Authorization") or "")
+    elif isinstance(token, str):
+        header = "Bearer " + token
+    else:
+        header = ""
+    if not header.startswith("Bearer ") or not 200 <= len(header[7:]) <= 16000:
         raise RuntimeError("TIKTOK_COMMENT_RECOVERY_AUTH_MISSING")
     if payload is not None and action not in ("comment-reserve", "comment-complete"):
         raise RuntimeError("TIKTOK_COMMENT_RECOVERY_METHOD_INVALID")
     if payload is None and action in ("comment-reserve", "comment-complete"):
         raise RuntimeError("TIKTOK_COMMENT_RECOVERY_METHOD_INVALID")
     body = json.dumps(payload, separators=(",", ":")).encode("utf-8") if payload is not None else None
-    headers = {"Authorization": "Bearer " + token, "Accept": "application/json"}
+    headers = {"Authorization": header, "Accept": "application/json"}
     if body is not None:
         headers["Content-Type"] = "application/json"
     req = urllib.request.Request(
