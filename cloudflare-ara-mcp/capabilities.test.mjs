@@ -74,3 +74,74 @@ assert.equal(denied.status, 401);
 globalThis.fetch = async () => Response.json({error:'unauthorized'}, {status:401});
 await assert.rejects(runtime.callTool(env, 'capabilities'), /control 401/);
 console.log('PASS authenticated discovery: initialize, scope-aware capabilities/session status, read-only shell denial, signed backend, no shell side effects, anonymous 401');
+
+ 
+// Recovery epoch: the same signing secret cannot make old and new replay
+// authorities interchangeable. Fixture credentials are synthetic only.
+const { DatabaseSync } = await import('node:sqlite');
+const { consumeReplayClaim } = await import('./src/quota-recovery.mjs');
+const db = new DatabaseSync(':memory:');
+const sql = {exec(statement,...params) {
+  const stmt=db.prepare(statement);
+  if(statement.includes('RETURNING'))return {toArray:()=>stmt.all(...params)};
+  stmt.run(...params);return {toArray:()=>[]};
+}};
+const now=Math.floor(Date.now()/1000);
+const claim='synthetic-replay-claim-01';
+assert.equal(consumeReplayClaim(sql,'refresh_token',claim,now+60,now),true);
+assert.equal(consumeReplayClaim(sql,'refresh_token',claim,now+60,now),false);
+assert.equal(consumeReplayClaim(sql,'refresh_token','expired-test-claim',now-1,now),false);
+assert.equal(consumeReplayClaim(sql,'unknown_kind','synthetic-test-claim',now+60,now),false);
+assert.equal(consumeReplayClaim(sql,'refresh_token','future-test-claim',now+32*86400,now),false);
+let failReplay=false,claimCalls=0,upstreamCalls=0;
+const recoveryEnv={...env,ARA_QUOTA_RECOVERY_MODE:'queue-v1',
+  AUTH_OWNER_METHOD:'github',ARA_OWNER_GITHUB_ID:'123456',
+  ARA_OWNER_GITHUB_CLIENT_ID:'fixture',ARA_OWNER_GITHUB_CLIENT_SECRET:'fixture-only',
+  ANTHARES_GITHUB_TOKEN:'fixture-only',
+  ARA_LIVE_CHANNEL:{
+    idFromName(name){assert.equal(name,'ARA-OAUTH-QUOTA-RECOVERY-V1');return name},
+    get(){return {async consumeQuotaReplay(kind,jti,exp){
+      claimCalls++;if(failReplay)throw Error('synthetic quota outage');
+      return consumeReplayClaim(sql,kind,jti,exp);
+    }}}
+  }
+};
+globalThis.fetch=async()=>{upstreamCalls++;throw Error('unexpected network request')};
+const origin='https://anthares-ara-mcp.anthares1.workers.dev';
+const client='https://chatgpt.com/oauth/client.json';
+const payload={typ:'refresh',iss:origin,aud:origin,cid:client,scp:['ara.read'],exp:now+600,jti:'recovery-refresh-claim-01'};
+const oldToken=await runtime.st(env).signToken(payload);
+const newToken=await runtime.st(recoveryEnv).signToken(payload);
+assert.notEqual(oldToken,newToken);
+assert.equal(await runtime.st(recoveryEnv).verifyToken(oldToken,'refresh'),null);
+assert.equal(await runtime.st(env).verifyToken(newToken,'refresh'),null);
+assert.deepEqual(await runtime.st(recoveryEnv).verifyToken(newToken,'refresh'),payload);
+const health=await runtime.default.fetch(new Request(origin+'/health'),recoveryEnv);
+assert.equal(health.status,200);
+const healthBody=await health.json();
+assert.equal(healthBody.device_status_verified,false);
+assert.equal(healthBody.device_connected,null);
+assert.equal(claimCalls,0);
+assert.equal(upstreamCalls,0);
+const anon=await runtime.default.fetch(new Request(origin+'/mcp',{method:'POST',body:'{}'}),recoveryEnv);
+assert.equal(anon.status,401);
+const refresh=t=>runtime.default.fetch(new Request(origin+'/oauth/token',{method:'POST',
+  body:new URLSearchParams({grant_type:'refresh_token',client_id:client,refresh_token:t})}),recoveryEnv);
+const legacy=await refresh(oldToken);
+assert.equal(legacy.status,400);
+assert.equal(claimCalls,0);
+failReplay=true;
+const unavailable=await refresh(newToken);
+assert.equal(unavailable.status,503);
+assert.equal((await unavailable.json()).error,'temporarily_unavailable');
+failReplay=false;
+const success=await refresh(newToken);
+assert.equal(success.status,200);
+const tokens=await success.json();
+assert(tokens.access_token&&tokens.refresh_token);
+assert.equal((await runtime.st(recoveryEnv).verifyToken(tokens.access_token,'access')).scp[0],'ara.read');
+const replay=await refresh(newToken);
+assert.equal(replay.status,400);
+assert.equal(upstreamCalls,0);
+db.close();
+console.log('PASS independent replay epoch: legacy/recovery isolation, atomic one-time SQL claim, unavailable 503, successful rotation, replay 400, anonymous 401, zero public health queue submissions');
