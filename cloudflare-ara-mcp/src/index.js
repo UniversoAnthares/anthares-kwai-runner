@@ -1,6 +1,7 @@
 import { EXTERNAL_DEVICE, externalReadOnly } from "./external-readonly.mjs";
 import {requestControl} from "./control-transport.mjs";
 import {queueExecute, queueStatus} from "./private-queue-control.mjs";
+import {quotaRecoveryEnabled,tokenMacInput,consumeReplayClaim,consumeRecoveryReplay,recoveryReady} from "./quota-recovery.mjs";
 var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 
@@ -137,13 +138,13 @@ ${raw}`;
   }
   async signToken(payload) {
     const body = b64urlBytes(te.encode(JSON.stringify(payload)));
-    return `${body}.${await this.hmac(body)}`;
+    return `${body}.${await this.hmac(tokenMacInput(this.env,body))}`;
   }
   async verifyToken(token, type) {
     const parts = String(token || "").split(".");
     if (parts.length !== 2) return null;
     const [body, sig] = parts;
-    if (!eq(sig, await this.hmac(body))) return null;
+    if (!eq(sig, await this.hmac(tokenMacInput(this.env,body)))) return null;
     try {
       const p = JSON.parse(td.decode(fromB64url(body)));
       if (p.typ !== type || p.iss !== ORIGIN || p.aud !== ORIGIN || !p.exp || p.exp <= Math.floor(Date.now() / 1e3) || !Array.isArray(p.scp)) return null;
@@ -181,6 +182,11 @@ var GatewayState = class extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
     this.ctx = ctx;
+    this.env = env;
+  }
+  async consumeQuotaReplay(kind,jti,exp) {
+    if(!quotaRecoveryEnabled(this.env))throw new Error("recovery_not_enabled");
+    return consumeReplayClaim(this.ctx.storage.sql,kind,jti,exp);
   }
   // CF-06: reuse the existing GatewayState namespace. Hibernatable
   // WebSockets keep the agent connected without periodic HTTP requests.
@@ -334,6 +340,7 @@ async function controlJson(env, path, opts) {
 }
 __name(controlJson, "controlJson");
 async function consumeViaControl(env, kind, jti, exp) {
+  if(quotaRecoveryEnabled(env))return consumeRecoveryReplay(env,kind,jti,exp);
   try {
     const r = await control(env, "/v1/mcp/oauth/consume", { method: "POST", body: { kind, issuer: ORIGIN, jti, exp } });
     if (r.status === 409) return false;
@@ -363,6 +370,7 @@ async function cf06Wake(env) {
   return r.json();
 }
 async function status(env, device = DEFAULT_DEVICE) {
+  if(quotaRecoveryEnabled(env))return queueStatus(env,device);
   if (env.ARA_PRIVATE_QUEUE_PRIMARY === "push") {
     if(device !== DEFAULT_DEVICE) return {connected:false,backend:"cloudflare-websocket-hibernation"};
     return cf06LiveStatus(env);
@@ -406,7 +414,7 @@ async function resolveDevice(env, device = DEFAULT_DEVICE) {
 }
 __name(resolveDevice, "resolveDevice");
 async function execute(env, type, args = {}, timeout = 30, device = DEFAULT_DEVICE) {
-  if (env.ARA_PRIVATE_QUEUE_PRIMARY === "enabled") {
+  if (quotaRecoveryEnabled(env) || env.ARA_PRIVATE_QUEUE_PRIMARY === "enabled") {
     return queueExecute(env, type, args, timeout, device);
   }
   if (env.ARA_PRIVATE_QUEUE_PRIMARY === "push") {
@@ -627,6 +635,11 @@ var index_default = { async fetch(req, env) {
     }
     if (req.method === "GET" && (u.pathname === "/" || u.pathname === "/health")) {
       await st(env).ensure();
+      if(quotaRecoveryEnabled(env)) {
+        const ready=recoveryReady(env,ownerGithubConfigured(env));
+        // Public health must not create a private issue or claim a fresh device receipt.
+        return json({ok:ready,service:"anthares-ara-mcp",provider:"cloudflare",control:"github-private-issue-queue",control_ready:ready,device_connected:null,device_status_verified:false,oauth:true,mcp:true,oauth_owner_code_mode:"github_owner_identity",mcp_server_version:"1.2.0",recovery_mode:"queue-v1"},ready?200:503);
+      }
       let controlReady = false, connected = false, controlError = null;
       try {
         const s = await status(env, DEFAULT_DEVICE);
@@ -640,6 +653,7 @@ var index_default = { async fetch(req, env) {
     if (req.method === "GET" && u.pathname === "/.well-known/ara-control-key") return new Response(await st(env).publicPem(), { headers: { "content-type": "application/x-pem-file", "cache-control": "no-store" } });
     if (req.method === "GET" && u.pathname === "/.well-known/oauth-protected-resource") return json({ resource: ORIGIN, authorization_servers: [ORIGIN], scopes_supported: [...SCOPES], resource_documentation: "https://github.com/UniversoAnthares/anthares-kwai-runner" });
     if (req.method === "GET" && (u.pathname === "/.well-known/oauth-authorization-server" || u.pathname === "/.well-known/openid-configuration")) return json({ issuer: ORIGIN, authorization_endpoint: `${ORIGIN}/oauth/authorize`, token_endpoint: `${ORIGIN}/oauth/token`, response_types_supported: ["code"], grant_types_supported: ["authorization_code", "refresh_token"], code_challenge_methods_supported: ["S256"], token_endpoint_auth_methods_supported: ["none"], scopes_supported: [...SCOPES], client_id_metadata_document_supported: true, authorization_response_iss_parameter_supported: true });
+    if(quotaRecoveryEnabled(env) && u.pathname.startsWith("/oauth/") && !recoveryReady(env,ownerGithubConfigured(env)))return json({error:"temporarily_unavailable"},503);
     if (req.method === "GET" && u.pathname === "/oauth/authorize") {
       const cid = u.searchParams.get("client_id") || "", red = u.searchParams.get("redirect_uri") || "", challenge = u.searchParams.get("code_challenge") || "", method = u.searchParams.get("code_challenge_method") || "", resource = u.searchParams.get("resource") || ORIGIN, scopes = parseScopes(u.searchParams.get("scope"), cid);
       if (!await clientAllowed(env, cid) || !validRedirect(red, cid) || u.searchParams.get("response_type") !== "code" || method !== "S256" || challenge.length < 43 || !(resource === ORIGIN || isKiloResource(cid, resource, ORIGIN) || (isClaudeClient(cid) && resource === ORIGIN + "/mcp")) || !scopes) return json({ error: "invalid_request" }, 400);
